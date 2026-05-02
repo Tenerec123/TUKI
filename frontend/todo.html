@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>T.U.K.I. TODO</title>
+  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+  <header>
+    <h1 id="title">T.U.K.I. TODO</h1>
+    <h2 id="subtitle">T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR</h2>
+    <div id="navbar">
+      <a href="chat">CHAT</a>
+      <a class="unable" href="todo">TODO</a>
+      <a href="kale">KALE</a>
+    </div>
+  </header>
+  
+  <form id="task-creator"></form>
+  <form id="project-creator"></form>
+  <form id="routine-creator"></form>
+
+  <table>
+    <thead>
+      <tr id="table-headers">
+        <th>Project</th>
+        <th>Decription</th>
+        <th class="priority-header">Priority</th>
+        <th>...</th>
+      </tr>
+      <tr>
+        
+        <td class="form-name">
+          <input form="project-creator" type="text" name="name">
+        </td>
+        <td class="form-description">
+          <input form="project-creator" type="text" name="description">
+        </td>
+        <td class="form-priority">
+          <input form="project-creator" type="number" name="priority" max="64" min="1" value="1">
+        </td>
+        <td class="form-submit">
+          <input form="project-creator" type="submit" value="Create">
+        </td>
+      </tr>
+    </thead>
+    <tbody id="project-container">
+    </tbody>
+  </table>
+
+  <br><br><br>
+	<table>
+    <thead>
+      <tr id="table-headers">
+        <th>Check</th>
+        <th>Task</th>
+        <th>Decription</th>
+        <th>Priority</th>
+        <th>Deadline</th>
+        <th>...</th>
+      </tr>
+      <tr>
+        <td class="form-check">
+          <button id="check-create-button" onclick="CheckClick(this, -1)">☐</button>
+        </td>
+        <td class="form-name">
+          <input form="task-creator" type="text" name="name">
+        </td>
+        <td class="form-description">
+          <input form="task-creator" type="text" name="description">
+        </td>
+        <td class="form-priority">
+          <input form="task-creator" type="number" name="priority" min="1" max="64" value="1">
+        </td>
+        <td class="form-deadline">
+          <div class="date-container">
+            <input form="task-creator" name="deadline" type="date" class="custom-date" value="2026-04-14">
+          </div>
+        </td>
+        <td class="form-submit">
+          <input form="task-creator" type="submit" value="Create">
+        </td>
+     </tr>
+    </thead>
+    <tbody id="task-container">
+    </tbody>
+  </table>
+
+  <br><br><br>
+
+  <table>
+    <thead>
+      <tr id="table-headers">
+        <th>Routine</th>
+        <th>Decription</th>
+        <th>Priority</th>
+        <th>Frequency</th>
+        <th>Last Run</th>
+        <th>Next Run</th>
+        <th>...</th>
+      </tr>
+      <tr>
+        <td class="form-name">
+          <input form="routine-creator" type="text" name="name">
+        </td>
+        <td class="form-description">
+          <input form="routine-creator" type="text" name="description">
+        </td>
+        <td class="form-priority">
+          <input form="routine-creator" type="number" name="priority" min="1" max="64" value="1">
+        </td>
+        <td class="form-description">
+          <input form="routine-creator" type="text" name="frequency">
+        </td>
+        <td></td><td></td>
+        <td class="form-submit">
+          <input form="routine-creator" type="submit" value="Create">
+        </td>
+      </tr>
+    </thead>
+    <tbody id="routine-container">
+    </tbody>
+  </table>
+  
+  
+
+
+ 
+<script src="/frontend/todo_script.js"></script>
+</body>
+</html>

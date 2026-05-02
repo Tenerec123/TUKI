@@ -1,0 +1,155 @@
+from datetime import datetime
+import os
+from dotenv import load_dotenv
+from google import genai
+from google.genai import types
+# Load environment variables from .env file
+load_dotenv()
+# Initialize clients with API keys from environment variables
+gemini_client = genai.Client(api_key=os.environ['GOOGLE_GENAI_API_KEY'])
+
+from schemas import ConversationSchema, MessageSchema, Prompt
+from fastapi import APIRouter, Depends
+from .tools import ProcessBatch, tool_schemas, ToolDict
+from openai import OpenAI
+import json
+from database import get_db
+from models import Conversation
+from sqlalchemy.orm import Session
+router = APIRouter(
+    prefix="/api/ai", # Todos los endpoints empezarán con esto
+    tags=["ai"]        # Organiza la documentación automática (/docs)
+)
+
+
+def GetRules():
+    return
+rules= f"""
+Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Your user will be the creator
+Use always this date format: DD/MM/YYYY
+All priorities are between 1 and 64 (0 is not asigned)
+There is only a tool, ProcessBatch. Inside it you can use all the other tools multiple times
+"""
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ['OPENROUTER_API_KEY']
+) # OpenRouter para multicontratación
+config = types.GenerateContentConfig(
+    system_instruction=rules,
+    tools=[ProcessBatch],
+    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
+    max_output_tokens=10000,
+)
+# for model in gemini_client.models.list():
+#     # Filtramos solo los modelos que soportan generación de contenido
+
+#     print(f"ID: {model.name} | Versión: {model.version} | Display: {model.display_name}")
+            
+def gemini_agent(conversation:ConversationSchema, prompt_text:str):
+        # Lista de modelos por orden de prioridad para T.U.K.I.
+    MODEL_STACK = [
+        'gemini-3.1-flash-lite-preview',  # Mejor cuota (500 RPD) y razonamiento
+        'gemini-2.0-flash',               # Rápido, pero experimental (fallback)
+        'gemini-flash-lite-latest',       # Alias de seguridad
+        'gemini-2.0-flash', 
+        'models/gemini-3.1-pro-preview',           # Lo más avanzado en la serie 3.
+        'models/gemini-2.5-pro',                   # Estable y con capacidades multimodales maduras.
+        'models/gemini-3-flash-preview',           # Rapidez de nueva generación.
+        'models/gemini-3.1-flash-lite-preview',    # Alta cuota y latencia mínima.
+        'models/gemini-2.5-flash',                 # El estándar actual para tareas generales.
+        'models/gemini-flash-latest',              # Garantiza que siempre use una versión funcional.
+        'models/gemini-pro-latest',
+    ]
+    
+    for model in MODEL_STACK:
+        try:
+            history_map = [
+                types.Content(
+                    role="model", 
+                    parts=[types.Part(text=f"TIME: {datetime.today().strftime("%d/%m/%Y, %H:%M:%S")}")]
+                    )
+                ]
+            for i, msg in enumerate(conversation.messages):
+                history_map.append(types.Content(
+                    role= 'user' if msg.is_user else 'model',
+                    parts=[types.Part(text=msg.text)]
+                ))
+
+            # 2. Crear el chat con el historial cargado
+            chat = gemini_client.chats.create(
+                model=model,
+                config=config,
+                history=history_map,
+            )
+
+            response = chat.send_message(prompt_text)
+            return {'response':response.text}
+        except Exception as e:
+            if '503' in str(e) or "429" in str(e):
+                print(f"Problems with {model}, system will try the next one")
+                continue
+            elif '404' in str(e):
+                print(f"ERROR!!!!!! {model} NO EXISTE")
+                continue
+            else: raise e
+    return {'response':"All models are UNAVAILABLE, impossible to respond"}
+
+formatted_tools = [
+    {
+        "type": "function",
+        "function": schema  # Aquí va el diccionario que creamos antes
+    } 
+    for schema in tool_schemas
+]
+
+def openai_agent(conversation:ConversationSchema, max_inferences = 3):
+
+    MODEL_STACK = [
+        "nvidia/nemotron-3-super-120b-a12b:free"
+        "meta-llama/llama-3.3-70b-instruct:free",   # Rey actual
+        "google/gemma-4-31b-it:free",               # Nuevo en 2026, brutal para JSON
+        "openai/gpt-oss-120b:free",                 # El nuevo MoE abierto de OpenAI
+        "qwen/qwen3-coder:free",                    # El mejor para lógica de sistemas
+        "nvidia/nemotron-3-super-120b-a12b:free",   # Enorme, ideal para 100 tareas
+        "z-ai/glm-4.5-air:free",                    # Muy rápido y preciso en tools
+        "minimax/minimax-m2.5:free"]
+    function_outputs = []
+    for model in MODEL_STACK:
+        try:
+            for i in range(max_inferences):
+                is_last_attempt = (i == max_inferences - 1)
+                tool_selection = None if is_last_attempt else "auto"
+                messages = [{'role':'developer','content':rules}]
+                for i, msg in enumerate(conversation.messages):
+                    messages.append({'role':'user' if i%2==0 else 'assistant', 'content':msg})
+                for f_output in function_outputs:
+                    messages.append({'role':'tool','content':f_output})
+                response = client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    tools= formatted_tools if not is_last_attempt else None,
+                    tool_choice=tool_selection
+                )
+                message = response.choices[0].message
+                if message.tool_calls:
+                    results = []
+                    for tool_call in message.tool_calls:
+                        args = json.loads(tool_call.function.arguments)
+                        func = ToolDict.get(tool_call.function.name, None)
+                        if func is not None:
+                            output = func(**args)
+                        else: output = f"Tool {tool_call.function.name} does not exist"
+                        results.append(output)
+                else:
+                    return {'response':message.content}
+        except Exception as e:
+            print(e)
+    return {'response':"All models are unavailable."}
+
+@router.post("/")
+def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
+    db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
+    
+    return gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message)
+
+

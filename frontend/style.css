@@ -1,0 +1,604 @@
+/* 
+MAIN STYLING 
+*/
+:root {
+    --neon-yellow: #ffff00;
+    --neon-red: #ff0000;
+    --off-red:#321010;
+    --green:#1a2010;
+    --off-yellow:#807c0e;
+    --dark-bg: #1a1a1a;
+    --chacoal-grey: #323A3F;
+    --glow-yellow-off: 0 0 0 var(--neon-yellow);
+    --glow-yellow-on: 0 0 10px var(--neon-yellow);
+    --glow-red-off: 0 0 0 var(--neon-red);
+    --glow-red-on: 0 0 10px var(--neon-red);
+    --sb-width: 250px; 
+    --transition-speed: 0.3s;
+}
+* {
+    box-sizing: border-box; /* El padding y borde van hacia ADENTRO */
+}
+body{
+    background-color: var(--dark-bg);
+    font-family: monospace;
+    color: var(--neon-yellow);
+    margin: 0;
+}
+
+#title{
+    text-align: center;
+    font-size: 3rem;
+    margin-bottom: 0;
+    margin-top: 10px;
+}
+#subtitle{
+    text-align: center;
+    margin-top: 0;
+    font-size: 1rem;
+}
+
+/*
+NAVBAR
+*/
+#navbar{
+    width: 100%;
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    background-color: var(--chacoal-grey);
+    margin-top: 20px;
+    margin-bottom: 0;
+    height: 50px;
+}
+#navbar a{
+    text-decoration: none;
+    font-size: 2rem;
+    margin: 7px 15px;
+    color:var(--neon-yellow);
+}
+#navbar a.unable{
+    color:var(--off-yellow);
+}
+
+/* 
+SIDEBAR
+*/
+#sidebar {
+    width: var(--sb-width);
+    height: 100%;
+    background-color: var(--chacoal-grey);
+    transition: width var(--transition-speed) ease;
+    display: flex;
+    flex-direction: column;
+    z-index: 20;
+    overflow-x: hidden;
+}
+
+.sidebar-controls {
+
+    padding: 10px 0;
+    padding-left: 10px;
+}
+.sidebar-controls button{
+    background: none;
+    border: none;
+    color: var(--neon-yellow);
+    cursor: pointer;
+    font-size: 1.5rem;
+    transition: transform 0.2s;
+}
+
+#toggle-sidebar:hover {
+    text-shadow: var(--glow-yellow-on);
+}
+
+#sidebar ul {
+    list-style-type: none;
+    padding: 0;
+    margin: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+#sidebar ul li{
+    display: flex;
+    flex-direction: row;
+}
+.conv-select {
+    text-align: left;
+    width: 100%;
+    background: none;
+    border: none;
+    display: block;
+    padding: 15px 20px;
+    color: white;
+    white-space: nowrap; /* Evita que el texto se amontone al colapsar */
+    transition: background-color 0.2s;
+    overflow-x: hidden;
+}
+.conv-select:hover {
+    background-color: #575757;
+    color: var(--neon-yellow);
+}
+
+.conv-delete{
+    width: 50px;
+    background: none;
+    border: none;
+    padding: 10px 15px;
+    white-space: nowrap; /* Evita que el texto se amontone al colapsar */
+    transition: background-color 0.5s;
+}
+.conv-delete:hover {
+    background-color: var(--neon-red);
+}
+
+.selected-conversation .conv-select{
+    background-color: var(--neon-yellow);
+    color: var(--chacoal-grey);
+
+}
+
+/* Ocultar texto del sidebar cuando está colapsado para un look limpio */
+.sidebar-collapsed #sidebar ul li button {
+    padding: 15px 18px;
+    font-size: 0; /* Oculta texto pero mantiene el área para iconos si pusieras */
+}
+
+/* Animación tipo 'aparición de sistema' */
+@keyframes tukiPop {
+    from { 
+        opacity: 0; 
+        transform: translateY(-5px); 
+    }
+    to { 
+        opacity: 1; 
+    }
+}
+
+.context-menu {
+    position: fixed;
+    min-width: 140px;
+    background-color: #1a1a1d; /* Un gris muy oscuro, a juego con tu sidebar */
+    border: 2px solid #FFFF00; /* Tu borde amarillo neón característico */
+    /* Eliminamos el border-radius para un look más "bloque" y retro */
+    border-radius: 0; 
+    box-shadow: 0 4px 10px rgba(255, 255, 0, 0.2); /* Sombra sutil amarilla */
+    padding: 4px 0;
+    z-index: 1000;
+    /* Animación más directa y rápida, tipo terminal */
+    animation-name: tukiPop;
+    animation-duration: 0.2s; /* Rápida, tipo terminal */
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards; /* Mantiene el estado final de la animación */
+}
+
+/* Estilo para los botones/opciones dentro del menú */
+.menu-item {
+  width: 100%;
+  background: none;
+  border: none;
+  color: #FFFF00; /* Texto amarillo neón */
+  font-family: 'Courier New', Courier, monospace; /* Tipografía monoespaciada para el look TUKI */
+  font-size: 13px;
+  font-weight: bold;
+  text-align: left;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Efecto Hover: invertimos los colores para que contraste */
+.menu-item:hover {
+  background-color: #FFFF00;
+  color: #1a1a1d;
+}
+
+/* Variante para la opción 'Eliminar' (Danger) */
+.menu-item.danger {
+  color: #ff4d4d; /* Rojo para alertar */
+}
+
+.menu-item.danger:hover {
+  background-color: #ff4d4d;
+  color: white;
+}
+
+
+
+/* 
+PROMPT
+*/
+
+/* Estado colapsado: Solo cambia esta variable y todo lo demás se ajusta */
+.sidebar-collapsed {
+    --sb-width: 60px;
+}
+
+/* --- ESTRUCTURA PRINCIPAL (LAYOUT) --- */
+#chat-sidebar-container {
+    display: flex;
+    position: relative;
+    /* Esto hace que el objeto ocupe la máxima altura hasta chocar con el final de la pantalla */
+    height: calc(100vh - 155px); 
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Evita que el contenedor padre genere scroll */
+    background-color: var(--dark-bg);
+}
+
+#form-container {
+    position: absolute;
+    bottom: 0;
+    /* Se mueve junto con el sidebar usando la variable */
+    left: var(--sb-width); 
+    right: 0;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    transition: left var(--transition-speed) ease;
+    /* Gradiente para ver mensajes pasar por debajo */
+    background: none;
+    pointer-events: none; /* Permite clickear el chat a través del área vacía */
+}
+
+#prompt-form {
+    pointer-events: auto; /* El formulario sí recibe clicks */
+    border: 3px solid var(--neon-yellow);
+    border-radius: 5px;
+    height: 80px;
+    width: 80%;
+    background-color: hsl(0, 0%, 10%, .9);
+    display: flex;
+    align-items: center;
+    position: relative;
+
+}
+
+#prompt-writer {
+    background: none;
+    border: none;
+    color: var(--neon-yellow);
+    height: 100%; /* Ajustado: 1000px rompía el layout */
+    width: 90%;
+    text-align: left;
+    font-size: 1.2rem;
+    resize: none;
+    padding: 10px;
+}
+#prompt-writer:focus, .active-rename:focus {
+  outline: none;
+}
+#submit-btn {
+    background: transparent;
+    border: none;
+    color: var(--neon-red);
+    cursor: pointer;
+    position: absolute; /* Posicionamiento absoluto dentro del form */
+    right: 10px;
+    bottom: 10px;
+    padding: 5px;
+    transition: box-shadow .5s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--glow-red-off);
+}
+#submit-btn:hover{
+    box-shadow: var(--glow-red-on);
+}
+#submit-btn svg {
+    width: 30px; /* Tamaño lógico para un icono */
+    height: 30px;
+}
+
+#chat-container {
+    box-sizing: border-box;
+    width: 100%;    
+    /* AJUSTES PARA SCROLL */
+    height: 100%;      /* Ocupa el 65% de la pantalla */
+    overflow-y: auto;  /* Habilita el scroll interno */
+    scroll-behavior: smooth; /* Esto ralentiza el movimiento */
+    /* padding-bottom: 100px; */
+    padding-bottom: 100px;
+}
+
+.user-msg, .tuki-msg{
+    white-space: pre-wrap; /* Mantiene los saltos de línea \n */
+    word-wrap: break-word; /* Evita que palabras largas rompan el layout */
+    margin: 20px;
+    border-radius: 10px;
+    min-height: 50px;
+    padding: 10px;
+    font-size: 1.2rem;
+    height: fit-content;
+
+}
+.user-msg{
+    display: flex;
+    align-items: center;
+    justify-content: center; /* Alineación horizontal (inicio) */
+    margin-right: 8%;
+    background-color: var(--off-red);
+    width: fit-content;
+    padding: 10px 20px;
+    max-width: 60%;
+    margin-left:auto;
+}
+.tuki-msg{
+    color: #ccff00;
+    background-color: var(--green);
+    width: 90%;
+    
+}
+/* Definir el ancho total del scrollbar */
+::-webkit-scrollbar {
+    width: 6px; /* Muy fino */
+}
+
+/* El fondo por donde se mueve (Track) */
+::-webkit-scrollbar-track {
+    background: var(--chacoal-grey); /* Fondo oscuro integrado */
+    border-radius: 10px;
+}
+
+/* La barra que se arrastra (Thumb) */
+::-webkit-scrollbar-thumb {
+    background-color: var(--neon-yellow); /* Color neon */
+    border-radius: 10px;
+    border: 1px solid var(--dark-bg); /* Pequeño borde para separarlo */
+}
+
+/* Efecto al pasar el ratón por encima del thumb */
+::-webkit-scrollbar-thumb:hover {
+    background-color: #ffffff; /* Se ilumina en blanco al hover */
+    box-shadow: var(--glow-yellow-on); /* Añade tu neón glow */
+}
+/* 
+TABLE 
+*/
+
+table{
+    border-collapse: collapse;
+    width: 100%;
+}
+th, td {
+    height: 50px;/* Espacio interno vertical y horizontal */   /* Alineación del texto */
+    border: 1px solid #ddd; /* Línea sutil entre filas */
+}
+th{
+    text-align: center;
+    font-size: 1rem;
+}
+/* 
+TABLE DATA COLUMNS
+*/
+
+.name{
+    font-size: 1.1rem;
+}
+.description{
+
+    font-size: .9rem;
+}
+.priority-header{
+    width: 100px;
+}
+.priority{
+    width: 100px;
+    font-size: 1.4rem;
+    text-align: center;
+}
+.deadline{
+    font-family: monospace;
+    padding: 0;
+    font-size: 1.4rem;
+    text-align: center;
+}
+.check, .form-check{
+    margin: 0;
+    padding: 0;
+}
+.check button, .form-check button{
+    font-size: 2.5rem;
+    color: var(--neon-yellow);
+    background-color: transparent;
+    border: none;
+    width: 100%;
+}
+
+
+.delete button{
+    background:none;
+    border: none;
+    font-size: 2rem;
+    width: 100%;
+    text-align: center;
+}
+/* 
+TABLE CREATE COLUMNS
+*/
+
+.form-submit,.form-name, .form-description, .form-priority, .form-deadline{
+    margin: 0;
+    padding: 0;
+}
+
+.form-submit{
+    width: 25px;
+}
+
+.form-submit input{
+    font-size: 1rem;
+    font-weight: bold;
+    color: var(--neon-red);
+    font-family: monospace;
+    text-align: center;
+    background-color: rgb(0, 0, 0);
+    border: 2px solid var(--neon-red);
+    width: 100%;
+    height: 100%;
+    transition: box-shadow .5s, border .5s, color .5s, background-color, .5s;
+}
+.form-submit input:hover{
+    box-shadow: 0 0 20px var(--neon-red);
+    color: black;
+    background-color: var(--neon-red);
+    border: 2px solid black;
+}
+
+.form-name input, .form-description input, .form-priority input{
+    background:none;
+    border: none;
+    width: 99%;
+    height: 100%;
+    color: var(--neon-yellow);
+}
+.form-priority input{
+    font-family: monospace;
+    padding: 0;
+    font-size: 1.4rem;
+    text-align: center;
+
+}
+
+
+.form-priority input:focus {
+  outline: none;
+}
+
+
+/* Chrome, Safari, Edge, Opera */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* 
+BIG CALENDAR
+*/
+
+.cal-task-pending {
+    background-color: var(--dark-bg) !important;
+    border: 1px solid var(--neon-yellow) !important;
+}
+
+/* Tarea terminada en el calendario */
+.cal-task-done {
+    background-color: var(--green) !important; /* El verde oscuro de TUKI */
+    border: none;
+    opacity: 0.7;
+}
+
+.cal-task-pending .fc-event-title,
+.cal-task-pending .fc-event-main {
+    color: var(--neon-yellow) !important; /* Cambiado de black a neón para legibilidad */
+}
+
+.cal-task-done .fc-event-title,
+.cal-task-done .fc-event-main {
+    color: green !important; /* En el verde sí queda bien el negro */
+}
+
+.fc-event {
+    transition: transform .15s;
+}
+
+/* 2. Forzamos a que el título se vea completo */
+.fc-event:hover .fc-event-title {
+    white-space: normal !important; /* Permite saltos de línea */
+    overflow: visible !important;   /* Muestra lo que estaba oculto */
+    display: block !important;
+}
+
+/* 3. Aseguramos que el contenedor del evento crezca para albergar el texto */
+.fc-event:hover .fc-event-main {
+    height: auto !important;
+    min-height: 100% !important;
+    background-color: inherit; /* Mantiene el color del evento */
+}
+/* Estado al pasar el ratón */
+.fc-event:hover {
+    transform: scale(1.1); /* Crece un 10% */
+    z-index: 999 !important; /* Se asegura de quedar por encima de otros eventos */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5); /* Añade profundidad */
+}
+
+/* Fondo de los fines de semana (Sábado y Domingo) */
+.fc-day-sat, .fc-day-sun {
+    background-color: #222222 !important;
+}
+
+/* El color de fondo del día actual */
+.fc .fc-day-today {
+    background-color: var(--off-yellow) !important; /* Un ligero tinte amarillo */
+}
+/* 
+SELECT CALENDAR
+*/
+
+.date-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+}
+
+.custom-date {
+    background-color: transparent;
+    color: var(--neon-yellow);
+    font-family: monospace; /* Misma fuente que la fila de abajo */
+    font-size: 1.4rem;      /* Mismo tamaño que .todo-deadline */
+    border: none;
+    width: 100%;
+    height: 100%;
+    outline: none;
+    cursor: pointer;
+    text-transform: uppercase;
+    color-scheme: dark;
+    text-align: center; 
+    padding: 0; 
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.custom-date::-webkit-date-and-time-value {
+    text-align: center;
+    width: 100%;
+}
+
+.custom-date::-webkit-calendar-picker-indicator {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+.date-container::after {
+    content: " ";
+    font-size: 1rem;
+    position: absolute;
+    right: 15px;
+    color: var(--neon-yellow);
+    opacity: 0.6;
+    pointer-events: none;
+    z-index: 1;
+}
+.custom-date:hover, .custom-date:focus {
+  border-color: var(--neon-yellow);
+  box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
+}
+

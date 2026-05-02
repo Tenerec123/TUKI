@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>T.U.K.I. CHAT</title>
+  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="icon" href="data:,">
+</head>
+<body>
+
+<header>
+  <h1 id="title">T.U.K.I. CHAT</h1>
+  <h2 id="subtitle">T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR</h2>
+  <div id="navbar">
+    <a class="unable" href="chat">CHAT</a>
+    <a href="todo">TODO</a>
+    <a href="kale">KALE</a>
+  </div>
+</header>
+
+<main id="chat-sidebar-container">
+  <nav id="sidebar">
+    <div class="sidebar-controls">
+      <button id="toggle-sidebar">☰</button><br>
+      <button id="create-chat" onclick="createConversation()">+</button>
+    </div>
+    <ul id="conversation-list">
+    </ul>
+      
+  </nav>
+  <div id="chat-container">
+  </div>
+  
+  <div id="form-container">
+    <form id="prompt-form" method="post">
+      <textarea id="prompt-writer" name="text" placeholder="Ask something to TUKI"></textarea>
+      <button type="submit" id="submit-btn" class="btn-tuki">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-arrow-up" viewBox="0 0 16 16">
+        <path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5"/>
+        </svg>
+      </button>
+    </form>
+  </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
+<script src="/frontend/chat_script.js"></script>
+</body>
+</html>
