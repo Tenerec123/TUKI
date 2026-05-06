@@ -36,8 +36,6 @@ def add_msgs_to_conversation(id:int, changes:ConversationUpdate, db: Session = D
                 **new_msg.model_dump(),
                 position = first_new_pos+i
             ))
-    print(changes.title)
-    print(db_conversation.title)
     if changes.title: db_conversation.title = changes.title
     db.commit()
     db.refresh(db_conversation)

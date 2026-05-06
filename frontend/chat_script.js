@@ -5,8 +5,8 @@ const conversationList = document.getElementById('conversation-list');
 const textarea = document.getElementById('prompt-writer')
 var posOfSelectedConv = -1;
 var idOfSelectedConv = -1;
-var menu_displayed;
-var id_of_menu_disp;
+var menu_displayed = null;
+var id_of_menu_disp = null;
 
 async function createConversation(){
     chat = {
@@ -35,12 +35,31 @@ async function deleteConversation(conv_id){
     menu_displayed = null;
     getConversations();
 }
+
 async function allowRenameConv(conv_id, conv_position) {
-    console.log(conversationList)
     renameForm = document.createElement('form');
+    titleButton = conversationList.children[conv_position].children[0];
     renameForm.classList.add('rename-form');
-    renameForm.innerHTML = `<input name="newname" type="text" class="conv-select active-rename" value="new_chat1">`;
-    conversationList.children[conv_position].children[0].replaceWith(renameForm);
+    renameForm.innerHTML = `<input name="newname" type="text" class="conv-select active-rename" placeholder="${titleButton.textContent}">`;
+    titleButton.replaceWith(renameForm);
+    renameForm.children[0].focus();
+    function detectClicksForRename(e){
+        conv_rename = e.target.closest('.conv-rename')
+        if ((!conv_rename || conv_rename == renameForm.parentNode.children[1])  && !e.target.closest('.active-rename')){
+            console.log("EIEIEI")
+            selectBtn = document.createElement('button');
+            selectBtn.classList.add('conv-select');
+            selectBtn.addEventListener('click', (e) => {
+                loadConversation(conv_id, conv_position);
+            });
+            selectBtn.innerHTML = `${renameForm.children[0].placeholder}`
+            renameForm.children[0].blur();
+            renameForm.replaceWith(selectBtn);
+            document.removeEventListener('click', detectClicksForRename)
+        }
+}
+    document.addEventListener('click', detectClicksForRename);
+
     renameForm.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -48,28 +67,39 @@ async function allowRenameConv(conv_id, conv_position) {
             const data = Object.fromEntries(formData.entries());
             const newName = data.newname
             const response2 = await fetch(`http://localhost:8000/api/conversations/${conv_id}`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                title:newName
-            })
-        });
-        selectBtn = document.createElement('button');
-        selectBtn.classList.add('conv-select');
-        selectBtn.addEventListener('click', (e) => {
-            loadConversation(conv_id, conv_position);
-        });
-        selectBtn.innerHTML = `${newName}`
-        conversationList.children[conv_position].children[0].replaceWith(selectBtn);
-
-    }
-});
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    title:newName
+                })
+            });
+            selectBtn = document.createElement('button');
+            selectBtn.classList.add('conv-select');
+            selectBtn.addEventListener('click', (e) => {
+                loadConversation(conv_id, conv_position);
+            });
+            selectBtn.innerHTML = `${newName}`
+            renameForm.children[0].blur();
+            renameForm.replaceWith(selectBtn);
+            document.removeEventListener('click', detectClicksForRename);
+        }
+        else if (e.key == 'Escape'){
+            e.preventDefault();
+            selectBtn = document.createElement('button');
+            selectBtn.classList.add('conv-select');
+            selectBtn.addEventListener('click', (e) => {
+                loadConversation(conv_id, conv_position);
+            });
+            selectBtn.innerHTML = `${renameForm.children[0].placeholder}`
+            renameForm.children[0].blur();
+            renameForm.replaceWith(selectBtn);
+            document.removeEventListener('click', detectClicksForRename);
+        }
+    });
+    
 }
-
-
-
 async function loadConversation(conv_id, conv_position){
     conversationList.children[conv_position].classList.add('selected-conversation');
     if (conv_position != posOfSelectedConv){
@@ -109,7 +139,7 @@ async function getConversations(){
             const divConv = document.createElement('li');
             divConv.innerHTML = `
                 <button class="conv-select" onclick="loadConversation(${conversation.id}, ${i})">${conversation.title}</button>
-                <button class="conv-delete" onclick="OpenMenu(this, ${conversation.id}, ${i})">
+                <button class="conv-options" onclick="OpenMenu(this, ${conversation.id}, ${i})">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-three-dots" viewBox="0 0 16 16">
                         <path d="M3 9.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m5 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"/>
                     </svg>
@@ -125,7 +155,6 @@ chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     sendPrompt();
 });
-
 async function sendPrompt(){
     const formData = new FormData(chatForm);
     const data = Object.fromEntries(formData.entries());
@@ -186,14 +215,12 @@ async function sendPrompt(){
         })
     });
 }
-
 textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendPrompt(); 
     }
 });
-
 function scrollToBottom(){
     setTimeout(() => {
         chatContainer.scrollTo({
@@ -210,7 +237,6 @@ document.addEventListener('DOMContentLoaded', () => {
         container.classList.toggle('sidebar-collapsed');
     });
 })
-
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();
     const x = rect.left; 
@@ -230,7 +256,7 @@ function OpenMenu(button, id, position){
         });
         menu.classList.add('context-menu');
         menu.innerHTML = `
-        <button class="menu-item" onClick="allowRenameConv(${id}, ${position})">Cambiar nombre</button>
+        <button class="menu-item conv-rename" onClick="allowRenameConv(${id}, ${position})">Cambiar nombre</button>
         <button class="menu-item" onClick="deleteConversation(${id})">Eliminar</button>
         `;
         
@@ -244,8 +270,11 @@ function OpenMenu(button, id, position){
         id_of_menu_disp = id;
     }
 }
-
-function Menu(x, y, button){
-    
-}
-    
+document.addEventListener('click', (e) => {
+    if (menu_displayed != null && !e.target.closest('.conv-options') && !menu_displayed.contains(e.target)){
+        console.log("1111")
+        menu_displayed.remove();
+        menu_displayed = null;
+        id_of_menu_disp = null;
+    }
+})

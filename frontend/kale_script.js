@@ -3,21 +3,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     await fetch('http://localhost:8000/api/tasks')
     .then(response => response.json())
     .then(data => {
-    console.log(data)
-    data.forEach(task => {
+        data.forEach(task => {
         const [dia, mes, año] = task.deadline.split('/');
-        console.log(dia)
         const ISO_date = `${año}-${mes}-${dia}`;
         tasks.push({
             title:task.name,
             start:ISO_date,
             allDay: true,
-            className: task.finished ? 'cal-task-done' : 'cal-task-pending',
+            className: task.finished ? 'cal-task-done' : ISO_date > new Date().toISOString().split('T')[0] ? 'cal-task-pending' : 'cal-task-overdue'
         })
     });
     })
     .catch(error => console.error("Error al obtener datos:", error));
-    console.log(tasks)
     var calendarEl = document.getElementById('calendar');
     var calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',

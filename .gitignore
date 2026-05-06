@@ -51,9 +51,3 @@ venv.bak/
 # Logs
 *.log
 logs/
-
-# Alembic
-alembic.ini
-
-# Temporary files
-tempCodeRunnerFile.py

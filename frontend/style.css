@@ -120,8 +120,11 @@ SIDEBAR
     background-color: #575757;
     color: var(--neon-yellow);
 }
-
-.conv-delete{
+.active-rename{
+    overflow: visible;
+    z-index: 99;
+}
+.conv-options{
     width: 50px;
     background: none;
     border: none;
@@ -129,7 +132,7 @@ SIDEBAR
     white-space: nowrap; /* Evita que el texto se amontone al colapsar */
     transition: background-color 0.5s;
 }
-.conv-delete:hover {
+.conv-options:hover {
     background-color: var(--neon-red);
 }
 
@@ -138,7 +141,6 @@ SIDEBAR
     color: var(--chacoal-grey);
 
 }
-
 /* Ocultar texto del sidebar cuando está colapsado para un look limpio */
 .sidebar-collapsed #sidebar ul li button {
     padding: 15px 18px;
@@ -504,6 +506,16 @@ BIG CALENDAR
 .cal-task-done .fc-event-title,
 .cal-task-done .fc-event-main {
     color: green !important; /* En el verde sí queda bien el negro */
+}
+
+.cal-task-overdue  {
+    background-color: rgb(28, 1, 1) !important; /* El rojo oscuro para tareas vencidas */
+    border: 1px solid var(--neon-red) !important;
+}
+
+.cal-task-overdue .fc-event-title, 
+.cal-task-overdue .fc-event-main {
+    color: red !important;
 }
 
 .fc-event {
