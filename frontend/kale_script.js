@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             title:task.name,
             start:ISO_date,
             allDay: true,
-            className: task.finished ? 'cal-task-done' : ISO_date > new Date().toISOString().split('T')[0] ? 'cal-task-pending' : 'cal-task-overdue'
+            className: task.finished ? 'cal-task-done' : ISO_date >= new Date().toISOString().split('T')[0] ? 'cal-task-pending' : 'cal-task-overdue'
         })
     });
     })
