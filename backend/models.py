@@ -72,4 +72,3 @@ class Message(Base):
     is_user: Mapped[bool] = mapped_column(nullable=False)
     text: Mapped[str] = mapped_column(nullable=False)
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
-Base.metadata.create_all(engine)

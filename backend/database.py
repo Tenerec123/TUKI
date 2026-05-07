@@ -11,7 +11,7 @@ engine = create_engine(
 # Definición de Base moderna
 class Base(DeclarativeBase):
     pass
-
+from models import Project, Task, Routine, Conversation, Message
 # Session factory
 SessionLocal = sessionmaker(
     bind=engine,
