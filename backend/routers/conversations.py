@@ -16,7 +16,7 @@ def get_conversation(id:int, db: Session = Depends(get_db)):
     return db_conversations
 @router.get("/", response_model=List[ConversationData])
 def get_conversation_names(db: Session = Depends(get_db)):
-    db_conversations = db.query(Conversation).all()
+    db_conversations = db.query(Conversation).order_by(Conversation.last_used.desc()).all()
     return db_conversations
 @router.post("/", response_model=ConversationSchema)
 def create_new_conversation(convesation: ConversationCreate, db: Session = Depends(get_db)):

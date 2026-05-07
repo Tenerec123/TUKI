@@ -116,7 +116,7 @@ class ConversationUpdate(BaseModel):
 class ConversationData(BaseModel):
     title: str = Field(...)
     id:int = Field(...)
-    creation_date:date = Field(...)
+    last_used:datetime = Field(...)
 
 
 class Prompt(BaseModel):
