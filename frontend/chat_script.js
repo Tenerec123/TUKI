@@ -10,9 +10,7 @@ var id_of_menu_disp = null;
 
 async function createConversation(){
     chat = {
-        title:"new_chat",
-        messages:[],
-        creation_date:"2026-04-04"
+        title:"new_chat"
     }
 
     const response = await fetch(`http://localhost:8000/api/conversations/`, {
@@ -202,7 +200,7 @@ async function sendPrompt(){
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            msgs:[
+            messages:[
                 {
                     is_user:true,
                     text:data.text

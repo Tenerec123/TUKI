@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ConfigDict, field_serializer
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 
@@ -94,23 +94,24 @@ class MessageSchema(MessageBase):
 
 class ConversationBase(BaseModel):
     title: str = Field(...)
-    messages: Optional[List[MessageSchema]] = Field(default=[])
-    creation_date:date = Field(...)
-    model_config = ConfigDict(from_attributes=True)
-
-
+    
 class ConversationCreate(ConversationBase):
     pass
 
 class ConversationSchema(ConversationCreate):
     id:int = Field(...)
+    messages: Optional[List[MessageSchema]] = Field(default=[])
+    creation_date:date = Field(...)
+    last_used:datetime = Field(...)
+    model_config = ConfigDict(from_attributes=True)
     @field_serializer('creation_date')
-    def serialize_deadline(self, creation_date: date) -> str:
+    def serialize_creation_date(self, creation_date: date) -> str:
         return creation_date.strftime("%d/%m/%Y")
-
+    
 class ConversationUpdate(BaseModel):
-    msgs:Optional[List[MessageBase]] = Field(default=[])
+    messages:Optional[List[MessageBase]] = Field(default=[])
     title: Optional[str] = Field(None)
+    last_used:Optional[datetime] = Field(None)
 
 class ConversationData(BaseModel):
     title: str = Field(...)

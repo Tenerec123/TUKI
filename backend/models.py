@@ -1,7 +1,7 @@
 from database import Base, engine
 from sqlalchemy import Integer, String, ForeignKey
 from typing import List, Optional
-from datetime import date
+from datetime import date,datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 # Mixin: Provee columnas comunes sin ser una tabla por sí misma
@@ -63,6 +63,7 @@ class Conversation(Base):
     title: Mapped[str] = mapped_column(String(100), nullable=False)
     messages: Mapped[List["Message"]] = relationship("Message",order_by="Message.position", back_populates="conversation", cascade="all, delete-orphan")
     creation_date:Mapped[Optional[date]] = mapped_column(nullable=True)
+    last_used:Mapped[Optional[datetime]] = mapped_column(nullable=True)
 
 class Message(Base):
     __tablename__="messages"
