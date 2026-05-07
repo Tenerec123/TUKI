@@ -19,20 +19,19 @@ async function LoadTasks() {
     await fetch('http://localhost:8000/api/tasks')
     .then(response => response.json())
     .then(data => {
-    
-    // Limpiamos el contenedor por si había algo antes
+
     TaskContainer.innerHTML = '';
-    // 'data' es tu lista de tareas. Usamos un bucle para leer cada una:
-    console.log(data)
+    ToSortTaskContainer = []
     data.forEach(task => {
         Char = "☑";
         SHOW_FINISHED = false
         if (!task.finished){
             Char = "☐";
         }
+        var dateParts = task.deadline.split("/");
+        var dateObject = new Date(+dateParts[2], dateParts[1] - 1, +dateParts[0]); 
 
         if (!task.finished || SHOW_FINISHED){
-            // Creamos un elemento para la tarea
             const divTask = document.createElement('tr');
         
             divTask.innerHTML = `
@@ -43,10 +42,14 @@ async function LoadTasks() {
                 <td class="deadline">${task.deadline || 'No date'}</td>
                 <td class="delete"><button onclick="Delete('tasks', this, ${task.id})">🗑️</button></td>
             `;
-
-            // Añadimos este nuevo div al contenedor principal
-            TaskContainer.appendChild(divTask);
+            ToSortTaskContainer.push([divTask, dateObject]);
         }
+        ToSortTaskContainer.sort((x, y) =>{
+            return x[1] - y[1];
+        })
+        ToSortTaskContainer.forEach(object => {
+            TaskContainer.appendChild(object[0]);
+        })
         
         });
     })
@@ -57,10 +60,7 @@ async function LoadProjects() {
     await fetch('http://localhost:8000/api/projects')
     .then(response => response.json())
     .then(data => {
-    
-    // Limpiamos el contenedor por si había algo antes
     ProjectContainer.innerHTML = '';
-    // 'data' es tu lista de tareas. Usamos un bucle para leer cada una:
     data.forEach(project => {
       // Creamos un elemento para la tarea
         const divProject = document.createElement('tr');
