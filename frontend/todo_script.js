@@ -21,19 +21,17 @@ async function LoadTasks() {
     .then(data => {
 
     TaskContainer.innerHTML = '';
-    ToSortTaskContainer = []
+    ToSortTaskContainer = [];
     data.forEach(task => {
         Char = "☑";
         SHOW_FINISHED = false
         if (!task.finished){
             Char = "☐";
         }
-        var dateParts = task.deadline.split("/");
-        var dateObject = new Date(+dateParts[2], dateParts[1] - 1, +dateParts[0]); 
 
         if (!task.finished || SHOW_FINISHED){
             const divTask = document.createElement('tr');
-        
+
             divTask.innerHTML = `
                 <td class="check"><button onclick="CheckClick(this, ${task.id})">${Char}</button></td>
                 <td class="name">${task.name}</td>
@@ -42,15 +40,8 @@ async function LoadTasks() {
                 <td class="deadline">${task.deadline || 'No date'}</td>
                 <td class="delete"><button onclick="Delete('tasks', this, ${task.id})">🗑️</button></td>
             `;
-            ToSortTaskContainer.push([divTask, dateObject]);
+            TaskContainer.appendChild(divTask);
         }
-        ToSortTaskContainer.sort((x, y) =>{
-            return x[1] - y[1];
-        })
-        ToSortTaskContainer.forEach(object => {
-            TaskContainer.appendChild(object[0]);
-        })
-        
         });
     })
     .catch(error => console.error("Error al obtener datos:", error));
@@ -62,7 +53,6 @@ async function LoadProjects() {
     .then(data => {
     ProjectContainer.innerHTML = '';
     data.forEach(project => {
-      // Creamos un elemento para la tarea
         const divProject = document.createElement('tr');
         divProject.innerHTML = `
             <td class="name">${project.name}</td>
@@ -71,7 +61,6 @@ async function LoadProjects() {
             <td class="delete"><button onclick="Delete('projects', this, ${project.id})">🗑️</button></td>
         `;
 
-        // Añadimos este nuevo div al contenedor principal
         ProjectContainer.appendChild(divProject);
     });
     })
@@ -83,12 +72,8 @@ async function LoadRoutines() {
   .then(response => response.json())
   .then(data => {
     
-    // Limpiamos el contenedor por si había algo antes
     RoutinesContainer.innerHTML = '';
-    // 'data' es tu lista de tareas. Usamos un bucle para leer cada una:
-    console.log(data)
     data.forEach(routine => {
-      // Creamos un elemento para la tarea
       const divRoutine = document.createElement('tr');
       Char = "☐";
       if (routine.finished){
@@ -103,7 +88,6 @@ async function LoadRoutines() {
         <td class="deadline">${routine.nex_run || 'No date'}</td>
         <td class="delete"><button onclick="Delete('routines', this, ${routine.id})">🗑️</button></td>
       `;
-      // Añadimos este nuevo div al contenedor principal
       RoutinesContainer.appendChild(divRoutine);
     });
   })
