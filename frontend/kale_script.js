@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
     tasks = []
-    await fetch('http://localhost:8000/api/tasks')
+    await fetch(`${window.API_URL}/api/tasks`)
     .then(response => response.json())
     .then(data => {
         data.forEach(task => {

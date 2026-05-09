@@ -1,9 +1,9 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
-
+import os
 # Engine con tipado implícito
 engine = create_engine(
-    'sqlite:///database.db', 
+    os.environ['DATABASE_URL'], 
     echo=False, 
     connect_args={"check_same_thread": False}
 )

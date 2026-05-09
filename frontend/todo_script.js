@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function LoadTasks() {
-    await fetch('http://localhost:8000/api/tasks')
+    await fetch(`${window.API_URL}/api/tasks`)
     .then(response => response.json())
     .then(data => {
 
@@ -48,7 +48,7 @@ async function LoadTasks() {
 }
 
 async function LoadProjects() {
-    await fetch('http://localhost:8000/api/projects')
+    await fetch(`${window.API_URL}/api/projects`)
     .then(response => response.json())
     .then(data => {
     ProjectContainer.innerHTML = '';
@@ -68,7 +68,7 @@ async function LoadProjects() {
 }
 // Not done
 async function LoadRoutines() {
-  await fetch('http://localhost:8000/api/routines')
+  await fetch(`${window.API_URL}/api/routines`)
   .then(response => response.json())
   .then(data => {
     
@@ -102,7 +102,7 @@ async function CheckClick(element, id){
     // element.innerText  = "☑";
     Checked_str = "true"
   }
-  const response = await fetch(`http://localhost:8000/api/tasks/${id}`, {
+  const response = await fetch(`${window.API_URL}/api/tasks/${id}`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -122,7 +122,7 @@ TaskCreator.addEventListener('submit', async (e) => {
       data.finished = "True"
     }
     console.log(data)
-    const response = await fetch('http://localhost:8000/api/tasks', {
+    const response = await fetch(`${window.API_URL}/api/tasks`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -143,7 +143,7 @@ ProjectCreator.addEventListener('submit', async (e) => {
     const formData = new FormData(ProjectCreator);
     const data = Object.fromEntries(formData.entries());
     console.log(data)
-    const response = await fetch('http://localhost:8000/api/projects', {
+    const response = await fetch(`${window.API_URL}/api/projects`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -164,7 +164,7 @@ RoutineCreator.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(RoutineCreator);
     const data = Object.fromEntries(formData.entries());
-    const response = await fetch('http://localhost:8000/api/routines', {
+    const response = await fetch(`${window.API_URL}/api/routines`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -181,7 +181,7 @@ RoutineCreator.addEventListener('submit', async (e) => {
 });
 async function Delete(type, object, id){
   object.parentElement.parentElement.remove()
-  const resp = await fetch(`http://localhost:8000/api/${type}/${id}`,{
+  const resp = await fetch(`${window.API_URL}/api/${type}/${id}`,{
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"

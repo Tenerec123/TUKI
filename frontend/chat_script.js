@@ -13,7 +13,7 @@ async function createConversation(){
         title:"new_chat"
     }
 
-    const response = await fetch(`http://localhost:8000/api/conversations/`, {
+    const response = await fetch(`${window.API_URL}/api/conversations/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -23,7 +23,7 @@ async function createConversation(){
     getConversations();
 }
 async function deleteConversation(conv_id){
-    const response = await fetch(`http://localhost:8000/api/conversations/${conv_id}`, {method: 'DELETE'});
+    const response = await fetch(`${window.API_URL}/api/conversations/${conv_id}`, {method: 'DELETE'});
     if (conv_id == idOfSelectedConv){
         chatContainer.innerHTML = ""
         idOfSelectedConv = -1
@@ -64,7 +64,7 @@ async function allowRenameConv(conv_id, conv_position) {
             const formData = new FormData(document.getElementsByClassName('rename-form')[0]);
             const data = Object.fromEntries(formData.entries());
             const newName = data.newname
-            const response2 = await fetch(`http://localhost:8000/api/conversations/${conv_id}`, {
+            const response2 = await fetch(`${window.API_URL}/api/conversations/${conv_id}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json'
@@ -105,7 +105,7 @@ async function loadConversation(conv_id, conv_position){
         conversationList.children[posOfSelectedConv].classList.remove('selected-conversation');
         }
         chatContainer.innerHTML = ""
-        const response = await fetch(`http://localhost:8000/api/conversations/${conv_id}`)
+        const response = await fetch(`${window.API_URL}/api/conversations/${conv_id}`)
         .then(response => response.json())
         .then(data => {
             data.messages.forEach((message)=>{
@@ -128,7 +128,7 @@ async function loadConversation(conv_id, conv_position){
     idOfSelectedConv = conv_id
 }
 async function getConversations(){
-    const response = await fetch(`http://localhost:8000/api/conversations/`)
+    const response = await fetch(`${window.API_URL}/api/conversations/`)
     .then(response => response.json())
     .then(data => {
         conversationList.innerHTML = ""
@@ -174,7 +174,7 @@ async function sendPrompt(){
 
     document.getElementById('prompt-writer').value = "";
     
-    const response = await fetch(`http://localhost:8000/api/ai/`, {
+    const response = await fetch(`${window.API_URL}/api/ai/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
