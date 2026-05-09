@@ -1,9 +1,14 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+basedir = Path(__file__).resolve().parent.parent 
+load_dotenv(basedir / ".env")
+
 # Engine con tipado implícito
 engine = create_engine(
-    os.environ['DATABASE_URL'], 
+    os.getenv('DATABASE_URL', 'sqlite:///database.db'), 
     echo=False, 
     connect_args={"check_same_thread": False}
 )

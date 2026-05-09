@@ -1,12 +1,14 @@
 from datetime import datetime
 import os
+from pathlib import Path
 from dotenv import load_dotenv
+basedir = Path(__file__).resolve().parent.parent 
+load_dotenv(basedir / ".env")
 from google import genai
 from google.genai import types
 # Load environment variables from .env file
-load_dotenv()
 # Initialize clients with API keys from environment variables
-gemini_client = genai.Client(api_key=os.environ['GOOGLE_GENAI_API_KEY'])
+gemini_client = genai.Client(api_key=os.getenv('GOOGLE_GENAI_API_KEY', ''))
 
 from schemas import ConversationSchema, MessageSchema, Prompt, ConversationUpdate, MessageBase
 from fastapi import APIRouter, Depends

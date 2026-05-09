@@ -1,14 +1,14 @@
-
 const TaskCreator = document.getElementById('task-creator');
 const ProjectCreator = document.getElementById('project-creator');
 const RoutineCreator = document.getElementById('routine-creator')
-
 const TaskContainer = document.getElementById('task-container');
 const ProjectContainer = document.getElementById('project-container');
 const RoutinesContainer = document.getElementById('routine-container');
-
-
 const CheckCreateButton = document.getElementById('check-create-button');
+const SERVER_IP = window.location.hostname;
+const API_PORT = window.location.port || "8000"
+window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
+
 document.addEventListener('DOMContentLoaded', () => {
     LoadTasks();
     LoadProjects();
@@ -188,3 +188,9 @@ async function Delete(type, object, id){
         },
     });
 }
+
+// Este script va a "gritar" el error en la pantalla del móvil
+window.onerror = function(msg, url, linenumber) {
+    alert('Error: ' + msg + '\nURL: ' + url + '\nLine: ' + linenumber);
+    return true;
+};

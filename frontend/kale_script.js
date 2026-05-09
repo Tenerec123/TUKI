@@ -1,3 +1,6 @@
+const SERVER_IP = window.location.hostname;
+const API_PORT = window.location.port || "8000"
+window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 document.addEventListener('DOMContentLoaded', async () => {
     tasks = []
     await fetch(`${window.API_URL}/api/tasks`)
