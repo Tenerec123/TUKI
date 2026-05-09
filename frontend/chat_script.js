@@ -208,13 +208,15 @@ function scrollToBottom(){
         });
     }, 10); // 10ms es suficiente para que el DOM se actualice
 }
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     const toggleBtn = document.getElementById('toggle-sidebar');
     const container = document.getElementById('chat-sidebar-container');
-    getConversations();
+    
     toggleBtn.addEventListener('click', () => {
         container.classList.toggle('sidebar-collapsed');
     });
+    await getConversations();
+    conversationList.children[0].children[0].click()
 })
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();
@@ -251,7 +253,6 @@ function OpenMenu(button, id, position){
 }
 document.addEventListener('click', (e) => {
     if (menu_displayed != null && !e.target.closest('.conv-options') && !menu_displayed.contains(e.target)){
-        console.log("1111")
         menu_displayed.remove();
         menu_displayed = null;
         id_of_menu_disp = null;
