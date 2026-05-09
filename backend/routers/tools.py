@@ -132,7 +132,6 @@ def CreateProject(name: str, description: str = None, priority: int = None, pare
     '''
     if parent_id is not None and parent_id <= 0: 
         parent_id = None
-    print(f"P.ID = {parent_id}")
     with SessionLocal() as db:
         project_data = ProjectCreate(
             name=name, 

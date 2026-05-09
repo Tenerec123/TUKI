@@ -193,25 +193,6 @@ async function sendPrompt(){
     tukiMsg.innerHTML = marked.parse(result.response);
     chatContainer.appendChild(tukiMsg);
     scrollToBottom();
-
-    const response2 = await fetch(`http://localhost:8000/api/conversations/${idOfSelectedConv}`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            messages:[
-                {
-                    is_user:true,
-                    text:data.text
-                },
-                {
-                    is_user:false,
-                    text:result.response
-                }
-            ]
-        })
-    });
 }
 textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {

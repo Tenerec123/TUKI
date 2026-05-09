@@ -29,8 +29,8 @@ def create_new_conversation(convesation: ConversationCreate, db: Session = Depen
     db.commit()
     db.refresh(db_conversation)
     return db_conversation
-@router.patch("/{id}", response_model=ConversationSchema)
-def edit_conversation(id:int, changes:ConversationUpdate, db: Session = Depends(get_db)):
+
+def edit_conversation_logic(id:int, changes:ConversationUpdate, db:Session):
     db_conversation = db.query(Conversation).where(Conversation.id == id).first()
     if (changes.messages):
         first_new_pos = len(db_conversation.messages)
@@ -45,6 +45,11 @@ def edit_conversation(id:int, changes:ConversationUpdate, db: Session = Depends(
     db.commit()
     db.refresh(db_conversation)
     return db_conversation
+
+@router.patch("/{id}", response_model=ConversationSchema)
+def edit_conversation(id:int, changes:ConversationUpdate, db: Session = Depends(get_db)):
+    return edit_conversation_logic(id=id, changes=changes, db=db)
+
 @router.delete("/{id}", response_model=ConversationSchema)
 def delete_conversation(id:int, db: Session = Depends(get_db)):
     db_conversation = db.query(Conversation).where(Conversation.id == id).first()

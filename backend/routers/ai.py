@@ -8,7 +8,7 @@ load_dotenv()
 # Initialize clients with API keys from environment variables
 gemini_client = genai.Client(api_key=os.environ['GOOGLE_GENAI_API_KEY'])
 
-from schemas import ConversationSchema, MessageSchema, Prompt
+from schemas import ConversationSchema, MessageSchema, Prompt, ConversationUpdate, MessageBase
 from fastapi import APIRouter, Depends
 from .tools import ProcessBatch, tool_schemas, ToolDict
 from openai import OpenAI
@@ -16,6 +16,7 @@ import json
 from database import get_db
 from models import Conversation
 from sqlalchemy.orm import Session
+from .conversations import edit_conversation_logic
 router = APIRouter(
     prefix="/api/ai", # Todos los endpoints empezarán con esto
     tags=["ai"]        # Organiza la documentación automática (/docs)
@@ -150,6 +151,9 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
 def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
     db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
     
-    return gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message)
+    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
+    response = gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message)
+    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=response['response'])]), db=db)
+    return response
 
 
