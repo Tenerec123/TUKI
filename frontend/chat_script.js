@@ -4,6 +4,7 @@ const createChatBTN = document.getElementById('create-chat');
 const conversationList = document.getElementById('conversation-list');
 const textarea = document.getElementById('prompt-writer')
 const SERVER_IP = window.location.hostname;
+const toggleBtn = document.getElementById('toggle-sidebar');
 const API_PORT = window.location.port || "8000"
 window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 var posOfSelectedConv = -1;
@@ -129,6 +130,9 @@ async function loadConversation(conv_id, conv_position){
     }
     posOfSelectedConv = conv_position
     idOfSelectedConv = conv_id
+    if (window.innerWidth <= 768){
+        toggleBtn.click();
+    }
 }
 async function getConversations(){
     const response = await fetch(`${window.API_URL}/api/conversations/`)
@@ -212,7 +216,6 @@ function scrollToBottom(){
     }, 10); // 10ms es suficiente para que el DOM se actualice
 }
 document.addEventListener('DOMContentLoaded', async () => {
-    const toggleBtn = document.getElementById('toggle-sidebar');
     const container = document.getElementById('chat-sidebar-container');
     
     toggleBtn.addEventListener('click', () => {
