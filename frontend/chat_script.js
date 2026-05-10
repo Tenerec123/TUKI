@@ -133,6 +133,7 @@ async function loadConversation(conv_id, conv_position){
     if (window.innerWidth <= 768){
         toggleBtn.click();
     }
+    Render();
 }
 async function getConversations(){
     const response = await fetch(`${window.API_URL}/api/conversations/`)
@@ -200,6 +201,7 @@ async function sendPrompt(){
     tukiMsg.innerHTML = marked.parse(result.response);
     chatContainer.appendChild(tukiMsg);
     scrollToBottom();
+    Render();
 }
 textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -215,14 +217,29 @@ function scrollToBottom(){
         });
     }, 10); // 10ms es suficiente para que el DOM se actualice
 }
+
+function Render(){
+    renderMathInElement(document.body, {
+      delimiters: [
+          {left: '$$', right: '$$', display: true},  // Ecuaciones centradas
+          {left: '$', right: '$', display: false},  // Ecuaciones inline
+          {left: '\\(', right: '\\)', display: true},
+          {left: '\\[', right: '\\]', display: false}
+      ],
+      throwOnError : true
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
+
     const container = document.getElementById('chat-sidebar-container');
     
     toggleBtn.addEventListener('click', () => {
         container.classList.toggle('sidebar-collapsed');
     });
     await getConversations();
-    conversationList.children[0].children[0].click()
+    conversationList.children[0].children[0].click();
+    Render();
 })
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();

@@ -32,6 +32,7 @@ Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. You
 Use always this date format: DD/MM/YYYY
 All priorities are between 1 and 64 (0 is not asigned)
 There is only a tool, ProcessBatch. Inside it you can use all the other tools multiple times
+When generating mathematical content, use the $ delimiter for inline LaTeX and $$ for display. 
 """
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
