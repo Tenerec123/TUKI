@@ -260,8 +260,8 @@ function OpenMenu(button, id, position){
         });
         menu.classList.add('context-menu');
         menu.innerHTML = `
-        <button class="menu-item conv-rename" onClick="allowRenameConv(${id}, ${position})">Cambiar nombre</button>
-        <button class="menu-item" onClick="deleteConversation(${id})">Eliminar</button>
+        <button class="menu-item conv-rename" onClick="allowRenameConv(${id}, ${position})">Rename</button>
+        <button class="menu-item" onClick="deleteConversation(${id})">Delete</button>
         `;
         
         document.body.appendChild(menu);
