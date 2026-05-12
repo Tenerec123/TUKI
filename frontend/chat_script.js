@@ -5,12 +5,81 @@ const conversationList = document.getElementById('conversation-list');
 const textarea = document.getElementById('prompt-writer')
 const SERVER_IP = window.location.hostname;
 const toggleBtn = document.getElementById('toggle-sidebar');
-const API_PORT = window.location.port || "8000"
+const API_PORT = window.location.port || "8000";
+const mic = document.getElementById('toggle-mic');
 window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
-var posOfSelectedConv = -1;
-var idOfSelectedConv = -1;
-var menu_displayed = null;
-var id_of_menu_disp = null;
+let posOfSelectedConv = -1;
+let idOfSelectedConv = -1;
+let menu_displayed = null;
+let id_of_menu_disp = null;
+
+let can_record = false;
+let is_recording = false;
+let recorder = null;
+let chunks = [];
+
+// 2. Función de inicialización
+async function SetupAudio() {
+    console.log("--- INICIANDO SETUP ---");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        return;
+    }
+}
+function SetupStream(stream) {
+    console.log("Configurando MediaRecorder...");
+    recorder = new MediaRecorder(stream);
+
+    recorder.ondataavailable = e => {
+        chunks.push(e.data);
+    };
+
+    recorder.onstop = async () => {
+        const blob = new Blob(chunks, { type: "audio/ogg; codecs=opus" });
+        chunks = [];
+        const formData = new FormData();
+        formData.append('file', blob, 'recording.ogg');
+        const response = await fetch('http://localhost:8000/api/ai/stt', {
+            method: 'POST',
+            body: formData,
+        });
+        if (response.ok) {
+            const data = await response.json();
+            console.log("Response:", data);
+        } else {
+            console.error("Error in response:", response.statusText);
+        }
+    };
+    can_record = true;
+}
+async function ToggleMic() {
+    is_recording = !is_recording;
+    if (is_recording) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log("Acceso al micro concedido");
+            SetupStream(stream);
+        } catch (err) {
+            console.error("Error al obtener stream:", err);
+        }
+        if (can_record){
+            recorder.start();
+            mic.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-mic-fill" viewBox="0 0 16 16">
+                    <path d="M5 3a3 3 0 0 1 6 0v5a3 3 0 0 1-6 0z"/>
+                    <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                </svg>`
+        }
+        
+    } else {
+        recorder.stop();
+        mic.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-mic" viewBox="0 0 16 16">
+                <path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5"/>
+                <path d="M10 8a2 2 0 1 1-4 0V3a2 2 0 1 1 4 0zM8 0a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V3a3 3 0 0 0-3-3"/>
+            </svg>`
+    }
+}
+mic.addEventListener('click', ToggleMic);
 
 async function createConversation(){
     chat = {
@@ -240,6 +309,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await getConversations();
     conversationList.children[0].children[0].click();
     Render();
+    SetupAudio();
 })
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();

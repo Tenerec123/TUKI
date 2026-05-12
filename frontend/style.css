@@ -287,8 +287,8 @@ PROMPT
     color: var(--neon-red);
     cursor: pointer;
     position: absolute; /* Posicionamiento absoluto dentro del form */
-    right: 10px;
-    bottom: 10px;
+    right: 5px;
+    bottom: 5px;
     padding: 5px;
     transition: box-shadow .5s;
     display: flex;
@@ -296,12 +296,30 @@ PROMPT
     justify-content: center;
     box-shadow: var(--glow-red-off);
 }
-#submit-btn:hover{
-    box-shadow: var(--glow-red-on);
-}
-#submit-btn svg {
+
+#submit-btn svg, #toggle-mic svg {
     width: 30px; /* Tamaño lógico para un icono */
     height: 30px;
+}
+
+#toggle-mic{
+    background: transparent;
+    border: none;
+    color: var(--neon-red);
+    cursor: pointer;
+    position: absolute; /* Posicionamiento absoluto dentro del form */
+    right: 50px;
+    bottom: 5px;
+    padding: 5px;
+    transition: box-shadow .5s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--glow-red-off);
+}
+
+#submit-btn:hover, #toggle-mic:hover{
+    box-shadow: var(--glow-red-on);
 }
 
 #chat-container {
