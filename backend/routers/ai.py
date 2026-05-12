@@ -2,16 +2,10 @@ from datetime import datetime
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-basedir = Path(__file__).resolve().parent.parent 
-load_dotenv(basedir / ".env")
 from google import genai
 from google.genai import types
-# Load environment variables from .env file
-# Initialize clients with API keys from environment variables
-gemini_client = genai.Client(api_key=os.getenv('GOOGLE_GENAI_API_KEY', ''))
-
 from schemas import ConversationSchema, MessageSchema, Prompt, ConversationUpdate, MessageBase
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 from .tools import ProcessBatch, tool_schemas, ToolDict
 from openai import OpenAI
 import json
@@ -19,6 +13,11 @@ from database import get_db
 from models import Conversation
 from sqlalchemy.orm import Session
 from .conversations import edit_conversation_logic
+import io
+from faster_whisper import WhisperModel
+basedir = Path(__file__).resolve().parent.parent 
+load_dotenv(basedir / ".env")
+gemini_client = genai.Client(api_key=os.getenv('GOOGLE_GENAI_API_KEY', ''))
 router = APIRouter(
     prefix="/api/ai", # Todos los endpoints empezarán con esto
     tags=["ai"]        # Organiza la documentación automática (/docs)
@@ -158,5 +157,27 @@ def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
     response = gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message)
     edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=response['response'])]), db=db)
     return response
+
+model = WhisperModel("tiny", device="cuda", compute_type="int8")
+@router.post('/stt')
+async def stt_conversion(file: UploadFile = File(...)):
+    audio_data = await file.read()
+    
+    # Faster-Whisper puede leer desde un stream de bytes usando un buffer
+    audio_file = io.BytesIO(audio_data)
+    
+    # Transcripción (segments es un generador, hay que iterarlo)
+    segments, info = model.transcribe(audio_file, beam_size=5, language="es", initial_prompt="Hablando con TUKI, mi asistente")
+    
+    # Consolidar el texto de todos los segmentos
+    full_text = ""
+    for segment in segments:
+        full_text += segment.text + " "
+    print(full_text)
+    return {
+        "text": full_text.strip(),
+        "language": info.language,
+        "probability": info.language_probability
+    }
 
 
