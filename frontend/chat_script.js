@@ -38,13 +38,25 @@ function SetupStream(stream) {
         chunks = [];
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
+        formData.append('conv_id', idOfSelectedConv)
         const response = await fetch('http://localhost:8000/api/ai/stt', {
             method: 'POST',
             body: formData,
         });
         if (response.ok) {
-            const data = await response.json();
-            console.log("Response:", data);
+            const result = await response.json(); 
+            userMsg = document.createElement('div')
+            userMsg.classList.add('user-msg')
+            userMsg.innerHTML = result.user_message;
+            chatContainer.appendChild(userMsg)
+            scrollToBottom();
+
+            tukiMsg = document.createElement('div');
+            tukiMsg.classList.add('tuki-msg');
+            tukiMsg.innerHTML = marked.parse(result.response);
+            chatContainer.appendChild(tukiMsg);
+            scrollToBottom();
+            Render();
         } else {
             console.error("Error in response:", response.statusText);
         }

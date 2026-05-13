@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from schemas import ConversationSchema, MessageSchema, Prompt, ConversationUpdate, MessageBase
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, UploadFile, Form, Depends, File
 from .tools import ProcessBatch, tool_schemas, ToolDict
 from openai import OpenAI
 import json
@@ -149,8 +149,7 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
             print(e)
     return {'response':"All models are unavailable."}
 
-@router.post("/")
-def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
+def ai_response_logic(prompt:Prompt, db:Session):
     db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
     
     edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
@@ -158,26 +157,27 @@ def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
     edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=response['response'])]), db=db)
     return response
 
+
+@router.post("/")
+def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
+    return ai_response_logic(prompt=prompt, db=db)
+
 model = WhisperModel("tiny", device="cuda", compute_type="int8")
 @router.post('/stt')
-async def stt_conversion(file: UploadFile = File(...)):
+async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:Session = Depends(get_db)):
     audio_data = await file.read()
-    
-    # Faster-Whisper puede leer desde un stream de bytes usando un buffer
     audio_file = io.BytesIO(audio_data)
-    
-    # Transcripción (segments es un generador, hay que iterarlo)
     segments, info = model.transcribe(audio_file, beam_size=5, language="es", initial_prompt="Hablando con TUKI, mi asistente")
-    
-    # Consolidar el texto de todos los segmentos
     full_text = ""
     for segment in segments:
         full_text += segment.text + " "
-    print(full_text)
-    return {
-        "text": full_text.strip(),
-        "language": info.language,
-        "probability": info.language_probability
-    }
+    final_response = ai_response_logic(
+        prompt=Prompt(conversation_id=conv_id, user_message=full_text),
+        db=db
+    )
+    final_response['user_message'] = full_text
+    print(final_response)
+    return final_response
+
 
 
