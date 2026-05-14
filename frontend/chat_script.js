@@ -81,15 +81,19 @@ async function createConversation(){
     chat = {
         title:"new_chat"
     }
-
     const response = await fetch(`${window.API_URL}/api/conversations/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
         },
         body:JSON.stringify(chat)
+    }).then(response => response.json()).then(async data =>{
+        await getConversations();
+        idOfSelectedConv = -1
+        posOfSelectedConv = -1
+        loadConversation(data.id, 0);
     });
-    getConversations();
+
 }
 async function deleteConversation(conv_id){
     const response = await fetch(`${window.API_URL}/api/conversations/${conv_id}`, {method: 'DELETE'});
@@ -232,6 +236,7 @@ chatForm.addEventListener('submit', async (e) => {
     sendPrompt(data.text);
 });
 async function sendPrompt(text){
+    if (idOfSelectedConv == -1){return}
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
     userMsg.innerHTML = text;
