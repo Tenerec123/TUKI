@@ -20,13 +20,11 @@ let chunks = [];
 
 // 2. Función de inicialización
 async function SetupAudio() {
-    console.log("--- INICIANDO SETUP ---");
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         return;
     }
 }
 function SetupStream(stream) {
-    console.log("Configurando MediaRecorder...");
     recorder = new MediaRecorder(stream);
 
     recorder.ondataavailable = e => {
@@ -42,24 +40,10 @@ function SetupStream(stream) {
         const response = await fetch('http://localhost:8000/api/ai/stt', {
             method: 'POST',
             body: formData,
+        }).then(response => response.json())
+        .then(data => {
+            sendPrompt(data)
         });
-        if (response.ok) {
-            const result = await response.json(); 
-            userMsg = document.createElement('div')
-            userMsg.classList.add('user-msg')
-            userMsg.innerHTML = result.user_message;
-            chatContainer.appendChild(userMsg)
-            scrollToBottom();
-
-            tukiMsg = document.createElement('div');
-            tukiMsg.classList.add('tuki-msg');
-            tukiMsg.innerHTML = marked.parse(result.response);
-            chatContainer.appendChild(tukiMsg);
-            scrollToBottom();
-            Render();
-        } else {
-            console.error("Error in response:", response.statusText);
-        }
     };
     can_record = true;
 }
@@ -240,27 +224,20 @@ async function getConversations(){
 }
 chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    sendPrompt();
-});
-async function sendPrompt(){
     const formData = new FormData(chatForm);
     const data = Object.fromEntries(formData.entries());
     if (!data.text || data.text.trim() === "") {
         return;
     }
-    let AllChat = [];
-    const msgs = chatContainer.children;
-
-    for (let i = 0; i < msgs.length; i++) {
-        AllChat.push(msgs[i].textContent);
-    }
-    
+    sendPrompt(data.text);
+});
+async function sendPrompt(text){
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
-    userMsg.innerHTML = data.text;
+    userMsg.innerHTML = text;
     chatContainer.appendChild(userMsg)
     scrollToBottom();
-
+    
     document.getElementById('prompt-writer').value = "";
     
     const response = await fetch(`${window.API_URL}/api/ai/`, {
@@ -270,24 +247,46 @@ async function sendPrompt(){
         },
         body: JSON.stringify({
             conversation_id:idOfSelectedConv,
-            user_message:data.text
+            user_message:text
         })// Convertimos el objeto a texto JSON
     });
-    const result = await response.json(); 
-
-        // 2. Ahora accedemos a la propiedad "response" que definiste en Python
 
     tukiMsg = document.createElement('div');
     tukiMsg.classList.add('tuki-msg');
-    tukiMsg.innerHTML = marked.parse(result.response);
     chatContainer.appendChild(tukiMsg);
-    scrollToBottom();
-    Render();
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        
+        if (value) {
+            // Decodificar y acumular
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            
+            // Renderizado progresivo
+            tukiMsg.innerHTML = marked.parse(fullText);
+            scrollToBottom();
+            Render();
+        }
+        if (done) {
+            decoder.decode(); // Limpiar buffer del decoder
+            break;
+        }
+    }
 }
 textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        sendPrompt(); 
+        const formData = new FormData(chatForm);
+        const data = Object.fromEntries(formData.entries());
+        if (!data.text || data.text.trim() === "") {
+            return;
+        }
+        sendPrompt(data.text);
     }
 });
 function scrollToBottom(){

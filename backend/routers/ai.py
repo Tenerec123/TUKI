@@ -6,6 +6,7 @@ from google import genai
 from google.genai import types
 from schemas import ConversationSchema, MessageSchema, Prompt, ConversationUpdate, MessageBase
 from fastapi import APIRouter, UploadFile, Form, Depends, File
+from fastapi.responses import StreamingResponse
 from .tools import ProcessBatch, tool_schemas, ToolDict
 from openai import OpenAI
 import json
@@ -51,16 +52,16 @@ config = types.GenerateContentConfig(
 def gemini_agent(conversation:ConversationSchema, prompt_text:str):
         # Lista de modelos por orden de prioridad para T.U.K.I.
     MODEL_STACK = [
-        'gemini-3.1-flash-lite-preview',  # Mejor cuota (500 RPD) y razonamiento
-        'gemini-2.0-flash',               # Rápido, pero experimental (fallback)
-        'gemini-flash-lite-latest',       # Alias de seguridad
-        'gemini-2.0-flash', 
-        'models/gemini-3.1-pro-preview',           # Lo más avanzado en la serie 3.
-        'models/gemini-2.5-pro',                   # Estable y con capacidades multimodales maduras.
-        'models/gemini-3-flash-preview',           # Rapidez de nueva generación.
-        'models/gemini-3.1-flash-lite-preview',    # Alta cuota y latencia mínima.
-        'models/gemini-2.5-flash',                 # El estándar actual para tareas generales.
-        'models/gemini-flash-latest',              # Garantiza que siempre use una versión funcional.
+        'gemini-3.1-flash-lite-preview',  
+        'gemini-2.0-flash',
+        'gemini-flash-lite-latest',
+        'gemini-2.0-flash',
+        'models/gemini-3.1-pro-preview',
+        'models/gemini-2.5-pro',
+        'models/gemini-3-flash-preview',
+        'models/gemini-3.1-flash-lite-preview',
+        'models/gemini-2.5-flash',
+        'models/gemini-flash-latest',
         'models/gemini-pro-latest',
     ]
     
@@ -85,8 +86,13 @@ def gemini_agent(conversation:ConversationSchema, prompt_text:str):
                 history=history_map,
             )
 
-            response = chat.send_message(prompt_text)
-            return {'response':response.text}
+            response = chat.send_message_stream(prompt_text)    
+            for chunk in response:
+                if chunk.text:
+                    print(chunk.text)
+                    yield chunk.text
+            return # Avoids returning again the AI response of the next model
+            
         except Exception as e:
             if '503' in str(e) or "429" in str(e):
                 print(f"Problems with {model}, system will try the next one")
@@ -96,6 +102,15 @@ def gemini_agent(conversation:ConversationSchema, prompt_text:str):
                 continue
             else: raise e
     return {'response':"All models are UNAVAILABLE, impossible to respond"}
+
+async def chat_persistence_wrapper(prompt:Prompt, db):
+    db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
+    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
+    full_text = ""
+    for token in gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message):
+        full_text += token
+        yield token # Re-enviamos al endpoint
+    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]), db=db)
 
 formatted_tools = [
     {
@@ -150,12 +165,7 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
     return {'response':"All models are unavailable."}
 
 def ai_response_logic(prompt:Prompt, db:Session):
-    db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
-    
-    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
-    response = gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message)
-    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=response['response'])]), db=db)
-    return response
+    return StreamingResponse(chat_persistence_wrapper(prompt, db), media_type="text/plain")
 
 
 @router.post("/")
@@ -171,13 +181,4 @@ async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:S
     full_text = ""
     for segment in segments:
         full_text += segment.text + " "
-    final_response = ai_response_logic(
-        prompt=Prompt(conversation_id=conv_id, user_message=full_text),
-        db=db
-    )
-    final_response['user_message'] = full_text
-    print(final_response)
-    return final_response
-
-
-
+    return full_text
