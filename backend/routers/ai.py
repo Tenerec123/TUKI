@@ -44,12 +44,8 @@ config = types.GenerateContentConfig(
     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
     max_output_tokens=10000,
 )
-# for model in gemini_client.models.list():
-#     # Filtramos solo los modelos que soportan generación de contenido
 
-#     print(f"ID: {model.name} | Versión: {model.version} | Display: {model.display_name}")
-            
-def gemini_agent(conversation:ConversationSchema, prompt_text:str):
+def gemini_agent(conversation:ConversationSchema):
         # Lista de modelos por orden de prioridad para T.U.K.I.
     MODEL_STACK = [
         'gemini-3.1-flash-lite-preview',  
@@ -73,7 +69,11 @@ def gemini_agent(conversation:ConversationSchema, prompt_text:str):
                     parts=[types.Part(text=f"TIME: {datetime.today().strftime("%d/%m/%Y, %H:%M:%S")}")]
                     )
                 ]
+            prompt_text = ""
             for i, msg in enumerate(conversation.messages):
+                if i == len(conversation.messages) -1:
+                    prompt_text = msg.text
+                    break
                 history_map.append(types.Content(
                     role= 'user' if msg.is_user else 'model',
                     parts=[types.Part(text=msg.text)]
@@ -103,19 +103,10 @@ def gemini_agent(conversation:ConversationSchema, prompt_text:str):
             else: raise e
     return {'response':"All models are UNAVAILABLE, impossible to respond"}
 
-async def chat_persistence_wrapper(prompt:Prompt, db):
-    db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
-    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
-    full_text = ""
-    for token in gemini_agent(ConversationSchema.model_validate(db_conversation), prompt.user_message):
-        full_text += token
-        yield token # Re-enviamos al endpoint
-    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]), db=db)
-
 formatted_tools = [
     {
         "type": "function",
-        "function": schema  # Aquí va el diccionario que creamos antes
+        "function": schema
     } 
     for schema in tool_schemas
 ]
@@ -124,12 +115,13 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
 
     MODEL_STACK = [
         "nvidia/nemotron-3-super-120b-a12b:free"
-        "meta-llama/llama-3.3-70b-instruct:free",   # Rey actual
+        ,   # Rey actual
         "google/gemma-4-31b-it:free",               # Nuevo en 2026, brutal para JSON
         "openai/gpt-oss-120b:free",                 # El nuevo MoE abierto de OpenAI
         "qwen/qwen3-coder:free",                    # El mejor para lógica de sistemas
         "nvidia/nemotron-3-super-120b-a12b:free",   # Enorme, ideal para 100 tareas
-        "z-ai/glm-4.5-air:free",                    # Muy rápido y preciso en tools
+        "z-ai/glm-4.5-air:free",     
+        "meta-llama/llama-3.3-70b-instruct:free"
         "minimax/minimax-m2.5:free"]
     function_outputs = []
     for model in MODEL_STACK:
@@ -139,30 +131,64 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
                 tool_selection = None if is_last_attempt else "auto"
                 messages = [{'role':'developer','content':rules}]
                 for i, msg in enumerate(conversation.messages):
-                    messages.append({'role':'user' if i%2==0 else 'assistant', 'content':msg})
+                    messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
                 for f_output in function_outputs:
                     messages.append({'role':'tool','content':f_output})
+
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    tools= formatted_tools if not is_last_attempt else None,
-                    tool_choice=tool_selection
+                    tools=formatted_tools if not is_last_attempt else None,
+                    tool_choice=tool_selection,
+                    stream=True,
                 )
-                message = response.choices[0].message
-                if message.tool_calls:
+
+                full_tool_calls = {} # Para reconstruir los argumentos fragmentados
+
+                is_final_inference = False
+
+                for chunk in response:
+                    delta = chunk.choices[0].delta
+                    
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            # Los chunks de herramientas vienen con índices, hay que ensamblarlos
+                            if tc.index not in full_tool_calls:
+                                full_tool_calls[tc.index] = tc
+                            else:
+                                # Acumulamos los fragmentos del JSON de argumentos
+                                full_tool_calls[tc.index].function.arguments += tc.function.arguments
+                        continue # No hacemos yield de nada al usuario aún
+
+                    if delta.content:
+                        if not is_final_inference: is_final_inference = True
+                        yield delta.content
+
+                if full_tool_calls:
                     results = []
-                    for tool_call in message.tool_calls:
+                    for tool_call in full_tool_calls.values():
                         args = json.loads(tool_call.function.arguments)
                         func = ToolDict.get(tool_call.function.name, None)
                         if func is not None:
                             output = func(**args)
                         else: output = f"Tool {tool_call.function.name} does not exist"
                         results.append(output)
-                else:
-                    return {'response':message.content}
+                    messages.append({"role": "assistant", "content":f"Tool calling outputs: {results}"})
+                if is_final_inference: return
+                
         except Exception as e:
             print(e)
-    return {'response':"All models are unavailable."}
+    return
+
+async def chat_persistence_wrapper(prompt:Prompt, db):
+    db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
+    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
+    full_text = ""
+    for token in openai_agent(ConversationSchema.model_validate(db_conversation)):
+        full_text += token
+        yield token # Re-enviamos al endpoint
+    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]), db=db)
+
 
 def ai_response_logic(prompt:Prompt, db:Session):
     return StreamingResponse(chat_persistence_wrapper(prompt, db), media_type="text/plain")
