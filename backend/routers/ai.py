@@ -25,13 +25,22 @@ router = APIRouter(
 )
 
 
-def GetRules():
-    return
-rules= f"""
-Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Your user will be the creator
+
+rules_gemini= f"""
+Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Your user will be the creator.
+Responses as short as possible, if you have to execute tools you don't have to explain all you have done, only make a little summary or just say what you have done if it's too long.
+Priority = Urgency (0-32, based on the consequences if the task is not done before the deadline) + Importance (0-32, based on task type/impact), capped at 1-64. Higher = more urgent/important.
 Use always this date format: DD/MM/YYYY
 All priorities are between 1 and 64 (0 is not asigned)
 There is only a tool, ProcessBatch. Inside it you can use all the other tools multiple times
+When generating mathematical content, use the $ delimiter for inline LaTeX and $$ for display."""
+rules_openai= f"""
+Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Responses as short as possible. Your user will be the creator.
+Responses as short as possible, if you have to execute tools you don't have to explain all you have done, only make a little summary or just say what you have done if it's too long.
+Priority = Urgency (0-32, based on the consequences if the task is not done before the deadline) + Importance (0-32, based on task type/impact), capped at 1-64. Higher = more urgent/important.
+Use always this date format: DD/MM/YYYY
+All priorities are between 1 and 64 (0 is not asigned)
+There is a list of functions that you can use as much times as you need in the same inference.
 When generating mathematical content, use the $ delimiter for inline LaTeX and $$ for display. 
 """
 client = OpenAI(
@@ -39,7 +48,7 @@ client = OpenAI(
     api_key=os.environ['OPENROUTER_API_KEY']
 ) # OpenRouter para multicontratación
 config = types.GenerateContentConfig(
-    system_instruction=rules,
+    system_instruction=rules_gemini,
     tools=[ProcessBatch],
     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
     max_output_tokens=10000,
@@ -114,8 +123,12 @@ formatted_tools = [
 def openai_agent(conversation:ConversationSchema, max_inferences = 3):
 
     MODEL_STACK = [
-        "nvidia/nemotron-3-super-120b-a12b:free"
-        ,   # Rey actual
+        'qwen/qwen3-next-80b-a3b-instruct:free',
+        'meta-llama/llama-3.3-70b-instruct:free',
+        'liquid/lfm-2.5-1.2b-instruct:free',
+        'nousresearch/hermes-3-llama-3.1-405b:free',
+        'meta-llama/llama-3.2-3b-instruct:free',
+        "nvidia/nemotron-3-super-120b-a12b:free",   # Rey actual
         "google/gemma-4-31b-it:free",               # Nuevo en 2026, brutal para JSON
         "openai/gpt-oss-120b:free",                 # El nuevo MoE abierto de OpenAI
         "qwen/qwen3-coder:free",                    # El mejor para lógica de sistemas
@@ -124,28 +137,26 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
         "meta-llama/llama-3.3-70b-instruct:free"
         "minimax/minimax-m2.5:free"]
     function_outputs = []
+    messages = [{'role':'developer','content':rules_openai}]
+    for i, msg in enumerate(conversation.messages):
+        messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
+
     for model in MODEL_STACK:
         try:
             for i in range(max_inferences):
                 is_last_attempt = (i == max_inferences - 1)
                 tool_selection = None if is_last_attempt else "auto"
-                messages = [{'role':'developer','content':rules}]
-                for i, msg in enumerate(conversation.messages):
-                    messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
-                for f_output in function_outputs:
-                    messages.append({'role':'tool','content':f_output})
-
+                
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
                     tools=formatted_tools if not is_last_attempt else None,
                     tool_choice=tool_selection,
+                    reasoning_effort="none",
                     stream=True,
                 )
 
                 full_tool_calls = {} # Para reconstruir los argumentos fragmentados
-
-                is_final_inference = False
 
                 for chunk in response:
                     delta = chunk.choices[0].delta
@@ -161,20 +172,49 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
                         continue # No hacemos yield de nada al usuario aún
 
                     if delta.content:
-                        if not is_final_inference: is_final_inference = True
                         yield delta.content
 
                 if full_tool_calls:
-                    results = []
-                    for tool_call in full_tool_calls.values():
-                        args = json.loads(tool_call.function.arguments)
-                        func = ToolDict.get(tool_call.function.name, None)
-                        if func is not None:
-                            output = func(**args)
-                        else: output = f"Tool {tool_call.function.name} does not exist"
-                        results.append(output)
-                    messages.append({"role": "assistant", "content":f"Tool calling outputs: {results}"})
-                if is_final_inference: return
+                    # 1. EL MODELO DEBE VER SU PROPIA LLAMADA EN EL HISTORIAL
+                    assistant_tool_call_msg = {
+                        "role": "assistant",
+                        "tool_calls": [
+                            {
+                                "id": tc.id,
+                                "type": "function",
+                                "function": {
+                                    "name": tc.function.name,
+                                    "arguments": tc.function.arguments
+                                }
+                            } for tc in full_tool_calls.values()
+                        ]
+                    }
+                    messages.append(assistant_tool_call_msg)
+
+                    # 2. EJECUTAR Y AÑADIR CADA RESULTADO CON ROL 'tool'
+                    for tc in full_tool_calls.values():
+                        try:
+                            args = json.loads(tc.function.arguments)
+                            # Buscamos la función en tu ToolDict (línea 164 de tu tools.py)
+                            func = ToolDict.get(tc.function.name)
+                            
+                            if func:
+                                result = func(**args)
+                            else:
+                                result = f"Error: Tool {tc.function.name} not found in ToolDict"
+                        except Exception as e:
+                            result = f"Execution Error: {str(e)}"
+
+                        # 3. Respuesta de rol 'tool' vinculada al ID
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "name": tc.function.name,
+                            "content": json.dumps(result, default=str)
+                        })
+                    continue
+                else:
+                    return
                 
         except Exception as e:
             print(e)
