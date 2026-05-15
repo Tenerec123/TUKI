@@ -1,5 +1,5 @@
 /* 
-MAIN STYLING 
+MAIN STYLING svg 
 */
 :root {
     --neon-yellow: #ffff00;
@@ -282,6 +282,10 @@ PROMPT
   outline: none;
 }
 #submit-btn {
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;
     background: transparent;
     border: none;
     color: var(--neon-red);
@@ -291,15 +295,15 @@ PROMPT
     bottom: 5px;
     padding: 5px;
     transition: box-shadow .5s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
     box-shadow: var(--glow-red-off);
 }
 
-#submit-btn svg, #toggle-mic svg {
-    width: 30px; /* Tamaño lógico para un icono */
-    height: 30px;
+#submit-btn i, #toggle-mic i {
+    font-size: 1.5rem;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 #toggle-mic{
@@ -797,3 +801,55 @@ SELECT CALENDAR
   box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
 }
 
+#routine-ribbon {
+    
+    display: flex;
+    flex-direction: row;
+    justify-content: center;
+    align-items: center;  
+    padding: 10px 20px;
+    width: 100%;
+    background-color: var(--chacoal-grey);
+    margin: 10px 0;
+}
+
+/* Estilo Scrollbar (Chrome/Safari) */
+
+/* EL ICONO DE RUTINA */
+.routine-item {
+    display: flex;
+    justify-content: center; /* Alineación horizontal */
+    align-items: center;  
+    width: 45px;
+    height: 45px;
+    border: 2px solid var(--neon-yellow);
+    color: var(--neon-yellow);
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    background: black;
+    font-size: 1.4rem;
+    margin:0 10px;
+}
+
+.routine-item:hover {
+    box-shadow: 0 0 10px var(--neon-yellow);
+    transform: scale(1.05);
+}
+.routine-item::after {
+    content: attr(data-name);
+    position: absolute;
+    bottom: -20px;
+    font-size: 0.6rem;
+    opacity: 0;
+    transition: 0.2s;
+}.routine-item:hover::after { opacity: 1; }
+
+/* ANIMACIÓN DE DESAPARICIÓN (UNDO-READY) */
+.routine-item.completing {
+    transform: scale(0);
+    opacity: 0;
+    width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
