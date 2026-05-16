@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
-from schemas import RoutineCreate, RoutineSchema, RoutineUpdate
+from schemas import RoutineCreate, RoutineSchema, RoutineUpdate, RoutineToday
 from database import get_db
 from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, check_routine_logic, uncheck_routine_logic
 router = APIRouter(
@@ -9,7 +9,7 @@ router = APIRouter(
     tags=["routines"]
 )
 
-@router.get("/today", response_model=List[RoutineSchema])
+@router.get("/today", response_model=List[RoutineToday])
 def get_today_routine(db: Session = Depends(get_db)):
     return get_today_routine_logic(db=db)   
 
@@ -26,7 +26,7 @@ def get_all_routine(db: Session = Depends(get_db)):
 def check_routine(id:int, db:Session = Depends(get_db)):
     return check_routine_logic(id=id,db=db)
 
-@router.post("/uncheck/{id:str}")
+@router.delete("/uncheck/{id:str}")
 def check_routine(id:int, db:Session = Depends(get_db)):
     return uncheck_routine_logic(id=id,db=db)
 

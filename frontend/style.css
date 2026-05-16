@@ -858,3 +858,7 @@ SELECT CALENDAR
     padding: 0;
     border: 0;
 }
+
+.routine-item.checked{
+    background-color: red;
+}

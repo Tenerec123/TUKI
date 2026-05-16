@@ -115,8 +115,18 @@ async function LoadTodayRoutines() {
    .then(response => response.json())
    .then(data => {
     data.forEach(routine=>{
-        newRoutine = document.createElement('div');
+        const newRoutine = document.createElement('div');
         newRoutine.classList.add('routine-item');
+        if (routine.checked){newRoutine.classList.add('checked')}
+        newRoutine.addEventListener('click', async (e) => {
+            if (newRoutine.classList.contains('checked')){
+                await fetch(`${window.API_URL}/api/routines/uncheck/${routine.id}`, {method:'DELETE'})
+            }
+            else{
+                await fetch(`${window.API_URL}/api/routines/check/${routine.id}`, {method:'POST'})
+            }
+            newRoutine.classList.toggle('checked')
+        });
         newRoutine.setAttribute('data-name', routine.name);
         newRoutine.innerHTML = `<i class="bi bi-person-walking"></i>`;
         TodayRoutines.appendChild(newRoutine);

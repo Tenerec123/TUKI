@@ -2,7 +2,7 @@ from fastapi import HTTPException
 from dateutil.rrule import rrulestr
 
 from sqlalchemy.orm import Session
-from schemas import RoutineCreate, RoutineUpdate
+from schemas import RoutineCreate, RoutineUpdate, RoutineToday
 from models import Routine, RoutineCheck
 from datetime import datetime,date
 
@@ -17,8 +17,17 @@ def get_all_routine_logic(db: Session):
 def get_today_routine_logic(db:Session):
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     db_routine = db.query(Routine).all()
-    print(str(db_routine[0].frequency))
-    return [routine for routine in db_routine if today in rrulestr(str(routine.frequency), dtstart=today)]
+    checked_today_ids = {
+        row.routine_id for row in db.query(RoutineCheck.routine_id)
+        .filter(RoutineCheck.check_date == date.today())
+        .all()
+    }
+    return [RoutineToday(
+        id=routine.id,
+        name=routine.name,
+        checked=routine.id in checked_today_ids,
+    )
+    for routine in db_routine if today in rrulestr(str(routine.frequency), dtstart=datetime.combine(routine.init_date, datetime.min.time()))]
 
 def create_routine_logic(routine: RoutineCreate, db: Session):
     db_routine = Routine(

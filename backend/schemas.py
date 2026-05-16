@@ -31,13 +31,14 @@ class TaskUpdate(BaseModel):
     project_id:Optional[int] = Field(None)
 # Routine Classes
 class RoutineCreate(BaseItem):
-    name: Optional[str] = Field(None, max_length=512)
-    description: Optional[str] = Field(None, max_length=512)
-    priority: Optional[int] = Field(None, ge=0, le=64)
     frequency: str = Field(..., description='Frequency in RRULE or custom string')
     project_id:Optional[int] = Field(None)
     init_date: date = Field(...)
 
+class RoutineToday(BaseModel):
+    name: str = Field(..., max_length=512, description='Name of the todo')
+    checked:bool = Field(...)
+    id:int = Field(..., description="Unique identifier")
 
 class RoutineSchema(RoutineCreate):
     id:int = Field(..., description="Unique identifier")
