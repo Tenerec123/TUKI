@@ -31,19 +31,20 @@ class TaskUpdate(BaseModel):
     project_id:Optional[int] = Field(None)
 # Routine Classes
 class RoutineCreate(BaseItem):
+    name: Optional[str] = Field(None, max_length=512)
+    description: Optional[str] = Field(None, max_length=512)
+    priority: Optional[int] = Field(None, ge=0, le=64)
     frequency: str = Field(..., description='Frequency in RRULE or custom string')
     project_id:Optional[int] = Field(None)
+    init_date: date = Field(...)
 
 
 class RoutineSchema(RoutineCreate):
-    project_id:Optional[int] = Field(None)
-    id: Optional[int] = Field(..., description="Unique identifier")
-    last_run: Optional[date] = Field(None, description="Last execution date")
-    next_run: Optional[date] = Field(None, description="Next planned execution")
-
-    @field_serializer('last_run', 'next_run')
-    def serialize_dates(self, dt: date):
-        return dt.strftime("%d/%m/%Y") if dt else "No date"
+    id:int = Field(..., description="Unique identifier")
+    
+    @field_serializer('init_date')
+    def serialize_deadline(self, init_date: date) -> str:
+        return init_date.strftime("%d/%m/%Y")
 
 class RoutineUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=512)
@@ -51,8 +52,7 @@ class RoutineUpdate(BaseModel):
     priority: Optional[int] = Field(None, ge=0, le=64)
     frequency: Optional[str] = Field(None)
     project_id:Optional[int] = Field(None)
-    last_run: Optional[date] = Field(None, description="Last execution date")
-    next_run: Optional[date] = Field(None, description="Next planned execution")
+    init_date:Optional[date] = Field(None)
 
 
 # Project Classes

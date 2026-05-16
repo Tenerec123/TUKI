@@ -5,6 +5,7 @@ const TaskContainer = document.getElementById('task-container');
 const ProjectContainer = document.getElementById('project-container');
 const RoutinesContainer = document.getElementById('routine-container');
 const CheckCreateButton = document.getElementById('check-create-button');
+const TodayRoutines = document.getElementById('today-routine-list')
 const SERVER_IP = window.location.hostname;
 const API_PORT = window.location.port || "8000"
 window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
@@ -13,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     LoadTasks();
     LoadProjects();
     LoadRoutines();
+    LoadTodayRoutines();
 });
 
 async function LoadTasks() {
@@ -66,7 +68,6 @@ async function LoadProjects() {
     })
     .catch(error => console.error("Error al obtener datos:", error));
 }
-// Not done
 async function LoadRoutines() {
   await fetch(`${window.API_URL}/api/routines`)
   .then(response => response.json())
@@ -84,8 +85,7 @@ async function LoadRoutines() {
         <td class="description">${routine.description}</td>
         <td class="priority">${routine.priority}</td>
         <td class="description">${routine.frequency}</td>
-        <td class="deadline">${routine.last_run || 'No date'}</td>
-        <td class="deadline">${routine.nex_run || 'No date'}</td>
+        <td class="deadline">${routine.init_date}</td>
         <td class="delete"><button onclick="Delete('routines', this, ${routine.id})">🗑️</button></td>
       `;
       RoutinesContainer.appendChild(divRoutine);
@@ -110,7 +110,19 @@ async function CheckClick(element, id){
         body: `{"finished":${Checked_str}}` // Convertimos el objeto a texto JSON
     });
 }
-
+async function LoadTodayRoutines() {
+   const response = await fetch(`${window.API_URL}/api/routines/today`)
+   .then(response => response.json())
+   .then(data => {
+    data.forEach(routine=>{
+        newRoutine = document.createElement('div');
+        newRoutine.classList.add('routine-item');
+        newRoutine.setAttribute('data-name', routine.name);
+        newRoutine.innerHTML = `<i class="bi bi-person-walking"></i>`;
+        TodayRoutines.appendChild(newRoutine);
+    })  
+   });
+}
 TaskCreator.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(TaskCreator);

@@ -20,22 +20,8 @@
   </header>
   
 
-    <div id="routine-ribbon">
-        <div class="routine-item" data-name="RUN">
-            <i class="bi bi-person-walking"></i>
-        </div>
-        <div class="routine-item" data-name="MATH">
-            <i class="bi bi-infinity"></i>
-        </div>
-        <div class="routine-item" data-name="CODE">
-            <i class="bi bi-terminal"></i>
-        </div>
-        <div class="routine-item" data-name="MED">
-            <i class="bi bi-cloud-sun"></i>
-        </div>
-        <div class="routine-item" data-name="READ">
-            <i class="bi bi-book"></i>
-        </div>
+    <div id="today-routine-list">
+        
     </div>
 
   <form id="task-creator"></form>
@@ -117,8 +103,7 @@
         <th>Decription</th>
         <th>Priority</th>
         <th>Frequency</th>
-        <th>Last Run</th>
-        <th>Next Run</th>
+        <th>Init Date</th>
         <th>...</th>
       </tr>
       <tr>
@@ -134,7 +119,11 @@
         <td class="form-description">
           <input form="routine-creator" type="text" name="frequency">
         </td>
-        <td></td><td></td>
+        <td class="form-deadline">
+          <div class="date-container">
+            <input form="routine-creator" name="init_date" type="date" class="custom-date" value="2026-04-14">
+          </div>
+        </td>
         <td class="form-submit">
           <input form="routine-creator" type="submit" value="Create">
         </td>
@@ -143,11 +132,6 @@
     <tbody id="routine-container">
     </tbody>
   </table>
-  
-  
-
-
- 
 <script src="/frontend/todo_script.js"></script>
 </body>
 </html>

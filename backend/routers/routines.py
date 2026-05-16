@@ -3,20 +3,25 @@ from sqlalchemy.orm import Session
 from typing import List
 from schemas import RoutineCreate, RoutineSchema, RoutineUpdate
 from database import get_db
-from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic
+from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic
 router = APIRouter(
     prefix="/api/routines",
     tags=["routines"]
 )
 
-@router.get("/{id}", response_model=RoutineSchema)
+@router.get("/today", response_model=List[RoutineSchema])
+def get_today_routine(db: Session = Depends(get_db)):
+    return get_today_routine_logic(db=db)   
+
+
+@router.get("/{id:int}", response_model=RoutineSchema)
 def get_routine(id:int, db: Session = Depends(get_db)):
     return get_routine_logic(id=id, db=db)
 
 @router.get("/", response_model=List[RoutineSchema])
-def get_all_routine(first_n:int = None, db: Session = Depends(get_db)):
-    return get_all_routine_logic(first_n=first_n, db=db)
-    
+def get_all_routine(db: Session = Depends(get_db)):
+    return get_all_routine_logic(db=db)
+
 @router.post("/", response_model=RoutineSchema)
 def create_routine(routine: RoutineCreate, db: Session = Depends(get_db)):
     return create_routine_logic(routine=routine, db=db)

@@ -801,7 +801,7 @@ SELECT CALENDAR
   box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
 }
 
-#routine-ribbon {
+#today-routine-list {
     
     display: flex;
     flex-direction: row;
@@ -811,6 +811,7 @@ SELECT CALENDAR
     width: 100%;
     background-color: var(--chacoal-grey);
     margin: 10px 0;
+    padding-bottom: 20px;
 }
 
 /* Estilo Scrollbar (Chrome/Safari) */
@@ -820,8 +821,8 @@ SELECT CALENDAR
     display: flex;
     justify-content: center; /* Alineación horizontal */
     align-items: center;  
-    width: 45px;
-    height: 45px;
+    width: 50px;
+    height: 50px;
     border: 2px solid var(--neon-yellow);
     color: var(--neon-yellow);
     cursor: pointer;
@@ -839,9 +840,13 @@ SELECT CALENDAR
     content: attr(data-name);
     position: absolute;
     bottom: -20px;
-    font-size: 0.6rem;
+    white-space: nowrap;
+    left: -475px;
+    text-align: center;
+    font-size: 0.9rem;
     opacity: 0;
     transition: 0.2s;
+    width: 1000px;
 }.routine-item:hover::after { opacity: 1; }
 
 /* ANIMACIÓN DE DESAPARICIÓN (UNDO-READY) */

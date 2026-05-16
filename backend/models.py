@@ -54,8 +54,7 @@ class Routine(Base, TimestampMixin):
     project_id: Mapped[Optional[int]] = mapped_column(ForeignKey('projects.id', ondelete="CASCADE"))
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="sub_routines")
     frequency: Mapped[str] = mapped_column(nullable=False)
-    last_run: Mapped[Optional[date]] = mapped_column(nullable=True)
-    next_run: Mapped[Optional[date]] = mapped_column(nullable=True)
+    init_date:Mapped[Optional[date]]= mapped_column(nullable=True)
 
 class Conversation(Base):
     __tablename__="conversations"

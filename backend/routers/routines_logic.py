@@ -1,19 +1,24 @@
 from fastapi import HTTPException
+from dateutil.rrule import rrule, rrulestr, WEEKLY, MO, TU, WE, TH, FR, SA, SU
+
 from sqlalchemy.orm import Session
 from schemas import RoutineCreate, RoutineUpdate
 from models import Routine
+from datetime import datetime
 
 def get_routine_logic(id:int, db: Session):
     db_routine = db.query(Routine).where(Routine.id == id).first()
     if db_routine is None: raise HTTPException(status_code=404, detail="Task not found")
     return db_routine
 
-def get_all_routine_logic(first_n:int, db: Session):
-    if first_n is None:
-        db_routine = db.query(Routine).all()
-        return db_routine
-    db_routine = db.query(Routine).limit(first_n).all()
-    return db_routine
+def get_all_routine_logic(db: Session):
+    return db.query(Routine).all()
+
+def get_today_routine_logic(db:Session):
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    db_routine = db.query(Routine).all()
+    print(str(db_routine[0].frequency))
+    return [routine for routine in db_routine if today in rrulestr(str(routine.frequency), dtstart=today)]
 
 def create_routine_logic(routine: RoutineCreate, db: Session):
     db_routine = Routine(
