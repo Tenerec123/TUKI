@@ -1,10 +1,10 @@
 from fastapi import HTTPException
-from dateutil.rrule import rrule, rrulestr, WEEKLY, MO, TU, WE, TH, FR, SA, SU
+from dateutil.rrule import rrulestr
 
 from sqlalchemy.orm import Session
 from schemas import RoutineCreate, RoutineUpdate
-from models import Routine
-from datetime import datetime
+from models import Routine, RoutineCheck
+from datetime import datetime,date
 
 def get_routine_logic(id:int, db: Session):
     db_routine = db.query(Routine).where(Routine.id == id).first()
@@ -27,6 +27,27 @@ def create_routine_logic(routine: RoutineCreate, db: Session):
     db.commit()
     db.refresh(db_routine)
     return db_routine
+
+def check_routine_logic(id:int, db:Session):
+    db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, RoutineCheck.check_date == date.today()).first()
+    print(db_check)
+    if db_check: return db_check
+    new_db_check = RoutineCheck(
+        routine_id=id,
+        check_date=date.today()
+    )
+    db.add(new_db_check)
+    db.commit()
+    db.refresh(new_db_check)
+    return new_db_check
+
+def uncheck_routine_logic(id:int, db: Session):
+    db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, RoutineCheck.check_date == date.today()).first()
+    if db_check is None: raise HTTPException(status_code=404, detail="Routine not found")
+    db.delete(db_check)
+    db.commit()
+    return db_check
+
 
 def update_routine_logic(id:int, updated_routine:RoutineUpdate, db: Session):
     db_routine = db.query(Routine).where(Routine.id == id).first()

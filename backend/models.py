@@ -72,3 +72,9 @@ class Message(Base):
     is_user: Mapped[bool] = mapped_column(nullable=False)
     text: Mapped[str] = mapped_column(nullable=False)
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
+
+class RoutineCheck(Base):
+    __tablename__="routineChecks"
+    id:Mapped[int] = mapped_column(primary_key=True)
+    routine_id:Mapped[int] = mapped_column(ForeignKey('routines.id', ondelete='CASCADE'))
+    check_date:Mapped[date] = mapped_column(nullable=False)
