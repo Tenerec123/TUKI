@@ -238,9 +238,16 @@ def ai_response_logic(prompt:Prompt, db:Session):
 def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
     return ai_response_logic(prompt=prompt, db=db)
 
-model = WhisperModel("tiny", device="cuda", compute_type="int8")
+_model = None
+
+def get_whisper_model():
+    global _model
+    if _model is None:
+        _model = WhisperModel("tiny", device="cuda", compute_type="int8")
+    return _model
 @router.post('/stt')
 async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:Session = Depends(get_db)):
+    model = get_whisper_model()
     audio_data = await file.read()
     audio_file = io.BytesIO(audio_data)
     segments, info = model.transcribe(audio_file, beam_size=5, language="es", initial_prompt="Hablando con TUKI, mi asistente")
