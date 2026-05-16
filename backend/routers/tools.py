@@ -69,11 +69,12 @@ def GetAllRoutines():
         routines = get_all_routine_logic(first_n=None,db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
-def CreateRoutine(name:str, description:str, priority:int, frequency:str, project_id:int = None):
+def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None):
     '''
     Creates a routine with using the input characteristics.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
-    Args: [name:str, description:str, priority:int, frequency:str, project_id:int = None]
+    init_date value in dd/mm/yyyy format.
+    Args: [name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None]
     '''
     with SessionLocal() as db:
         new_routine = create_routine_logic(
@@ -82,7 +83,8 @@ def CreateRoutine(name:str, description:str, priority:int, frequency:str, projec
                 description=description,
                 priority=priority,
                 frequency=frequency,
-                project_id=project_id
+                project_id=project_id,
+                init_date=datetime.strptime(init_date, '%d/%m/%Y').date()
                 ),
                 db=db)
         return f"Routine {name} with id {new_routine.id} successfully created"
@@ -174,7 +176,7 @@ def CreateTree():
     pass
 
 def ProcessBatch(commands:List[dict]):
-    
+
     output_log = []
     for command in commands:
         func = ToolDict.get(command['tool'], None)
@@ -286,6 +288,7 @@ tool_schemas = [
                 'description': {'type': 'string', 'description': 'Description of the routine.'},
                 'priority': {'type': 'integer', 'description': 'Priority level.'},
                 'frequency': {'type': 'string', 'description': "RRULE string (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
+                'init_date': {'type': 'string', 'description': 'date in dd/mm/yyyy format.'},
                 'project_id': {'type': 'integer', 'description': 'Optional project ID association.'}
             },
             'required': ['name', 'description', 'priority', 'frequency']
