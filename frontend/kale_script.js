@@ -35,17 +35,22 @@ async function LoadCalendar(){
 }
 
 async function LoadHeatMap(){
+    var checkData = {};
+    await fetch(`${window.API_URL}/api/routines/stats/${2}`)
+    .then(response => response.json())
+    .then(data => {
+        data.forEach(check => {
+            console.log(check)
+            const [dia, mes, año] = check.check_date.split('/');
+            const unix = `${Math.floor(+new Date(`${año}-${mes}-${dia}`) / 1000)}`;
+            checkData[unix] = 1
+        });
+    });
+    console.log(checkData)
 
-    var datosBinarios = {
-        "1771113600": 1, 
-        "1771200000": 1, 
-        "1771286400": 0  
-    };
-
-    var fechaInicio = moment().subtract(1, 'years').startOf('week').toDate();
-    // Guardamos los límites exactos del año para la limpieza (hace 1 año justo y hoy justo)
-    var limiteInferior = moment().subtract(1, 'years').startOf('day');
-    var limiteSuperior = moment().subtract(3, 'days').startOf('day');
+    var initDate = moment().subtract(1, 'years').startOf('week').toDate();
+    var lowLimit = moment().subtract(1, 'years').startOf('day');
+    var upLimit = moment().startOf('day');
 
     var cal = new CalHeatMap();
 
@@ -57,39 +62,29 @@ async function LoadHeatMap(){
         range: 54, 
         cellSize: 12,
         cellPadding: 2,
-        start: fechaInicio, 
-        data: datosBinarios,
+        start: initDate, 
+        data: checkData,
         displayLegend: false,
         legend: [1],
         legendColors: ["#1f1f1f", "#ffff00"], 
-
-        // onComplete asegura que los rectángulos existen en el DOM antes de ejecutar el filtro
         onComplete: function() {
-        // Selecciona el contenedor de grupo <g> de cada día
         d3.selectAll("#cal-heatmap svg.graph-subdomain-group g")
             .filter(function(d) {
-                // d contiene el objeto asignado por cal-heatmap {t: timestamp, v: valor}
                 if (d && d.t) {
-                    return d.t <= limiteInferior || d.t > limiteSuperior;
+                    return d.t <= lowLimit || d.t > upLimit;
                 }
                 return false;
             })
-            .remove(); // Elimina el elemento <g> completo del DOM
+            .remove();
         },
 
         tooltip: true,
         subDomainTitleFormat: {
-            empty: "No hecho: {date}",
-            filled: "Hecho: {date}"
+            empty: "{date}",
+            filled: "{date}"
         },
         subDomainDateFormat: function(date) {
             return moment(date).format("LL");
-        },
-
-        onClick: function(date, value) {
-            var fechaFormateada = moment(date).format("LL");
-            var estado = (value >= 1) ? "Hecho" : "No hecho";
-            alert("Fecha: " + fechaFormateada + "\nEstado: " + estado);
         },
 
         domainLabelFormat: function(date) {

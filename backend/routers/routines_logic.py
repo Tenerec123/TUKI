@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 from dateutil.rrule import rrulestr
-
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from schemas import RoutineCreate, RoutineUpdate, RoutineToday
 from models import Routine, RoutineCheck
@@ -8,8 +8,14 @@ from datetime import datetime,date
 
 def get_routine_logic(id:int, db: Session):
     db_routine = db.query(Routine).where(Routine.id == id).first()
-    if db_routine is None: raise HTTPException(status_code=404, detail="Task not found")
+    if db_routine is None: raise HTTPException(status_code=404, detail="Routine not found")
     return db_routine
+
+def get_routine_stats_logic(id:int, db: Session):
+    if db.query(Routine).where(Routine.id == id).first() is None: raise HTTPException(status_code=404, detail="Routine not found")
+    restriction = func.date('now', '-1 year')
+    db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, restriction < RoutineCheck.check_date)
+    return db_check
 
 def get_all_routine_logic(db: Session):
     return db.query(Routine).all()

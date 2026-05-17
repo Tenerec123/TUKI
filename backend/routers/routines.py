@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
-from schemas import RoutineCreate, RoutineSchema, RoutineUpdate, RoutineToday
+from schemas import RoutineCreate, RoutineSchema, RoutineUpdate, RoutineToday, RoutineCheckSchema
 from database import get_db
-from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, check_routine_logic, uncheck_routine_logic
+from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, check_routine_logic, uncheck_routine_logic, get_routine_stats_logic
 router = APIRouter(
     prefix="/api/routines",
     tags=["routines"]
@@ -13,6 +13,9 @@ router = APIRouter(
 def get_today_routine(db: Session = Depends(get_db)):
     return get_today_routine_logic(db=db)   
 
+@router.get("/stats/{id:int}", response_model=List[RoutineCheckSchema])
+def get_routine_stats(id:int,db: Session = Depends(get_db)):
+    return get_routine_stats_logic(id=id, db=db)
 
 @router.get("/{id:int}", response_model=RoutineSchema)
 def get_routine(id:int, db: Session = Depends(get_db)):
@@ -27,7 +30,7 @@ def check_routine(id:int, db:Session = Depends(get_db)):
     return check_routine_logic(id=id,db=db)
 
 @router.delete("/uncheck/{id:str}")
-def check_routine(id:int, db:Session = Depends(get_db)):
+def uncheck_routine(id:int, db:Session = Depends(get_db)):
     return uncheck_routine_logic(id=id,db=db)
 
 @router.post("/", response_model=RoutineSchema)

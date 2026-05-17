@@ -55,6 +55,12 @@ class RoutineUpdate(BaseModel):
     project_id:Optional[int] = Field(None)
     init_date:Optional[date] = Field(None)
 
+class RoutineCheckSchema(BaseModel):
+    routine_id:int = Field(...)
+    check_date:date = Field(...)
+    @field_serializer('check_date')
+    def serialize_deadline(self, check_date: date) -> str:
+        return check_date.strftime("%d/%m/%Y")
 
 # Project Classes
 
