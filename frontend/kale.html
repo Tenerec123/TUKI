@@ -7,7 +7,11 @@
   <link rel="stylesheet" href="/frontend/style.css">
   <link rel="icon" href="data:,">
   <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
-    <style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cal-heatmap/3.3.10/cal-heatmap.css" /> 
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+  <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>  
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/cal-heatmap/3.3.10/cal-heatmap.min.js"></script>
+  <style>
       #calendar {
         margin: 0 auto;
         height: 65vh;
@@ -24,6 +28,19 @@
       <a class="unable" href="kale">KALE</a>
     </div>
   </header>
+  <div class="calendar-wrapper">
+        <div id="cal-heatmap-yaxislabels">
+            <div>Lun</div>
+            <div>Mar</div>
+            <div>Mié</div>
+            <div>Jue</div>
+            <div>Vie</div>
+            <div>Sáb</div>
+            <div>Dom</div>
+
+        </div>
+        <div id="cal-heatmap"></div>
+    </div>
   <div id='calendar'></div>
 <script src="/frontend/kale_script.js"></script>
 </body>

@@ -801,6 +801,29 @@ SELECT CALENDAR
   box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
 }
 
+.graph-domain {
+    overflow: visible !important;
+}
+.calendar-wrapper {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+#cal-heatmap-yaxislabels {
+    margin-right: 8px;
+    padding-top: 0px; 
+}
+
+#cal-heatmap-yaxislabels > div {
+    height: 14px;
+    line-height: 14px;
+    font-size: 10px;
+    color: #8b949e;
+    user-select: none;
+}
+
 #today-routine-list {
     
     display: flex;
