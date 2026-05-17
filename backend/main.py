@@ -13,7 +13,7 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
-api.mount("/frontend", StaticFiles(directory="../frontend"), name="frontend")
+api.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 @api.get("/chat")
 async def read_index():

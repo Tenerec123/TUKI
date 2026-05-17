@@ -128,8 +128,7 @@ See `.env.example` for all available options:
 
 ### Running locally with auto-reload
 ```bash
-cd backend
-python -m fastapi dev main.py --host 0.0.0.0
+python -m fastapi dev backend/main.py --host 0.0.0.0
 ```
 
 ### Database Migrations (Alembic)
