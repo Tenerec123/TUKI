@@ -7,6 +7,7 @@ T.U.K.I. (T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR) is a comprehensive TODO ma
 - ✅ **Projects Management** - Create hierarchical projects with sub-projects
 - ✅ **Tasks** - Manage tasks with deadlines and priority levels
 - ✅ **Routines** - Schedule recurring tasks with frequency settings
+- ✅ **Routine Heatmap** - Visual representation of routine completion patterns
 - ✅ **AI Chat** - Integrated AI assistant powered by Google Gemini
 - ✅ **Conversations** - Store and manage chat histories
 
@@ -64,21 +65,26 @@ Once running, visit `http://localhost:8000/docs` for interactive API documentati
 
 ```
 backend/
-  ├── models.py           # Database models
-  ├── database.py         # Database configuration
-  ├── schemas.py          # Pydantic schemas
-  ├── main.py             # FastAPI app setup
-  └── routers/            # API endpoints
-      ├── tasks.py
-      ├── projects.py
-      ├── routines.py
-      ├── ai.py
-      └── conversations.py
+  ├── models.py                # Database models
+  ├── database.py              # Database configuration
+  ├── schemas.py               # Pydantic schemas
+  ├── main.py                  # FastAPI app setup
+  ├── alembic/                 # Database migrations
+  └── routers/
+      ├── tasks.py             # Task endpoints
+      ├── tasks_logic.py        # Task business logic
+      ├── projects.py          # Project endpoints
+      ├── projects_logic.py     # Project business logic
+      ├── routines.py          # Routine endpoints
+      ├── routines_logic.py     # Routine business logic
+      ├── ai.py                # AI chat endpoints
+      ├── conversations.py      # Conversation history endpoints
+      └── tools.py             # Utility functions for AI tools
 
 frontend/
-  ├── todo.html
-  ├── chat.html
-  ├── kale.html
+  ├── todo.html                # Task management UI
+  ├── chat.html                # AI chat interface
+  ├── kale.html                # Routine heatmap visualization
   ├── todo_script.js
   ├── chat_script.js
   ├── kale_script.js

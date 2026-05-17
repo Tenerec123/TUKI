@@ -34,8 +34,8 @@ cp .env.example .env
 ## Running the Application
 
 ```bash
-cd backend
-uvicorn main:api --reload
+# From the project root directory
+python -m uvicorn backend.main:api --reload --host 0.0.0.0
 ```
 
 ## Code Style
