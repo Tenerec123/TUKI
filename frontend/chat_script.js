@@ -313,7 +313,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         container.classList.toggle('sidebar-collapsed');
     });
     await getConversations();
-    conversationList.children[0].children[0].click();
+    if (conversationList.children){
+        conversationList.children[0].children[0].click();
+    }
     Render();
     SetupAudio();
 })
