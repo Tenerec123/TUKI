@@ -15,6 +15,10 @@ api.add_middleware(
 
 api.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
+@api.get("/TUKI.svg")
+async def favicon():
+    return FileResponse("frontend/TUKI.svg")
+
 @api.get("/chat")
 async def read_index():
     return FileResponse('frontend/chat.html')
