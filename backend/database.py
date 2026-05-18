@@ -17,6 +17,10 @@ engine = create_engine(
 class Base(DeclarativeBase):
     pass
 from models import Project, Task, Routine, Conversation, Message
+
+# Create tables automatically when the app starts (development mode)
+Base.metadata.create_all(engine)
+
 # Session factory
 SessionLocal = sessionmaker(
     bind=engine,

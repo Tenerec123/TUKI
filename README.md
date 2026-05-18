@@ -51,8 +51,7 @@ cp .env.example .env
 
 5. **Run the application**
 ```bash
-cd backend
-python -m fastapi dev main.py --host 0.0.0.0
+python -m fastapi dev backend/main.py --host 0.0.0.0
 ```
 
 The application will be available at `http://localhost:8000`

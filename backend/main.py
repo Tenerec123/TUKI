@@ -17,15 +17,15 @@ api.mount("/frontend", StaticFiles(directory="frontend"), name="frontend")
 
 @api.get("/chat")
 async def read_index():
-    return FileResponse('../frontend/chat.html')
+    return FileResponse('frontend/chat.html')
 
 @api.get("/todo")
 async def read_index():
-    return FileResponse('../frontend/todo.html')
+    return FileResponse('frontend/todo.html')
 
 @api.get("/kale")
 async def read_index():
-    return FileResponse('../frontend/kale.html')
+    return FileResponse('frontend/kale.html')
 
 api.include_router(tasks.router)
 api.include_router(routines.router)
