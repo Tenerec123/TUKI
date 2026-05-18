@@ -12,7 +12,7 @@ def get_routine_logic(id:int, db: Session):
     return db_routine
 
 def get_routine_stats_logic(id:int, db: Session):
-    if db.query(Routine).where(Routine.id == id).first() is None: raise HTTPException(status_code=404, detail="Routine not found")
+    if db.query(Routine).where(Routine.id == id).first() is None: return []
     restriction = func.date('now', '-1 year')
     db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, restriction < RoutineCheck.check_date)
     return db_check
