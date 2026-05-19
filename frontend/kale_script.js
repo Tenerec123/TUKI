@@ -1,7 +1,8 @@
 const SERVER_IP = window.location.hostname;
-const API_PORT = window.location.port || "8000"
+const API_PORT = window.location.port || "8000";
+const Rselector = document.getElementById('routine-selector');
 window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
-
+let obj_selected = null;
 async function LoadCalendar(){
     tasks = []
     await fetch(`${window.API_URL}/api/tasks`)
@@ -34,11 +35,49 @@ async function LoadCalendar(){
     calendar.render();
 }
 
-async function LoadHeatMap(){
-    var checkData = {};
-    await fetch(`${window.API_URL}/api/routines/stats/${2}`)
+async function LoadRoutineSelector(){
+    await fetch(`${window.API_URL}/api/routines/`)
     .then(response => response.json())
     .then(data => {
+        let first = true;
+        data.forEach(routine => {
+            
+            let rout_obj = document.createElement('div');
+            rout_obj.classList.add('routine-card');
+            rout_obj.addEventListener('click', () => {
+                if (obj_selected == rout_obj){return}
+              
+                if (obj_selected){obj_selected.classList.remove('active');}
+                obj_selected = rout_obj
+                rout_obj.classList.add('active');
+                LoadHeatmap(routine.id);
+            })
+            rout_obj.innerHTML = `
+                <div class="card-icon">
+                    <i class="bi bi-code-slash"></i>
+                </div>
+                <div class="card-content">
+                    <span class="routine-title">${routine.name}</span>
+                        <span class="routine-desc">Indexación y consolidación de bloques</span>
+                </div>
+            `
+            Rselector.appendChild(rout_obj)
+            if (first){
+                LoadHeatmap(routine.id);
+                rout_obj.classList.add('active');
+                first=false;
+            }
+        });
+    });    
+}
+
+async function LoadHeatmap(id) {
+    document.getElementById('cal-heatmap').innerHTML = ''
+    var checkData = {};
+    await fetch(`${window.API_URL}/api/routines/stats/${id}`)
+    .then(response => response.json())
+    .then(data => {
+        console.log(data)
         data.forEach(check => {
             console.log(check)
             const [dia, mes, año] = check.check_date.split('/');
@@ -46,7 +85,6 @@ async function LoadHeatMap(){
             checkData[unix] = 1
         });
     });
-    console.log(checkData)
 
     var initDate = moment().subtract(1, 'years').startOf('week').toDate();
     var lowLimit = moment().subtract(1, 'years').startOf('day');
@@ -99,5 +137,5 @@ async function LoadHeatMap(){
 
 document.addEventListener('DOMContentLoaded', async () => {
     LoadCalendar();
-    LoadHeatMap();
+    LoadRoutineSelector();
 });

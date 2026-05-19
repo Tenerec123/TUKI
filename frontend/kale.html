@@ -19,7 +19,7 @@
         height: 65vh;
       }
       /* --- Contenedor Principal (Dark Theme) --- */
-.routine-selector {
+#routine-selector {
     width: 340px; /* Ancho fijo solicitado */
     display: flex;
     flex-direction: column;
@@ -106,48 +106,8 @@
   </header>
 
 <div id="stats-container" style="display: flex; flex-direction: row; align-items: center;">
-  <div class="routine-selector">
-    <div class="routine-card active" data-routine="deep-work">
-        <div class="card-icon">
-            <i class="bi bi-code-slash"></i>
-        </div>
-        <div class="card-content">
-            <span class="routine-title">Deep Work</span>
-            <span class="routine-desc">Bloque de código sin distracciones</span>
-        </div>
-    </div>
-
-    <div class="routine-card" data-routine="math-training">
-        <div class="card-icon">
-            <i class="bi bi-calculator"></i>
-        </div>
-        <div class="card-content">
-            <span class="routine-title">Math & Logic</span>
-            <span class="routine-desc">Resolución de problemas complejos</span>
-        </div>
-    </div>
-
-    <div class="routine-card" data-routine="english-sat">
-        <div class="card-icon">
-            <i class="bi bi-translate"></i>
-        </div>
-        <div class="card-content">
-            <span class="routine-title">English C1/SAT</span>
-            <span class="routine-desc">Auditoría lingüística y precisión</span>
-        </div>
-    </div>
-
-    <div class="routine-card" data-routine="system-review">
-        <div class="card-icon">
-            <i class="bi bi-diagram-3"></i>
-        </div>
-        <div class="card-content">
-            <span class="routine-title">System Review</span>
-            <span class="routine-desc">Indexación y consolidación de bloques</span>
-        </div>
-    </div>
+  <div id="routine-selector">
   </div>
-
   <div class="calendar-wrapper" style="display: flex; flex-direction: row; align-items: center; width: 100%;">
         <div id="cal-heatmap-yaxislabels">
             <div>Lun</div>
@@ -159,10 +119,8 @@
             <div>Dom</div>
         </div>
         <div id="cal-heatmap"></div>
-    </div>
-
+  </div>
 </div>
-
 <br>
   
   
