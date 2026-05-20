@@ -3,11 +3,15 @@ from sqlalchemy.orm import Session
 from typing import List
 from schemas import RoutineCreate, RoutineSchema, RoutineUpdate, RoutineToday, RoutineCheckSchema
 from database import get_db
-from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, check_routine_logic, uncheck_routine_logic, get_routine_stats_logic
+from .routines_logic import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, check_routine_logic, uncheck_routine_logic, get_routine_stats_logic, get_accuracy_logic
 router = APIRouter(
     prefix="/api/routines",
     tags=["routines"]
 )
+
+@router.get("/accuracy/{id:int}")
+def get_accuracy(id:int, db:Session = Depends(get_db)):
+    return get_accuracy_logic(id, db)
 
 @router.get("/today", response_model=List[RoutineToday])
 def get_today_routine(db: Session = Depends(get_db)):

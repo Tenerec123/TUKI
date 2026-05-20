@@ -40,7 +40,7 @@ async function LoadRoutineSelector(){
     .then(response => response.json())
     .then(data => {
         let first = true;
-        data.forEach(routine => {
+        data.forEach(async routine => {
             
             let rout_obj = document.createElement('div');
             rout_obj.classList.add('routine-card');
@@ -52,12 +52,17 @@ async function LoadRoutineSelector(){
                 rout_obj.classList.add('active');
                 LoadHeatmap(routine.id);
             })
+            
+            response = await fetch(`${window.API_URL}/api/routines/accuracy/${routine.id}`)
+            const textData = await response.text();
+            const accuracy = parseFloat(textData);
+            console.log(accuracy == 'NaN')
             rout_obj.innerHTML = `
                 <div class="card-icon">
                     <i class="bi bi-code-slash"></i>
                 </div>
                 <div class="card-content">
-                    <span class="routine-title">${routine.name}</span>
+                    <span class="routine-title">${routine.name} Acc: ${Number.isNaN(accuracy)?'Unstarted':(accuracy*100).toFixed(2)}</span>
                         <span class="routine-desc">Indexación y consolidación de bloques</span>
                 </div>
             `
@@ -77,9 +82,7 @@ async function LoadHeatmap(id) {
     await fetch(`${window.API_URL}/api/routines/stats/${id}`)
     .then(response => response.json())
     .then(data => {
-        console.log(data)
         data.forEach(check => {
-            console.log(check)
             const [dia, mes, año] = check.check_date.split('/');
             const unix = `${Math.floor(+new Date(`${año}-${mes}-${dia}`) / 1000)}`;
             checkData[unix] = 1

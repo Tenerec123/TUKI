@@ -4,7 +4,28 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from schemas import RoutineCreate, RoutineUpdate, RoutineToday
 from models import Routine, RoutineCheck
-from datetime import datetime,date
+from datetime import datetime,date,time
+
+
+# non-endpoint function
+def get_days_until_today(frequency_str: str, init_date) -> int:
+    if not frequency_str.startswith("RRULE:"):
+        frequency_str = f"RRULE:{frequency_str}"
+    if isinstance(init_date, date) and not isinstance(init_date, datetime):
+        start_dt = datetime.combine(init_date, time.min)
+    else:
+        start_dt = init_date.replace(hour=0, minute=0, second=0, microsecond=0).replace(tzinfo=None)
+    end_dt = datetime.combine(datetime.now().date(), time.max)
+    rule = rrulestr(frequency_str, dtstart=start_dt)
+    theoretical_dates = rule.between(start_dt, end_dt, inc=True)
+    return len(theoretical_dates)
+
+def get_accuracy_logic(id:int, db:Session):
+    db_routine = get_routine_logic(id, db)
+    done_days = len(get_routine_stats_logic(id, db))
+    total_days = get_days_until_today(db_routine.frequency, db_routine.init_date)
+    if total_days <= 0: return "Unstarted"
+    return done_days/total_days
 
 def get_routine_logic(id:int, db: Session):
     db_routine = db.query(Routine).where(Routine.id == id).first()
@@ -14,7 +35,7 @@ def get_routine_logic(id:int, db: Session):
 def get_routine_stats_logic(id:int, db: Session):
     if db.query(Routine).where(Routine.id == id).first() is None: return []
     restriction = func.date('now', '-1 year')
-    db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, restriction < RoutineCheck.check_date)
+    db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, restriction < RoutineCheck.check_date).all()
     return db_check
 
 def get_all_routine_logic(db: Session):
