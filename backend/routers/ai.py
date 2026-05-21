@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -34,14 +34,32 @@ Use always this date format: DD/MM/YYYY
 All priorities are between 1 and 64 (0 is not asigned)
 There is only a tool, ProcessBatch. Inside it you can use all the other tools multiple times
 When generating mathematical content, use the $ delimiter for inline LaTeX and $$ for display."""
-rules_openai= f"""
-Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Responses as short as possible. Your user will be the creator.
-Responses as short as possible, if you have to execute tools you don't have to explain all you have done, only make a little summary or just say what you have done if it's too long.
-Priority = Urgency (0-32, based on the consequences if the task is not done before the deadline) + Importance (0-32, based on task type/impact), capped at 1-64. Higher = more urgent/important.
-Use always this date format: DD/MM/YYYY
-All priorities are between 1 and 64 (0 is not asigned)
-There is a list of functions that you can use as much times as you need in the same inference.
-When generating mathematical content, use the $ delimiter for inline LaTeX and $$ for display. 
+def get_openai_rules():
+    today_str = date.today().strftime('%A, %d/%m/%Y')     
+    return f"""
+[IDENTITY & STYLE]
+Role: T.U.K.I. Technical Assistant.
+User: Creator/Developer.
+Tone: Direct, technical, no-filler, robot.
+Execution: After using tools, your textual response must strictly reflect the real names and IDs returned in the execution messages using natural language. 
+
+[TIME CONTEXT]
+Format: DD/MM/YYYY
+Today: {today_str}
+
+[PRIORITY ALGORITHM]
+Priority = Urgency (0-32, risk if not done before deadline) + Importance (0-32, structural impact).
+Range: [1, 64]
+
+[TOOL USE RULES]
+1. ZERO GUESSING PROTOCOL: You are STRICTLY FORBIDDEN from guessing, predicting, or hallucinating object IDs (e.g., executing DeleteTask with ID 1, 2, or 123 without reading first).
+2. PRE-CONDITION: If the user request targets objects by semantic text or names (e.g., "todo lo que tenga que ver con X"), you DO NOT KNOW the IDs. Therefore, your very first inference turn MUST be a 'ProcessBatch' containing ONLY the database read functions needed to inspect the context ('GetAllTasks', 'GetAllProjects', 'GetAllRoutines').
+3. EXECUTION PHASE: Only after the tool execution returns the database arrays, you will parse them, filter the items matching the user's intent, and execute the mutations ('DeleteTask', 'CreateProject', etc.) via a final 'ProcessBatch' call in the second turn.
+4. SINGLE MUTATION BATCH: For any request requiring multiple modifications, you must group them into a single 'ProcessBatch' call. Sequential individual mutation calls are prohibited.
+5. ARGS INTEGRITY: The 'args' object inside 'ProcessBatch' must exactly match the schema parameters of the target function. Never invent or omit parameters.
+
+[FORMATTING]
+- Math/Science: Use $ for inline LaTeX and $$ for display blocks. No markdown alternatives for math equations.
 """
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -112,7 +130,45 @@ def gemini_agent(conversation:ConversationSchema):
             else: raise e
     return {'response':"All models are UNAVAILABLE, impossible to respond"}
 
-formatted_tools = [
+formatted_tools = [{
+        'type': 'function',
+        'function': {
+            'name': 'ProcessBatch',
+            'description': 'Executes multiple task, project, or routine mutations sequentially in a single API roundtrip. Use ONLY when the user requests multiple creations or mutations.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'commands': {
+                        'type': 'array',
+                        'description': 'Ordered list of tools to execute.',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'tool': {
+                                    'type': 'string',
+                                    'description': 'The exact name of the tool.',
+                                    'enum': [
+                                        'GetAllTasks', 'GetAllProjects', 'GetAllRoutines',
+                                        'CreateTask', 'DeleteTask', 'UpdateTask',
+                                        'CreateProject', 'DeleteProject', 'UpdateProject',
+                                        'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'
+                                    ]
+                                },
+                                'args': {
+                                    'type': 'object',
+                                    'description': 'Arguments dict mapping exactly to the chosen tool parameters.'
+                                }
+                            },
+                            'required': ['tool', 'args']
+                        }
+                    }
+                },
+                'required': ['commands']
+            }
+        }
+    }]
+
+formatted_tools += [
     {
         "type": "function",
         "function": schema
@@ -120,26 +176,28 @@ formatted_tools = [
     for schema in tool_schemas
 ]
 
-def openai_agent(conversation:ConversationSchema, max_inferences = 3):
+def openai_agent(conversation:ConversationSchema, max_inferences = 5):
 
     MODEL_STACK = [
-        'qwen/qwen3-next-80b-a3b-instruct:free',
-        'meta-llama/llama-3.3-70b-instruct:free',
+        'meta-llama/llama-3.3-70b-instruct',
+        "nvidia/nemotron-3-super-120b-a12b:free",   # Rey actual
         'liquid/lfm-2.5-1.2b-instruct:free',
         'nousresearch/hermes-3-llama-3.1-405b:free',
         'meta-llama/llama-3.2-3b-instruct:free',
-        "nvidia/nemotron-3-super-120b-a12b:free",   # Rey actual
         "google/gemma-4-31b-it:free",               # Nuevo en 2026, brutal para JSON
         "openai/gpt-oss-120b:free",                 # El nuevo MoE abierto de OpenAI
         "qwen/qwen3-coder:free",                    # El mejor para lógica de sistemas
         "nvidia/nemotron-3-super-120b-a12b:free",   # Enorme, ideal para 100 tareas
         "z-ai/glm-4.5-air:free",     
-        "meta-llama/llama-3.3-70b-instruct:free"
+        "meta-llama/llama-3.3-70b-instruct:free",
         "minimax/minimax-m2.5:free"]
     function_outputs = []
-    messages = [{'role':'developer','content':rules_openai}]
+    messages = [{'role':'developer','content':get_openai_rules()}]
+
     for i, msg in enumerate(conversation.messages):
         messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
+
+    print(f'[DEBUG] MESSAGES: {messages}')
 
     for model in MODEL_STACK:
         try:
@@ -150,9 +208,10 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    tools=formatted_tools if not is_last_attempt else None,
+                    tools=formatted_tools,
                     tool_choice=tool_selection,
                     reasoning_effort="none",
+                    parallel_tool_calls=True,
                     stream=True,
                 )
 
@@ -160,56 +219,72 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 3):
 
                 for chunk in response:
                     delta = chunk.choices[0].delta
-                    
                     if delta.tool_calls:
-                        for tc in delta.tool_calls:
-                            # Los chunks de herramientas vienen con índices, hay que ensamblarlos
-                            if tc.index not in full_tool_calls:
-                                full_tool_calls[tc.index] = tc
+                        print(f'[DEBUG] TOOL CALL CHUNK: {delta.tool_calls}')
+                        for call_data in delta.tool_calls:
+                            idx = call_data.index
+                            
+                            if idx not in full_tool_calls:
+                                # Inicializamos el diccionario para este índice con un clon/estructura limpia
+                                full_tool_calls[idx] = {
+                                    "id": call_data.id,
+                                    "name": call_data.function.name,
+                                    "arguments": call_data.function.arguments or ""
+                                }
                             else:
-                                # Acumulamos los fragmentos del JSON de argumentos
-                                full_tool_calls[tc.index].function.arguments += tc.function.arguments
-                        continue # No hacemos yield de nada al usuario aún
+                                # Si el chunk actual trae id o name (raro pero posible), lo preservamos
+                                if call_data.id: 
+                                    full_tool_calls[idx]["id"] = call_data.id
+                                if call_data.function and call_data.function.name: 
+                                    full_tool_calls[idx]["name"] = call_data.function.name
+                                
+                                # Acumulamos los fragmentos de texto del JSON de argumentos
+                                if call_data.function and call_data.function.arguments:
+                                    full_tool_calls[idx]["arguments"] += call_data.function.arguments
+                        continue
 
                     if delta.content:
+                        print(f'[DEBUG] CONTENT: {delta.content}')
                         yield delta.content
 
                 if full_tool_calls:
                     # 1. EL MODELO DEBE VER SU PROPIA LLAMADA EN EL HISTORIAL
+                    print(f'[DEBUG] TOOL CALLS')
                     assistant_tool_call_msg = {
                         "role": "assistant",
                         "tool_calls": [
                             {
-                                "id": tc.id,
+                                "id": call_data['id'],
                                 "type": "function",
                                 "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments
+                                    "name": call_data['name'],
+                                    "arguments": call_data['arguments']
                                 }
-                            } for tc in full_tool_calls.values()
+                            } for call_data in full_tool_calls.values()
                         ]
                     }
+                    print(f'[DEBUG] CALLS: {assistant_tool_call_msg}')
                     messages.append(assistant_tool_call_msg)
 
                     # 2. EJECUTAR Y AÑADIR CADA RESULTADO CON ROL 'tool'
-                    for tc in full_tool_calls.values():
+                    for call_data in full_tool_calls.values():
                         try:
-                            args = json.loads(tc.function.arguments)
+                            args = json.loads(call_data['arguments'])
                             # Buscamos la función en tu ToolDict (línea 164 de tu tools.py)
-                            func = ToolDict.get(tc.function.name)
+                            func = ToolDict.get(call_data['name'])
                             
                             if func:
                                 result = func(**args)
                             else:
-                                result = f"Error: Tool {tc.function.name} not found in ToolDict"
+                                result = f"Error: Tool {call_data['name']} not found in ToolDict"
                         except Exception as e:
                             result = f"Execution Error: {str(e)}"
-
+                        print(f'[DEBUG] MESSAGES: {result}')
                         # 3. Respuesta de rol 'tool' vinculada al ID
                         messages.append({
                             "role": "tool",
-                            "tool_call_id": tc.id,
-                            "name": tc.function.name,
+                            "tool_call_id": call_data['id'],
+                            "name": call_data['name'],
                             "content": json.dumps(result, default=str)
                         })
                     continue

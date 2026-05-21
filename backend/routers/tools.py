@@ -66,7 +66,7 @@ def GetAllRoutines():
     Args: [any args]
     '''
     with SessionLocal() as db:
-        routines = get_all_routine_logic(first_n=None,db=db)
+        routines = get_all_routine_logic(db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
 def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None):
@@ -99,7 +99,7 @@ def DeleteRoutine(routine_id:int):
         deleted_routine = delete_routine_logic(id=routine_id, db=db)
         return f"Routine {deleted_routine.name} with id {deleted_routine.id} successfully deleted"
 
-def UpdateRoutine(routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None):
+def UpdateRoutine(routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None, init_date:str = None):
     '''
     Updates the parameters you select of the object with the routine_id you choose. Set only what you want to change.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
@@ -108,11 +108,12 @@ def UpdateRoutine(routine_id:int, name:str = None, description:str = None, prior
     with SessionLocal() as db:
         update_routine_logic(
             id=routine_id, 
-            updated_task=RoutineCreate(
+            updated_task=RoutineUpdate(
                 name=name,
                 description=description,
                 priority=priority,
-                frequency=frequency),
+                frequency=frequency,
+                init_date=init_date),
             db=db)
         return f"Routine {name} with id:{routine_id} successfully updated."
 
@@ -176,7 +177,6 @@ def CreateTree():
     pass
 
 def ProcessBatch(commands:List[dict]):
-
     output_log = []
     for command in commands:
         func = ToolDict.get(command['tool'], None)
@@ -190,7 +190,7 @@ def ProcessBatch(commands:List[dict]):
             output_log.append(f"{command} -> Error: {e}")
     return output_log
 
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, UpdateProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, UpdateProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, ProcessBatch]
 ToolDict = {t.__name__: t for t in ToolList}
 
 def DocCreator():
@@ -218,51 +218,45 @@ tool_schemas = [
     # --- TASKS ---
     {
         'name': 'GetAllTasks',
-        'description': 'Returns all the tasks in the database as a list of dictionaries.',
-        'parameters': {
-            'type': 'object',
-            'properties': {},
-            'required': []
-        }
+        'description': 'Returns all tasks in the database.',
+        'parameters': {'type': 'object', 'properties': {}, 'required': []}
     },
     {
         'name': 'CreateTask',
-        'description': 'Creates a task using the input characteristics. Use dd/mm/yyyy for deadlines.',
+        'description': 'Creates a task. Format deadline as dd/mm/yyyy.',
         'parameters': {
             'type': 'object',
             'properties': {
-                'name': {'type': 'string', 'description': 'The name of the task.'},
-                'description': {'type': 'string', 'description': 'Detailed description of the task.'},
-                'priority': {'type': 'integer', 'description': 'Priority level (integer).'},
-                'deadline': {'type': 'string', 'description': 'Deadline in dd/mm/yyyy format.'},
-                'project_id': {'type': 'integer', 'description': 'Optional project ID to associate the task with.'}
+                'name': {'type': 'string'},
+                'description': {'type': 'string'},
+                'priority': {'type': 'integer'},
+                'deadline': {'type': 'string'},
+                'project_id': {'type': 'integer'}
             },
             'required': ['name', 'description', 'priority', 'deadline']
         }
     },
     {
         'name': 'DeleteTask',
-        'description': 'Deletes the task with the selected id. Use with caution.',
+        'description': 'Deletes a specific task.',
         'parameters': {
             'type': 'object',
-            'properties': {
-                'task_id': {'type': 'integer', 'description': 'The unique ID of the task to delete.'}
-            },
+            'properties': {'task_id': {'type': 'integer'}},
             'required': ['task_id']
         }
     },
     {
         'name': 'UpdateTask',
-        'description': 'Updates selected parameters of a specific task. Only provide fields that need changing.',
+        'description': 'Updates selected parameters of a specific task.',
         'parameters': {
             'type': 'object',
             'properties': {
-                'task_id': {'type': 'integer', 'description': 'The ID of the task to update.'},
-                'name': {'type': 'string', 'description': 'New name for the task.'},
-                'description': {'type': 'string', 'description': 'New description for the task.'},
-                'priority': {'type': 'integer', 'description': 'New priority level.'},
-                'deadline': {'type': 'string', 'description': 'New deadline in dd/mm/yyyy format.'},
-                'finished': {'type': 'boolean', 'description': 'Status of task completion.'}
+                'task_id': {'type': 'integer'},
+                'name': {'type': 'string'},
+                'description': {'type': 'string'},
+                'priority': {'type': 'integer'},
+                'deadline': {'type': 'string'},
+                'finished': {'type': 'boolean'}
             },
             'required': ['task_id']
         }
@@ -271,37 +265,31 @@ tool_schemas = [
     # --- ROUTINES ---
     {
         'name': 'GetAllRoutines',
-        'description': 'Returns all the routines in the database as a list of dictionaries.',
-        'parameters': {
-            'type': 'object',
-            'properties': {},
-            'required': []
-        }
+        'description': 'Returns all routines in the database.',
+        'parameters': {'type': 'object', 'properties': {}, 'required': []}
     },
     {
         'name': 'CreateRoutine',
-        'description': 'Creates a routine. Frequency must be in valid RRULE code.',
+        'description': 'Creates a routine.',
         'parameters': {
             'type': 'object',
             'properties': {
-                'name': {'type': 'string', 'description': 'Name of the routine.'},
-                'description': {'type': 'string', 'description': 'Description of the routine.'},
-                'priority': {'type': 'integer', 'description': 'Priority level.'},
-                'frequency': {'type': 'string', 'description': "RRULE string (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
-                'init_date': {'type': 'string', 'description': 'date in dd/mm/yyyy format.'},
-                'project_id': {'type': 'integer', 'description': 'Optional project ID association.'}
+                'name': {'type': 'string'},
+                'description': {'type': 'string'},
+                'priority': {'type': 'integer'},
+                'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
+                'init_date': {'type': 'string'},
+                'project_id': {'type': 'integer'}
             },
             'required': ['name', 'description', 'priority', 'frequency']
         }
     },
     {
         'name': 'DeleteRoutine',
-        'description': 'Deletes the routine with the selected id. Use with caution.',
+        'description': 'Deletes a specific routine.',
         'parameters': {
             'type': 'object',
-            'properties': {
-                'routine_id': {'type': 'integer', 'description': 'The unique ID of the routine to delete.'}
-            },
+            'properties': {'routine_id': {'type': 'integer'}},
             'required': ['routine_id']
         }
     },
@@ -311,11 +299,12 @@ tool_schemas = [
         'parameters': {
             'type': 'object',
             'properties': {
-                'routine_id': {'type': 'integer', 'description': 'The ID of the routine to update.'},
-                'name': {'type': 'string', 'description': 'New name.'},
-                'description': {'type': 'string', 'description': 'New description.'},
-                'priority': {'type': 'integer', 'description': 'New priority level.'},
-                'frequency': {'type': 'string', 'description': 'New RRULE frequency string.'}
+                'routine_id': {'type': 'integer'},
+                'name': {'type': 'string'},
+                'description': {'type': 'string'},
+                'priority': {'type': 'integer'},
+                'frequency': {'type': 'string', 'description': 'RRULE syntax.'},
+                'init_date': {'type': 'string'},
             },
             'required': ['routine_id']
         }
@@ -324,49 +313,43 @@ tool_schemas = [
     # --- PROJECTS ---
     {
         'name': 'GetAllProjects',
-        'description': 'Returns all projects in the database as a list of dictionaries.',
-        'parameters': {
-            'type': 'object',
-            'properties': {},
-            'required': []
-        }
+        'description': 'Returns all projects in the database.',
+        'parameters': {'type': 'object', 'properties': {}, 'required': []}
     },
     {
         'name': 'CreateProject',
-        'description': 'Creates a project. Avoid parent loops when setting parent_id.',
+        'description': 'Creates a project.',
         'parameters': {
             'type': 'object',
             'properties': {
-                'name': {'type': 'string', 'description': 'Name of the project.'},
-                'description': {'type': 'string', 'description': 'Description of the project.'},
-                'priority': {'type': 'integer', 'description': 'Priority level.'},
-                'parent_id': {'type': 'integer', 'description': 'Optional ID of the parent project.'}
+                'name': {'type': 'string'},
+                'description': {'type': 'string'},
+                'priority': {'type': 'integer'},
+                'parent_id': {'type': 'integer'}
             },
             'required': ['name']
         }
     },
     {
         'name': 'DeleteProject',
-        'description': 'Deletes a project and all its sub-projects/tasks (cascade). High impact action.',
+        'description': 'Deletes a project and all its sub-projects/tasks (cascade).',
         'parameters': {
             'type': 'object',
-            'properties': {
-                'project_id': {'type': 'integer', 'description': 'The ID of the project to delete.'}
-            },
+            'properties': {'project_id': {'type': 'integer'}},
             'required': ['project_id']
         }
     },
     {
         'name': 'UpdateProject',
-        'description': 'Updates project parameters. Only provided fields will be updated.',
+        'description': 'Updates selected project parameters.',
         'parameters': {
             'type': 'object',
             'properties': {
-                'project_id': {'type': 'integer', 'description': 'The ID of the project to update.'},
-                'name': {'type': 'string', 'description': 'New name.'},
-                'description': {'type': 'string', 'description': 'New description.'},
-                'priority': {'type': 'integer', 'description': 'New priority level.'},
-                'parent_id': {'type': 'integer', 'description': 'New parent ID.'}
+                'project_id': {'type': 'integer'},
+                'name': {'type': 'string'},
+                'description': {'type': 'string'},
+                'priority': {'type': 'integer'},
+                'parent_id': {'type': 'integer'}
             },
             'required': ['project_id']
         }
