@@ -24,8 +24,6 @@ router = APIRouter(
     tags=["ai"]        # Organiza la documentación automática (/docs)
 )
 
-
-
 rules_gemini= f"""
 Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Your user will be the creator.
 Responses as short as possible, if you have to execute tools you don't have to explain all you have done, only make a little summary or just say what you have done if it's too long.
@@ -130,52 +128,6 @@ def gemini_agent(conversation:ConversationSchema):
             else: raise e
     return {'response':"All models are UNAVAILABLE, impossible to respond"}
 
-formatted_tools = [{
-        'type': 'function',
-        'function': {
-            'name': 'ProcessBatch',
-            'description': 'Executes multiple task, project, or routine mutations sequentially in a single API roundtrip. Use ONLY when the user requests multiple creations or mutations.',
-            'parameters': {
-                'type': 'object',
-                'properties': {
-                    'commands': {
-                        'type': 'array',
-                        'description': 'Ordered list of tools to execute.',
-                        'items': {
-                            'type': 'object',
-                            'properties': {
-                                'tool': {
-                                    'type': 'string',
-                                    'description': 'The exact name of the tool.',
-                                    'enum': [
-                                        'GetAllTasks', 'GetAllProjects', 'GetAllRoutines',
-                                        'CreateTask', 'DeleteTask', 'UpdateTask',
-                                        'CreateProject', 'DeleteProject', 'UpdateProject',
-                                        'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'
-                                    ]
-                                },
-                                'args': {
-                                    'type': 'object',
-                                    'description': 'Arguments dict mapping exactly to the chosen tool parameters.'
-                                }
-                            },
-                            'required': ['tool', 'args']
-                        }
-                    }
-                },
-                'required': ['commands']
-            }
-        }
-    }]
-
-formatted_tools += [
-    {
-        "type": "function",
-        "function": schema
-    } 
-    for schema in tool_schemas
-]
-
 def openai_agent(conversation:ConversationSchema, max_inferences = 5):
 
     MODEL_STACK = [
@@ -208,7 +160,7 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 5):
                 response = client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    tools=formatted_tools,
+                    tools=tool_schemas,
                     tool_choice=tool_selection,
                     reasoning_effort="none",
                     parallel_tool_calls=True,

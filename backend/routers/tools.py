@@ -215,143 +215,218 @@ All tool:
 ProcessBatch.__doc__ = DocCreator()
 
 tool_schemas = [
+    # --- PROCESS BATCH ---
+    {
+        'type': 'function',
+        'function': {
+            'name': 'ProcessBatch',
+            'description': 'Executes multiple task, project, or routine mutations sequentially in a single API roundtrip. Use ONLY when the user requests multiple creations or mutations.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'commands': {
+                        'type': 'array',
+                        'description': 'Ordered list of tools to execute.',
+                        'items': {
+                            'type': 'object',
+                            'properties': {
+                                'tool': {
+                                    'type': 'string',
+                                    'description': 'The exact name of the tool.',
+                                    'enum': [
+                                        'GetAllTasks', 'GetAllProjects', 'GetAllRoutines',
+                                        'CreateTask', 'DeleteTask', 'UpdateTask',
+                                        'CreateProject', 'DeleteProject', 'UpdateProject',
+                                        'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'
+                                    ]
+                                },
+                                'args': {
+                                    'type': 'object',
+                                    'description': 'Arguments dict mapping exactly to the chosen tool parameters.'
+                                }
+                            },
+                            'required': ['tool', 'args']
+                        }
+                    }
+                },
+                'required': ['commands']
+            }
+        }
+    },
+    
     # --- TASKS ---
     {
-        'name': 'GetAllTasks',
-        'description': 'Returns all tasks in the database.',
-        'parameters': {'type': 'object', 'properties': {}, 'required': []}
-    },
-    {
-        'name': 'CreateTask',
-        'description': 'Creates a task. Format deadline as dd/mm/yyyy.',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'name': {'type': 'string'},
-                'description': {'type': 'string'},
-                'priority': {'type': 'integer'},
-                'deadline': {'type': 'string'},
-                'project_id': {'type': 'integer'}
-            },
-            'required': ['name', 'description', 'priority', 'deadline']
+        'type': 'function',
+        'function': {
+            'name': 'GetAllTasks',
+            'description': 'Returns all tasks in the database.',
+            'parameters': {'type': 'object', 'properties': {}, 'required': []}
         }
     },
     {
-        'name': 'DeleteTask',
-        'description': 'Deletes a specific task.',
-        'parameters': {
-            'type': 'object',
-            'properties': {'task_id': {'type': 'integer'}},
-            'required': ['task_id']
+        'type': 'function',
+        'function': {
+            'name': 'CreateTask',
+            'description': 'Creates a task. Format deadline as dd/mm/yyyy.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'priority': {'type': 'integer'},
+                    'deadline': {'type': 'string'},
+                    'project_id': {'type': 'integer'}
+                },
+                'required': ['name', 'description', 'priority', 'deadline']
+            }
         }
     },
     {
-        'name': 'UpdateTask',
-        'description': 'Updates selected parameters of a specific task.',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'task_id': {'type': 'integer'},
-                'name': {'type': 'string'},
-                'description': {'type': 'string'},
-                'priority': {'type': 'integer'},
-                'deadline': {'type': 'string'},
-                'finished': {'type': 'boolean'}
-            },
-            'required': ['task_id']
+        'type': 'function',
+        'function': {
+            'name': 'DeleteTask',
+            'description': 'Deletes a specific task.',
+            'parameters': {
+                'type': 'object',
+                'properties': {'task_id': {'type': 'integer'}},
+                'required': ['task_id']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'UpdateTask',
+            'description': 'Updates selected parameters of a specific task.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'task_id': {'type': 'integer'},
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'priority': {'type': 'integer'},
+                    'deadline': {'type': 'string'},
+                    'finished': {'type': 'boolean'}
+                },
+                'required': ['task_id']
+            }
         }
     },
 
     # --- ROUTINES ---
     {
-        'name': 'GetAllRoutines',
-        'description': 'Returns all routines in the database.',
-        'parameters': {'type': 'object', 'properties': {}, 'required': []}
-    },
-    {
-        'name': 'CreateRoutine',
-        'description': 'Creates a routine.',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'name': {'type': 'string'},
-                'description': {'type': 'string'},
-                'priority': {'type': 'integer'},
-                'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
-                'init_date': {'type': 'string'},
-                'project_id': {'type': 'integer'}
-            },
-            'required': ['name', 'description', 'priority', 'frequency']
+        'type': 'function',
+        'function': {
+            'name': 'GetAllRoutines',
+            'description': 'Returns all routines in the database.',
+            'parameters': {'type': 'object', 'properties': {}, 'required': []}
         }
     },
     {
-        'name': 'DeleteRoutine',
-        'description': 'Deletes a specific routine.',
-        'parameters': {
-            'type': 'object',
-            'properties': {'routine_id': {'type': 'integer'}},
-            'required': ['routine_id']
+        'type': 'function',
+        'function': {
+            'name': 'CreateRoutine',
+            'description': 'Creates a routine.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'priority': {'type': 'integer'},
+                    'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
+                    'init_date': {'type': 'string'},
+                    'project_id': {'type': 'integer'}
+                },
+                'required': ['name', 'description', 'priority', 'frequency']
+            }
         }
     },
     {
-        'name': 'UpdateRoutine',
-        'description': 'Updates selected parameters of a specific routine.',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'routine_id': {'type': 'integer'},
-                'name': {'type': 'string'},
-                'description': {'type': 'string'},
-                'priority': {'type': 'integer'},
-                'frequency': {'type': 'string', 'description': 'RRULE syntax.'},
-                'init_date': {'type': 'string'},
-            },
-            'required': ['routine_id']
+        'type': 'function',
+        'function': {
+            'name': 'DeleteRoutine',
+            'description': 'Deletes a specific routine.',
+            'parameters': {
+                'type': 'object',
+                'properties': {'routine_id': {'type': 'integer'}},
+                'required': ['routine_id']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'UpdateRoutine',
+            'description': 'Updates selected parameters of a specific routine.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'routine_id': {'type': 'integer'},
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'priority': {'type': 'integer'},
+                    'frequency': {'type': 'string', 'description': 'RRULE syntax.'},
+                    'init_date': {'type': 'string'},
+                },
+                'required': ['routine_id']
+            }
         }
     },
 
     # --- PROJECTS ---
     {
-        'name': 'GetAllProjects',
-        'description': 'Returns all projects in the database.',
-        'parameters': {'type': 'object', 'properties': {}, 'required': []}
-    },
-    {
-        'name': 'CreateProject',
-        'description': 'Creates a project.',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'name': {'type': 'string'},
-                'description': {'type': 'string'},
-                'priority': {'type': 'integer'},
-                'parent_id': {'type': 'integer'}
-            },
-            'required': ['name']
+        'type': 'function',
+        'function': {
+            'name': 'GetAllProjects',
+            'description': 'Returns all projects in the database.',
+            'parameters': {'type': 'object', 'properties': {}, 'required': []}
         }
     },
     {
-        'name': 'DeleteProject',
-        'description': 'Deletes a project and all its sub-projects/tasks (cascade).',
-        'parameters': {
-            'type': 'object',
-            'properties': {'project_id': {'type': 'integer'}},
-            'required': ['project_id']
+        'type': 'function',
+        'function': {
+            'name': 'CreateProject',
+            'description': 'Creates a project.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'priority': {'type': 'integer'},
+                    'parent_id': {'type': 'integer'}
+                },
+                'required': ['name']
+            }
         }
     },
     {
-        'name': 'UpdateProject',
-        'description': 'Updates selected project parameters.',
-        'parameters': {
-            'type': 'object',
-            'properties': {
-                'project_id': {'type': 'integer'},
-                'name': {'type': 'string'},
-                'description': {'type': 'string'},
-                'priority': {'type': 'integer'},
-                'parent_id': {'type': 'integer'}
-            },
-            'required': ['project_id']
+        'type': 'function',
+        'function': {
+            'name': 'DeleteProject',
+            'description': 'Deletes a project and all its sub-projects/tasks (cascade).',
+            'parameters': {
+                'type': 'object',
+                'properties': {'project_id': {'type': 'integer'}},
+                'required': ['project_id']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'UpdateProject',
+            'description': 'Updates selected project parameters.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'project_id': {'type': 'integer'},
+                    'name': {'type': 'string'},
+                    'description': {'type': 'string'},
+                    'priority': {'type': 'integer'},
+                    'parent_id': {'type': 'integer'}
+                },
+                'required': ['project_id']
+            }
         }
     }
 ]
