@@ -453,12 +453,12 @@ PROMPT
 
     #prompt-form {
         width: 100%;
-        height: 60px;
+        height: auto;
+        max-height: 200px;
     }
-
-    #prompt-writer {
-        font-size: var(--mobile-font-size);
-        padding: 8px;
+    #form-container {
+        height: auto;
+        min-height: var(--mobile-form-height);
     }
 
     #submit-btn {
@@ -884,4 +884,153 @@ SELECT CALENDAR
 
 .routine-item.checked{
     background-color: red;
+}
+
+/* --- REDISEÑO DEL FORMULARIO FLEXIBLE Y ELÁSTICO --- */
+
+ #prompt-form {
+    pointer-events: auto;
+    border: 3px solid var(--neon-yellow);
+    border-radius: 5px;
+    min-height: 60px;
+    height: auto; 
+    max-height: 250px; 
+    width: 80%;
+    background-color: hsl(0, 0%, 10%, .9);
+    display: flex;
+    flex-direction: column; 
+    position: relative;
+    padding: 10px;
+}
+
+#prompt-writer {
+    background: none;
+    border: none;
+    color: var(--neon-yellow);
+    width: 100%;
+    height: auto;
+    min-height: 40px;
+    max-height: 150px;
+    text-align: left;
+    font-size: 1.2rem;
+    resize: none;
+    padding: 5px 10px;
+    overflow-y: auto;
+    font-family: monospace;
+}
+
+.form-controls {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 15px;
+    width: 100%;
+    margin-top: 5px;
+    border-top: 1px solid rgba(255, 255, 0, 0.1); 
+    padding-top: 8px;
+}
+
+#model-selector-details {
+    position: relative;
+    display: inline-block;
+}
+
+#model-selector-details summary::-webkit-details-marker {
+    display: none;
+}
+#model-dropdown-btn {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--neon-yellow);
+    cursor: pointer;
+    font-family: monospace;
+    font-size: 0.95rem;
+    font-weight: bold;
+    padding: 4px 8px;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
+}
+
+#model-dropdown-btn:hover {
+    text-shadow: var(--glow-yellow-on);
+}
+
+#model-dropdown-btn i {
+    font-size: 0.8rem;
+    transition: transform 0.2s ease;
+}
+
+#model-selector-details[open] #model-dropdown-btn i {
+    transform: rotate(180deg);
+}
+
+#model-dropdown-menu {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    right: 0;
+    min-width: 180px;
+    max-height: 180px;
+    overflow-y: auto;
+    background-color: #1a1a1d;
+    border: 2px solid var(--neon-yellow);
+    list-style: none;
+    padding: 4px 0;
+    margin: 0;
+    z-index: 1100;
+    box-shadow: 0 -4px 15px rgba(255, 255, 0, 0.2);
+    animation: tukiPop 0.15s ease-out forwards;
+}
+
+.model-item {
+    color: #8b949e;
+    font-family: monospace;
+    font-size: 13px;
+    font-weight: bold;
+    padding: 8px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.model-item:hover {
+    background-color: var(--neon-yellow);
+    color: #1a1a1d;
+}
+
+.model-item.selected-model {
+    color: var(--neon-yellow);
+    background-color: var(--off-yellow);
+}
+
+#submit-btn, #toggle-mic {
+    position: static;
+    background: transparent;
+    border: none;
+    color: var(--neon-red);
+    cursor: pointer;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: text-shadow 0.3s;
+}
+
+#submit-btn:hover, #toggle-mic:hover {
+    box-shadow: none;
+    text-shadow: var(--glow-red-on);
+}
+
+#model-dropdown-menu::-webkit-scrollbar {
+    width: 4px;
+}
+#model-dropdown-menu::-webkit-scrollbar-track {
+    background: var(--chacoal-grey);
+}
+#model-dropdown-menu::-webkit-scrollbar-thumb {
+    background-color: var(--neon-yellow);
+}
+
+@media (max-width: 768px) {
+    
 }

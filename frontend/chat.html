@@ -38,17 +38,35 @@
   <div id="chat-container">
   </div>
   
-  <div id="form-container">
-    <form id="prompt-form" method="post">
-      <textarea id="prompt-writer" name="text" placeholder="Ask something to TUKI"></textarea>
+<div id="form-container">
+  <form id="prompt-form" method="post">
+    <textarea id="prompt-writer" name="text" placeholder="Ask something to TUKI" rows="1"></textarea>
+    
+    <div class="form-controls">
+      <details id="model-selector-details">
+        <summary id="model-dropdown-btn" title="Seleccionar Modelo">
+          <span id="model-current-name">Gemini 1.5 Pro</span>
+          <i class="bi bi-chevron-up"></i>
+        </summary>
+        <ul id="model-dropdown-menu">
+          <li class="model-item selected-model"  data-model="gemini-1.5-pro">Gemini 1.5 Pro</li>
+          <li class="model-item" data-model="claude-3.5-sonnet">Claude 3.5 Sonnet</li>
+          <li class="model-item" data-model="gpt-4o">GPT-4o</li>
+          <li class="model-item" data-model="llama-3-3-70b">Llama 3.3 70B</li>
+        </ul>
+      </details>
+
+      <input type="hidden" name="model" id="selected-model" value="gemini-1.5-pro">
+
+      <button type="button" id="toggle-mic" class="btn-tuki">
+        <i class="bi bi-mic"></i>
+      </button>
       <button type="submit" id="submit-btn" class="btn-tuki">
         <i class="bi bi-arrow-up"></i>
       </button>
-      <button type="submit" id="toggle-mic" class="btn-tuki">
-        <i class="bi bi-mic"></i>
-      </button>
-    </form>
-  </div>
+    </div>
+  </form>
+</div>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/marked/lib/marked.umd.js"></script>
 <script src="/frontend/chat_script.js"></script>
