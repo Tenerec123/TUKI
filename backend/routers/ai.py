@@ -141,22 +141,7 @@ def gemini_agent(conversation:ConversationSchema):
             else: raise e
     return {'response':"All models are UNAVAILABLE, impossible to respond"}
 
-def openai_agent(conversation:ConversationSchema, max_inferences = 5):
-
-    MODEL_STACK = [
-        'meta-llama/llama-3.3-70b-instruct',
-        "nvidia/nemotron-3-super-120b-a12b:free",   # Rey actual
-        'liquid/lfm-2.5-1.2b-instruct:free',
-        'nousresearch/hermes-3-llama-3.1-405b:free',
-        'meta-llama/llama-3.2-3b-instruct:free',
-        "google/gemma-4-31b-it:free",               # Nuevo en 2026, brutal para JSON
-        "openai/gpt-oss-120b:free",                 # El nuevo MoE abierto de OpenAI
-        "qwen/qwen3-coder:free",                    # El mejor para lógica de sistemas
-        "nvidia/nemotron-3-super-120b-a12b:free",   # Enorme, ideal para 100 tareas
-        "z-ai/glm-4.5-air:free",     
-        "meta-llama/llama-3.3-70b-instruct:free",
-        "minimax/minimax-m2.5:free"]
-    function_outputs = []
+def openai_agent(conversation:ConversationSchema, model:str = 'meta-llama/llama-3.3-70b-instruct', max_inferences = 5):
     messages = [{'role':'developer','content':get_openai_rules()}]
 
     for i, msg in enumerate(conversation.messages):
@@ -164,115 +149,113 @@ def openai_agent(conversation:ConversationSchema, max_inferences = 5):
 
     print(f'[DEBUG] MESSAGES: {messages}')
 
-    for model in MODEL_STACK:
-        try:
-            for i in range(max_inferences):
-                is_last_attempt = (i == max_inferences - 1)
-                tool_selection = None if is_last_attempt else "auto"
-                
-                response = client.chat.completions.create(
-                    model=model,
-                    messages=messages,
-                    tools=tool_schemas,
-                    tool_choice=tool_selection,
-                    reasoning_effort="none",
-                    parallel_tool_calls=True,
-                    stream=True,
-                )
+    try:
+        for i in range(max_inferences):
+            is_last_attempt = (i == max_inferences - 1)
+            tool_selection = None if is_last_attempt else "auto"
+            
+            response = client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=tool_schemas,
+                tool_choice=tool_selection,
+                reasoning_effort="none",
+                parallel_tool_calls=True,
+                stream=True,
+            )
 
-                full_tool_calls = {} # Para reconstruir los argumentos fragmentados
+            full_tool_calls = {} # Para reconstruir los argumentos fragmentados
 
-                for chunk in response:
-                    delta = chunk.choices[0].delta
-                    if delta.tool_calls:
-                        print(f'[DEBUG] TOOL CALL CHUNK: {delta.tool_calls}')
-                        for call_data in delta.tool_calls:
-                            idx = call_data.index
+            for chunk in response:
+                delta = chunk.choices[0].delta
+                if delta.tool_calls:
+                    print(f'[DEBUG] TOOL CALL CHUNK: {delta.tool_calls}')
+                    for call_data in delta.tool_calls:
+                        idx = call_data.index
+                        
+                        if idx not in full_tool_calls:
+                            # Inicializamos el diccionario para este índice con un clon/estructura limpia
+                            full_tool_calls[idx] = {
+                                "id": call_data.id,
+                                "name": call_data.function.name,
+                                "arguments": call_data.function.arguments or ""
+                            }
+                        else:
+                            # Si el chunk actual trae id o name (raro pero posible), lo preservamos
+                            if call_data.id: 
+                                full_tool_calls[idx]["id"] = call_data.id
+                            if call_data.function and call_data.function.name: 
+                                full_tool_calls[idx]["name"] = call_data.function.name
                             
-                            if idx not in full_tool_calls:
-                                # Inicializamos el diccionario para este índice con un clon/estructura limpia
-                                full_tool_calls[idx] = {
-                                    "id": call_data.id,
-                                    "name": call_data.function.name,
-                                    "arguments": call_data.function.arguments or ""
-                                }
-                            else:
-                                # Si el chunk actual trae id o name (raro pero posible), lo preservamos
-                                if call_data.id: 
-                                    full_tool_calls[idx]["id"] = call_data.id
-                                if call_data.function and call_data.function.name: 
-                                    full_tool_calls[idx]["name"] = call_data.function.name
-                                
-                                # Acumulamos los fragmentos de texto del JSON de argumentos
-                                if call_data.function and call_data.function.arguments:
-                                    full_tool_calls[idx]["arguments"] += call_data.function.arguments
-                        continue
-
-                    if delta.content:
-                        print(f'[DEBUG] CONTENT: {delta.content}')
-                        yield delta.content
-
-                if full_tool_calls:
-                    # 1. EL MODELO DEBE VER SU PROPIA LLAMADA EN EL HISTORIAL
-                    print(f'[DEBUG] TOOL CALLS')
-                    assistant_tool_call_msg = {
-                        "role": "assistant",
-                        "tool_calls": [
-                            {
-                                "id": call_data['id'],
-                                "type": "function",
-                                "function": {
-                                    "name": call_data['name'],
-                                    "arguments": call_data['arguments']
-                                }
-                            } for call_data in full_tool_calls.values()
-                        ]
-                    }
-                    print(f'[DEBUG] CALLS: {assistant_tool_call_msg}')
-                    messages.append(assistant_tool_call_msg)
-
-                    # 2. EJECUTAR Y AÑADIR CADA RESULTADO CON ROL 'tool'
-                    for call_data in full_tool_calls.values():
-                        try:
-                            args = json.loads(call_data['arguments'])
-                            # Buscamos la función en tu ToolDict (línea 164 de tu tools.py)
-                            func = ToolDict.get(call_data['name'])
-                            
-                            if func:
-                                result = func(**args)
-                            else:
-                                result = f"Error: Tool {call_data['name']} not found in ToolDict"
-                        except Exception as e:
-                            result = f"Execution Error: {str(e)}"
-                        print(f'[DEBUG] MESSAGES: {result}')
-                        # 3. Respuesta de rol 'tool' vinculada al ID
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": call_data['id'],
-                            "name": call_data['name'],
-                            "content": json.dumps(result, default=str)
-                        })
+                            # Acumulamos los fragmentos de texto del JSON de argumentos
+                            if call_data.function and call_data.function.arguments:
+                                full_tool_calls[idx]["arguments"] += call_data.function.arguments
                     continue
-                else:
-                    return
-                
-        except Exception as e:
-            print(e)
+
+                if delta.content:
+                    print(f'[DEBUG] CONTENT: {delta.content}')
+                    yield delta.content
+
+            if full_tool_calls:
+                # 1. EL MODELO DEBE VER SU PROPIA LLAMADA EN EL HISTORIAL
+                print(f'[DEBUG] TOOL CALLS')
+                assistant_tool_call_msg = {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": call_data['id'],
+                            "type": "function",
+                            "function": {
+                                "name": call_data['name'],
+                                "arguments": call_data['arguments']
+                            }
+                        } for call_data in full_tool_calls.values()
+                    ]
+                }
+                print(f'[DEBUG] CALLS: {assistant_tool_call_msg}')
+                messages.append(assistant_tool_call_msg)
+
+                # 2. EJECUTAR Y AÑADIR CADA RESULTADO CON ROL 'tool'
+                for call_data in full_tool_calls.values():
+                    try:
+                        args = json.loads(call_data['arguments'])
+                        # Buscamos la función en tu ToolDict (línea 164 de tu tools.py)
+                        func = ToolDict.get(call_data['name'])
+                        
+                        if func:
+                            result = func(**args)
+                        else:
+                            result = f"Error: Tool {call_data['name']} not found in ToolDict"
+                    except Exception as e:
+                        result = f"Execution Error: {str(e)}"
+                    print(f'[DEBUG] MESSAGES: {result}')
+                    # 3. Respuesta de rol 'tool' vinculada al ID
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call_data['id'],
+                        "name": call_data['name'],
+                        "content": json.dumps(result, default=str)
+                    })
+                continue
+            else: return  
+    except Exception as e:
+        yield 'ERROR_TOKEN'
     return
 
 async def chat_persistence_wrapper(prompt:Prompt, db):
     db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
     edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
     full_text = ""
-    for token in openai_agent(ConversationSchema.model_validate(db_conversation)):
+    for token in openai_agent(ConversationSchema.model_validate(db_conversation), prompt.model):
+        if token =='ERROR_TOKEN': 
+            yield "\n THERE HAS BEEN AN ERROR, TRY ANOTHER MODEL"
+            break
         full_text += token
         yield token # Re-enviamos al endpoint
     edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]), db=db)
 
-
 def ai_response_logic(prompt:Prompt, db:Session):
     return StreamingResponse(chat_persistence_wrapper(prompt, db), media_type="text/plain")
-
 
 @router.post("/")
 def ai_response(prompt:Prompt, db:Session = Depends(get_db)):

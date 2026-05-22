@@ -127,7 +127,8 @@ class ConversationData(BaseModel):
 
 
 class Prompt(BaseModel):
-    conversation_id: int
-    user_message: str
+    conversation_id: int = Field(...)
+    user_message: str = Field(...)
+    model: str = Field(...)
     model_config = ConfigDict(from_attributes=True)
     

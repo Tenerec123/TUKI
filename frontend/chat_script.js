@@ -242,7 +242,8 @@ async function sendPrompt(text){
         },
         body: JSON.stringify({
             conversation_id:idOfSelectedConv,
-            user_message:text
+            user_message:text,
+            model:'meta-llama/llama-3.3-70b-instruct'
         })// Convertimos el objeto a texto JSON
     });
 
