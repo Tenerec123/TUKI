@@ -1030,7 +1030,3 @@ SELECT CALENDAR
 #model-dropdown-menu::-webkit-scrollbar-thumb {
     background-color: var(--neon-yellow);
 }
-
-@media (max-width: 768px) {
-    
-}

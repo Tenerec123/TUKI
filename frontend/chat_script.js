@@ -42,7 +42,7 @@ function SetupStream(stream) {
             body: formData,
         }).then(response => response.json())
         .then(data => {
-            sendPrompt(data)
+            sendPrompt(data, document.querySelector('.selected-model').getAttribute('data-model'))
         });
     };
     can_record = true;
@@ -219,13 +219,29 @@ async function getConversations(){
 chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(chatForm);
+    const model = document.querySelector('.selected-model').getAttribute('data-model')
+    console.log(model)
     const data = Object.fromEntries(formData.entries());
     if (!data.text || data.text.trim() === "") {
         return;
     }
-    sendPrompt(data.text);
+    sendPrompt(data.text, model);
 });
-async function sendPrompt(text){
+textarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const formData = new FormData(chatForm);
+        const model = document.querySelector('.selected-model').getAttribute('data-model')
+        console.log(model)
+        const data = Object.fromEntries(formData.entries());
+        if (!data.text || data.text.trim() === "") {
+            return;
+        }
+        sendPrompt(data.text, model);
+    }
+});
+
+async function sendPrompt(text, model){
     if (idOfSelectedConv == -1){return}
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
@@ -243,7 +259,7 @@ async function sendPrompt(text){
         body: JSON.stringify({
             conversation_id:idOfSelectedConv,
             user_message:text,
-            model:'meta-llama/llama-3.3-70b-instruct'
+            model:model
         })// Convertimos el objeto a texto JSON
     });
 
@@ -274,17 +290,7 @@ async function sendPrompt(text){
         }
     }
 }
-textarea.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        const formData = new FormData(chatForm);
-        const data = Object.fromEntries(formData.entries());
-        if (!data.text || data.text.trim() === "") {
-            return;
-        }
-        sendPrompt(data.text);
-    }
-});
+
 function scrollToBottom(){
     setTimeout(() => {
         chatContainer.scrollTo({
@@ -319,6 +325,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     Render();
     SetupAudio();
+
+    const possibleModel = document.querySelectorAll('.model-item');
+    possibleModel.forEach(model => {
+        model.addEventListener('click', () => {
+            const selectedBefore = document.querySelector('.selected-model');
+            if (selectedBefore == model) {return}
+            selectedBefore.classList.remove('selected-model')
+            model.classList.add('selected-model');
+            document.getElementById('model-current-name').textContent = model.textContent
+            document.getElementById('model-selector-details').open = false;
+        })
+    })
 })
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();
@@ -358,5 +376,8 @@ document.addEventListener('click', (e) => {
         menu_displayed.remove();
         menu_displayed = null;
         id_of_menu_disp = null;
+    }
+    if (!e.target.closest('.model-selector-details')){
+        document.getElementById('model-selector-details').open = false;
     }
 })
