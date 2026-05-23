@@ -246,9 +246,9 @@ async function sendPrompt(text, model){
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
     userMsg.innerHTML = text;
-    chatContainer.appendChild(userMsg)
+    chatContainer.appendChild(userMsg);
+    chatContainer.style.paddingBottom = `${400}px`;
     scrollToBottom();
-    
     document.getElementById('prompt-writer').value = "";
     
     const response = await fetch(`${window.API_URL}/api/ai/`, {
@@ -262,8 +262,10 @@ async function sendPrompt(text, model){
             model:model
         })// Convertimos el objeto a texto JSON
     });
+    
 
-    tukiMsg = document.createElement('div');
+
+    const tukiMsg = document.createElement('div');
     tukiMsg.classList.add('tuki-msg');
     chatContainer.appendChild(tukiMsg);
 
@@ -281,11 +283,17 @@ async function sendPrompt(text, model){
             
             // Renderizado progresivo
             tukiMsg.innerHTML = marked.parse(fullText);
-            scrollToBottom();
             Render();
         }
         if (done) {
             decoder.decode(); // Limpiar buffer del decoder
+            const scroll_dif = chatContainer.clientHeight - tukiMsg.scrollHeight;
+            console.log(scroll_dif);
+            if (scroll_dif > 0) {
+                chatContainer.style.paddingBottom = `${scroll_dif-100}px`;
+            } else {
+                chatContainer.style.paddingBottom = "100px";
+            }
             break;
         }
     }
