@@ -98,10 +98,13 @@ async function CheckClick(element, id){
   if (element.textContent == "☑"){
     element.innerText  = "☐";
   }else{
-    element.parentElement.parentElement.remove()
-    // element.innerText  = "☑";
+    if (id != -1) {element.parentElement.parentElement.remove()}
+    else{
+        element.innerText  = "☑";
+    }
     Checked_str = "true"
   }
+  if (id == -1){return}
   const response = await fetch(`${window.API_URL}/api/tasks/${id}`, {
         method: 'PATCH',
         headers: {
