@@ -1,38 +1,11 @@
-from datetime import datetime, date
+from datetime import date
 import os
-from pathlib import Path
-from dotenv import load_dotenv
-from google import genai
-from google.genai import types
-from schemas import ConversationSchema, MessageSchema, Prompt, ConversationUpdate, MessageBase
-from fastapi import APIRouter, UploadFile, Form, Depends, File
-from fastapi.responses import StreamingResponse
-from .tools import ProcessBatch, tool_schemas, ToolDict
+from schemas import ConversationSchema
+from .tools import tool_schemas, ToolDict
 from openai import OpenAI
 import json
-from database import get_db
-from models import Conversation
-from sqlalchemy.orm import Session
-from .conversations import edit_conversation_logic
-import io
-from faster_whisper import WhisperModel
-basedir = Path(__file__).resolve().parent.parent 
-load_dotenv(basedir / ".env")
-gemini_client = genai.Client(api_key=os.getenv('GOOGLE_GENAI_API_KEY', ''))
-router = APIRouter(
-    prefix="/api/ai", # Todos los endpoints empezarán con esto
-    tags=["ai"]        # Organiza la documentación automática (/docs)
-)
 
-rules_gemini= f"""
-Identity: T.U.K.I. Technical Assistant. Style: Direct, technical, no filler. Your user will be the creator.
-Responses as short as possible, if you have to execute tools you don't have to explain all you have done, only make a little summary or just say what you have done if it's too long.
-Priority = Urgency (0-32, based on the consequences if the task is not done before the deadline) + Importance (0-32, based on task type/impact), capped at 1-64. Higher = more urgent/important.
-Use always this date format: DD/MM/YYYY
-All priorities are between 1 and 64 (0 is not asigned)
-There is only a tool, ProcessBatch. Inside it you can use all the other tools multiple times
-When generating mathematical content, use the $ delimiter for inline LaTeX and $$ for display."""
-def get_openai_rules():
+def get_rules():
     today_str = date.today().strftime('%A, %d/%m/%Y')     
     return f"""
 [IDENTITY & STYLE]
@@ -75,74 +48,10 @@ Range: [1, 64]
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ['OPENROUTER_API_KEY']
-) # OpenRouter para multicontratación
-config = types.GenerateContentConfig(
-    system_instruction=rules_gemini,
-    tools=[ProcessBatch],
-    automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False),
-    max_output_tokens=10000,
 )
 
-def gemini_agent(conversation:ConversationSchema):
-        # Lista de modelos por orden de prioridad para T.U.K.I.
-    MODEL_STACK = [
-        'gemini-3.1-flash-lite-preview',  
-        'gemini-2.0-flash',
-        'gemini-flash-lite-latest',
-        'gemini-2.0-flash',
-        'models/gemini-3.1-pro-preview',
-        'models/gemini-2.5-pro',
-        'models/gemini-3-flash-preview',
-        'models/gemini-3.1-flash-lite-preview',
-        'models/gemini-2.5-flash',
-        'models/gemini-flash-latest',
-        'models/gemini-pro-latest',
-    ]
-    
-    for model in MODEL_STACK:
-        try:
-            history_map = [
-                types.Content(
-                    role="model", 
-                    parts=[types.Part(text=f"TIME: {datetime.today().strftime("%d/%m/%Y, %H:%M:%S")}")]
-                    )
-                ]
-            prompt_text = ""
-            for i, msg in enumerate(conversation.messages):
-                if i == len(conversation.messages) -1:
-                    prompt_text = msg.text
-                    break
-                history_map.append(types.Content(
-                    role= 'user' if msg.is_user else 'model',
-                    parts=[types.Part(text=msg.text)]
-                ))
-
-            # 2. Crear el chat con el historial cargado
-            chat = gemini_client.chats.create(
-                model=model,
-                config=config,
-                history=history_map,
-            )
-
-            response = chat.send_message_stream(prompt_text)    
-            for chunk in response:
-                if chunk.text:
-                    print(chunk.text)
-                    yield chunk.text
-            return # Avoids returning again the AI response of the next model
-            
-        except Exception as e:
-            if '503' in str(e) or "429" in str(e):
-                print(f"Problems with {model}, system will try the next one")
-                continue
-            elif '404' in str(e):
-                print(f"ERROR!!!!!! {model} NO EXISTE")
-                continue
-            else: raise e
-    return {'response':"All models are UNAVAILABLE, impossible to respond"}
-
 def openai_agent(conversation:ConversationSchema, model:str = 'meta-llama/llama-3.3-70b-instruct', max_inferences = 5):
-    messages = [{'role':'developer','content':get_openai_rules()}]
+    messages = [{'role':'developer','content':get_rules()}]
 
     for i, msg in enumerate(conversation.messages):
         messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
@@ -241,40 +150,3 @@ def openai_agent(conversation:ConversationSchema, model:str = 'meta-llama/llama-
     except Exception as e:
         yield 'ERROR_TOKEN'
     return
-
-async def chat_persistence_wrapper(prompt:Prompt, db):
-    db_conversation = db.query(Conversation).where(Conversation.id == prompt.conversation_id).first()
-    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]), db=db)
-    full_text = ""
-    for token in openai_agent(ConversationSchema.model_validate(db_conversation), prompt.model):
-        if token =='ERROR_TOKEN': 
-            yield "\n THERE HAS BEEN AN ERROR, TRY ANOTHER MODEL"
-            break
-        full_text += token
-        yield token # Re-enviamos al endpoint
-    edit_conversation_logic(prompt.conversation_id, ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]), db=db)
-
-def ai_response_logic(prompt:Prompt, db:Session):
-    return StreamingResponse(chat_persistence_wrapper(prompt, db), media_type="text/plain")
-
-@router.post("/")
-def ai_response(prompt:Prompt, db:Session = Depends(get_db)):
-    return ai_response_logic(prompt=prompt, db=db)
-
-_model = None
-
-def get_whisper_model():
-    global _model
-    if _model is None:
-        _model = WhisperModel("tiny", device="cuda", compute_type="int8")
-    return _model
-@router.post('/stt')
-async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:Session = Depends(get_db)):
-    model = get_whisper_model()
-    audio_data = await file.read()
-    audio_file = io.BytesIO(audio_data)
-    segments, info = model.transcribe(audio_file, beam_size=5, language="es", initial_prompt="Hablando con TUKI, mi asistente")
-    full_text = ""
-    for segment in segments:
-        full_text += segment.text + " "
-    return full_text

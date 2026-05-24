@@ -2,9 +2,15 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from routers import tasks, routines, projects, ai, conversations
+from routers.ai import ai
+from routers import tasks, routines, projects, conversations
+from pathlib import Path
+from dotenv import load_dotenv
+basedir = Path(__file__).resolve().parent.parent 
+load_dotenv(basedir / ".env")
 import logging
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
+
 api = FastAPI()
 api.add_middleware(
     CORSMiddleware,

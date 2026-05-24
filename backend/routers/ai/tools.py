@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import List, Callable
 from schemas import TaskCreate, TaskUpdate, TaskSchema, ProjectCreate, ProjectUpdate, ProjectSchema, RoutineCreate, RoutineUpdate, RoutineSchema
 from database import SessionLocal
-from .tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic
-from .projects_logic import get_all_project_logic, create_project_logic, delete_project_logic, update_project_logic
-from .routines_logic import get_all_routine_logic, create_routine_logic, delete_routine_logic, update_routine_logic
+from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic
+from ..projects_logic import get_all_project_logic, create_project_logic, delete_project_logic, update_project_logic
+from ..routines_logic import get_all_routine_logic, create_routine_logic, delete_routine_logic, update_routine_logic
 def GetAllTasks():
     '''
     Returns all the tasks in the db as a list of dictionaries.
