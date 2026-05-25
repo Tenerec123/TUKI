@@ -4,54 +4,16 @@ from schemas import ConversationSchema
 from .tools import tool_schemas, ToolDict
 from openai import OpenAI
 import json
+from .prompt_router import get_semantic_rules
 
-def get_rules():
-    today_str = date.today().strftime('%A, %d/%m/%Y')     
-    return f"""
-[IDENTITY & STYLE]
-Role: T.U.K.I. (Technical Utility & Knowledge Interface). You are the advanced AI assistant of a personal productivity system, operating as a background Jarvis-like interface.
-User: Creator/Developer.
-Tone: Direct, technical, no-filler, robot.
-Language: Spanish or English.
-
-[TWO-TURN COGNITIVE PROCESS]
-You operate strictly under a two-step evaluation flow for every user message:
-
-STEP 1: CONTEXT & ACTION EVALUATION (First Inference Turn)
-- Determine if you need to read from the database (e.g., to answer questions about tasks, give time-management advice based on their routines) or modify the database (create/delete/update).
-- If database access or modification is required, your first turn MUST strictly contain ONLY the appropriate tool calls (via 'ProcessBatch' or specific tools). Do not output any conversational text or preambles here.
-- If the request is purely informational/conceptual and requires absolutely NO database awareness or changes (e.g., "Hola", "Dame consejos generales de estudio"), skip tool calling entirely and proceed directly to step 2.
-
-STEP 2: RESPONSE & CONFIRMATION (Second Inference Turn)
-- Generate your textual response only after you have the final context.
-- If tools were executed, synthesize the database results or confirm the mutation briefly using natural language, strictly reflecting the real names and IDs returned.
-- If no tools were executed, simply deliver your technical, direct response to the user's inquiry without mentioning tools, omissions, or system logistics.
-
-[TIME CONTEXT]
-Format: DD/MM/YYYY
-Today: {today_str}
-
-[PRIORITY ALGORITHM]
-Priority = Urgency (0-32, risk if not done before deadline) + Importance (0-32, structural impact).
-Range: [1, 64]
-
-[TOOL USE RULES]
-1. ZERO GUESSING PROTOCOL: You are STRICTLY FORBIDDEN from guessing, predicting, or hallucinating object IDs (e.g., executing DeleteTask with ID 1, 2, or 123 without reading first).
-2. PRE-CONDITION: If the user request targets objects by semantic text or names (e.g., "todo lo que tenga que ver con X"), you DO NOT KNOW the IDs. Therefore, your very first inference turn MUST be a 'ProcessBatch' containing ONLY the database read functions needed to inspect the context ('GetAllTasks', 'GetAllProjects', 'GetAllRoutines').
-3. EXECUTION PHASE: Only after the tool execution returns the database arrays, you will parse them, filter the items matching the user's intent, and execute the mutations ('DeleteTask', 'CreateProject', etc.) via a final 'ProcessBatch' call in the second turn.
-4. SINGLE MUTATION BATCH: For any request requiring multiple modifications, you must group them into a single 'ProcessBatch' call. Sequential individual mutation calls are prohibited.
-5. ARGS INTEGRITY: The 'args' object inside 'ProcessBatch' must exactly match the schema parameters of the target function. Never invent or omit parameters.
-
-[FORMATTING]
-- Math/Science: Use $ for inline LaTeX and $$ for display blocks. No markdown alternatives for math equations.
-"""
 client = OpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ['OPENROUTER_API_KEY']
 )
 
-def openai_agent(conversation:ConversationSchema, model:str = 'meta-llama/llama-3.3-70b-instruct', max_inferences = 5):
-    messages = [{'role':'developer','content':get_rules()}]
+def openai_agent(conversation:ConversationSchema, model, max_inferences = 5):
+    rules = get_semantic_rules(conversation)
+    messages = [{'role':'developer','content':rules}]
 
     for i, msg in enumerate(conversation.messages):
         messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
@@ -61,7 +23,7 @@ def openai_agent(conversation:ConversationSchema, model:str = 'meta-llama/llama-
     try:
         for i in range(max_inferences):
             is_last_attempt = (i == max_inferences - 1)
-            tool_selection = None if is_last_attempt else "auto"
+            tool_selection = None if is_last_attempt  else "auto"
             
             response = client.chat.completions.create(
                 model=model,
@@ -148,5 +110,6 @@ def openai_agent(conversation:ConversationSchema, model:str = 'meta-llama/llama-
                 continue
             else: return  
     except Exception as e:
+        print(e)
         yield 'ERROR_TOKEN'
     return
