@@ -16,7 +16,7 @@ engine = create_engine(
 # Definición de Base moderna
 class Base(DeclarativeBase):
     pass
-from models import Project, Task, Routine, Conversation, Message
+from .models import Project, Task, Routine, Conversation, Message
 
 # Create tables automatically when the app starts (development mode)
 Base.metadata.create_all(engine)

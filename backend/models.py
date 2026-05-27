@@ -1,4 +1,4 @@
-from database import Base, engine
+from .database import Base, engine
 from sqlalchemy import Integer, String, ForeignKey
 from typing import List, Optional
 from datetime import date,datetime

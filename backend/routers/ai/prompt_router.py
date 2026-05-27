@@ -1,4 +1,4 @@
-from schemas import ConversationSchema
+from ...schemas import ConversationSchema
 from semantic_router import Route
 from semantic_router.encoders import HuggingFaceEncoder
 from semantic_router.routers import SemanticRouter

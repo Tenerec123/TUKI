@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from models import Message, Conversation
-from schemas import ConversationCreate, ConversationSchema, ConversationData, MessageBase, ConversationUpdate
-from database import get_db
+from ..models import Message, Conversation
+from ..schemas import ConversationCreate, ConversationSchema, ConversationData, MessageBase, ConversationUpdate
+from ..database import get_db
 from datetime import date,datetime
 router = APIRouter(
     prefix="/api/conversations", # Todos los endpoints empezarán con esto

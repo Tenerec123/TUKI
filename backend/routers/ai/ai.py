@@ -1,8 +1,8 @@
-from schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
+from ...schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
 from fastapi import APIRouter, UploadFile, Form, Depends, File
 from fastapi.responses import StreamingResponse
-from database import get_db
-from models import Conversation
+from ...database import get_db
+from ...models import Conversation
 from sqlalchemy.orm import Session
 from ..conversations import edit_conversation_logic
 import io

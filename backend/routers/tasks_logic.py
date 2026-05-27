@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from schemas import TaskCreate, TaskUpdate
-from models import Task
+from ..schemas import TaskCreate, TaskUpdate
+from ..models import Task
 
 def get_task_logic(id:int, db: Session):
     db_task = db.query(Task).where(Task.id == id).first()

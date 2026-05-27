@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
-from schemas import ProjectCreate, ProjectUpdate
-from models import Project
+from ..schemas import ProjectCreate, ProjectUpdate
+from ..models import Project
 
 def get_project_logic(id:int, db: Session):
     db_project = db.query(Project).where(Project.id == id).first()

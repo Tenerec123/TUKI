@@ -2,7 +2,7 @@ from datetime import datetime, date
 import os
 from google import genai
 from google.genai import types
-from schemas import ConversationSchema
+from ...schemas import ConversationSchema
 from .tools import ProcessBatch
 gemini_client = genai.Client(api_key=os.getenv('GOOGLE_GENAI_API_KEY', ''))
 

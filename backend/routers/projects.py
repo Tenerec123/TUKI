@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import List
-from schemas import ProjectCreate, ProjectSchema, ProjectUpdate
-from database import get_db
+from ..schemas import ProjectCreate, ProjectSchema, ProjectUpdate
+from ..database import get_db
 from .projects_logic import get_project_logic, get_all_project_logic, create_project_logic, update_project_logic, delete_project_logic
 router = APIRouter(
     prefix="/api/projects", # Todos los endpoints empezarán con esto

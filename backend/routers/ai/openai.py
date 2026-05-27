@@ -1,6 +1,6 @@
 from datetime import date
 import os
-from schemas import ConversationSchema
+from ...schemas import ConversationSchema
 from .tools import tool_schemas, ToolDict
 from openai import OpenAI
 import json

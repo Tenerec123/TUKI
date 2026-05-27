@@ -2,8 +2,8 @@ from fastapi import HTTPException
 from dateutil.rrule import rrulestr
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from schemas import RoutineCreate, RoutineUpdate, RoutineToday
-from models import Routine, RoutineCheck
+from ..schemas import RoutineCreate, RoutineUpdate, RoutineToday
+from ..models import Routine, RoutineCheck
 from datetime import datetime,date,time
 
 

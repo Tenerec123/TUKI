@@ -136,6 +136,16 @@ See `.env.example` for all available options:
 python -m fastapi dev backend/main.py --host 0.0.0.0
 ```
 
+### Docker Setup (Production/Isolated)
+
+If you prefer to run the application in an isolated Docker container:
+
+1. **Build the Docker image:**
+```bash
+docker build -t tuki-backend .
+docker run -d -p 8000:8000 --env-file .env --name tuki-app tuki-backend
+```
+
 ### Database Migrations (Alembic)
 ```bash
 cd backend
