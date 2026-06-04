@@ -37,7 +37,7 @@ function SetupStream(stream) {
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
         formData.append('conv_id', idOfSelectedConv)
-        const response = await fetch('http://localhost:8000/api/ai/stt', {
+        const response = await fetch('http://localhost:8000/api/ai/stt/', {
             method: 'POST',
             body: formData,
         }).then(response => response.json())
@@ -195,6 +195,47 @@ async function loadConversation(conv_id, conv_position){
         toggleBtn.click();
     }
     Render();
+    
+    const response = await fetch(`${window.API_URL}/api/ai/connect/${conv_id}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+    if (!response.ok){return}
+    console.log("TUKI_MSG_CREATED")
+    const tukiMsg = document.createElement('div');
+    tukiMsg.classList.add('tuki-msg');
+    chatContainer.appendChild(tukiMsg);
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let fullText = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        
+        if (value) {
+            // Decodificar y acumular
+            const chunk = decoder.decode(value, { stream: true });
+            fullText += chunk;
+            
+            // Renderizado progresivo
+            tukiMsg.innerHTML = marked.parse(fullText);
+            Render();
+        }
+        if (done) {
+            decoder.decode(); // Limpiar buffer del decoder
+            const scroll_dif = chatContainer.clientHeight - tukiMsg.scrollHeight;
+            console.log(scroll_dif);
+            if (scroll_dif > 0) {
+                chatContainer.style.paddingBottom = `${scroll_dif-100}px`;
+            } else {
+                chatContainer.style.paddingBottom = "100px";
+            }
+            break;
+        }
+    }
 }
 async function getConversations(){
     const response = await fetch(`${window.API_URL}/api/conversations/`)
@@ -251,19 +292,24 @@ async function sendPrompt(text, model){
     scrollToBottom();
     document.getElementById('prompt-writer').value = "";
     
-    const response = await fetch(`${window.API_URL}/api/ai/`, {
+    await fetch(`${window.API_URL}/api/ai/execute`, {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
+            'Content-Type': 'application/json'
         },
         body: JSON.stringify({
             conversation_id:idOfSelectedConv,
             user_message:text,
             model:model
-        })// Convertimos el objeto a texto JSON
+        })
     });
-    
-
+    console.log("DONE")
+    const response = await fetch(`${window.API_URL}/api/ai/connect/${idOfSelectedConv}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
 
     const tukiMsg = document.createElement('div');
     tukiMsg.classList.add('tuki-msg');

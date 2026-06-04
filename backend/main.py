@@ -5,10 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.routers.ai import ai
 from backend.routers import tasks, routines, projects, conversations
 from pathlib import Path
+import anyio
 from dotenv import load_dotenv
 basedir = Path(__file__).resolve().parent.parent 
 load_dotenv(basedir / ".env")
 import logging
+from contextlib import asynccontextmanager
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 logging.getLogger("watchfiles").setLevel(logging.WARNING)
 logging.getLogger("semantic_router").setLevel(logging.ERROR)
@@ -17,7 +19,21 @@ for logger_name in [ "uvicorn.error"]:
     logger.handlers = []
     logger.propagate = False
 
-api = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # ---- CÓDIGO QUE SE EJECUTA AL ARRANCAR ----
+    # Sube el límite de hilos síncronos para peticiones en paralelo
+    anyio.to_thread.current_default_thread_limiter().total_threads = 100
+    
+    yield  # Aquí es donde la aplicación se queda corriendo
+    
+    # ---- CÓDIGO QUE SE EJECUTA AL APAGAR (Opcional) ----
+    pass
+
+# Pasas el lifespan a la instancia de FastAPI
+api = FastAPI(lifespan=lifespan)
+
 api.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], # Permite que cualquier origen (tu HTML local) llame a la API

@@ -5,7 +5,7 @@ window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 let obj_selected = null;
 async function LoadCalendar(){
     tasks = []
-    await fetch(`${window.API_URL}/api/tasks`)
+    await fetch(`${window.API_URL}/api/tasks/`)
     .then(response => response.json())
     .then(data => {
         data.forEach(task => {

@@ -2,16 +2,16 @@ from datetime import date
 import os
 from ...schemas import ConversationSchema
 from .tools import tool_schemas, ToolDict
-from openai import OpenAI
+from openai import AsyncOpenAI
 import json
 from .prompt_router import get_semantic_rules
 
-client = OpenAI(
+client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.environ['OPENROUTER_API_KEY']
 )
 
-def openai_agent(conversation:ConversationSchema, model, max_inferences = 5):
+async def openai_agent(conversation:ConversationSchema, model, max_inferences = 5):
     rules = get_semantic_rules(conversation)
     messages = [{'role':'developer','content':rules}]
 
@@ -25,7 +25,7 @@ def openai_agent(conversation:ConversationSchema, model, max_inferences = 5):
             is_last_attempt = (i == max_inferences - 1)
             tool_selection = None if is_last_attempt  else "auto"
             
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model,
                 messages=messages,
                 tools=tool_schemas,
@@ -37,7 +37,7 @@ def openai_agent(conversation:ConversationSchema, model, max_inferences = 5):
 
             full_tool_calls = {} # Para reconstruir los argumentos fragmentados
 
-            for chunk in response:
+            async for chunk in response:
                 delta = chunk.choices[0].delta
                 if delta.tool_calls:
                     print(f'[DEBUG] TOOL CALL CHUNK: {delta.tool_calls}')
