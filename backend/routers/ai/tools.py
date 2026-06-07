@@ -69,7 +69,7 @@ def GetAllRoutines():
         routines = get_all_routine_logic(db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
-def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None):
+def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str = None, project_id:int = None):
     '''
     Creates a routine with using the input characteristics.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
@@ -84,7 +84,7 @@ def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_d
                 priority=priority,
                 frequency=frequency,
                 project_id=project_id,
-                init_date=datetime.strptime(init_date, '%d/%m/%Y').date()
+                init_date= datetime.today().date() if init_date == None else datetime.strptime(init_date, '%d/%m/%Y').date() 
                 ),
                 db=db)
         return f"Routine {name} with id {new_routine.id} successfully created"
@@ -99,23 +99,24 @@ def DeleteRoutine(routine_id:int):
         deleted_routine = delete_routine_logic(id=routine_id, db=db)
         return f"Routine {deleted_routine.name} with id {deleted_routine.id} successfully deleted"
 
-def UpdateRoutine(routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None, init_date:str = None):
+def UpdateRoutine(routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None, init_date:str = None, project_id:int = None):
     '''
     Updates the parameters you select of the object with the routine_id you choose. Set only what you want to change.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
     Args: [routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None]
     '''
     with SessionLocal() as db:
-        update_routine_logic(
+        routine = update_routine_logic(
             id=routine_id, 
-            updated_task=RoutineUpdate(
+            updated_routine=RoutineUpdate(
                 name=name,
                 description=description,
                 priority=priority,
                 frequency=frequency,
-                init_date=init_date),
+                project_id=project_id,
+                init_date= None if init_date is None else datetime.strptime(init_date, '%d/%m/%Y').date()),
             db=db)
-        return f"Routine {name} with id:{routine_id} successfully updated."
+        return f"Routine {routine.name} with id:{routine_id} successfully updated."
 
 def GetAllProjects():
     '''
@@ -276,7 +277,7 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'deadline': {'type': 'string'},
                     # Permitimos explícitamente que sea null a nivel de esquema JSON
-                    'project_id': {'type': ['integer'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
+                    'project_id': {'type': ['integer', 'null'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
                 },
                 'required': ['name', 'description', 'priority', 'deadline'] # Sacado de la obligatoriedad
             }
@@ -336,7 +337,7 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
                     'init_date': {'type': 'string'},
-                    'project_id': {'type': ['integer'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
+                    'project_id': {'type': ['integer','null'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
 
                 },
                 'required': ['name', 'description', 'priority', 'frequency']
@@ -369,6 +370,7 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'frequency': {'type': 'string', 'description': 'RRULE syntax.'},
                     'init_date': {'type': 'string'},
+                    'project_id': {'type': 'integer'}
                 },
                 'required': ['routine_id']
             }
@@ -425,7 +427,7 @@ tool_schemas = [
                     'name': {'type': 'string'},
                     'description': {'type': 'string'},
                     'priority': {'type': 'integer'},
-                    'parent_id': {'type': ['integer'], 'description': 'Optional parent (another project) ID. DO NOT guess or invent an ID if not explicitly known.'}
+                    'parent_id': {'type': ['integer', 'null'], 'description': 'Optional parent (another project) ID. DO NOT guess or invent an ID if not explicitly known.'}
 
                 },
                 'required': ['project_id']

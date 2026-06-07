@@ -91,9 +91,9 @@ def update_routine_logic(id:int, updated_routine:RoutineUpdate, db: Session):
     if updated_routine.name is not None:db_routine.name = updated_routine.name
     if updated_routine.description is not None:db_routine.description = updated_routine.description
     if updated_routine.priority is not None:db_routine.priority = updated_routine.priority
+    if updated_routine.frequency is not None:db_routine.frequency = updated_routine.frequency
     if updated_routine.project_id is not None:db_routine.project_id = updated_routine.project_id
-    if updated_routine.last_run is not None:db_routine.last_run = updated_routine.last_run
-    if updated_routine.next_run is not None:db_routine.next_run = updated_routine.next_run
+    if updated_routine.init_date is not None:db_routine.init_date = updated_routine.init_date
     db.commit()
     return db_routine
 
