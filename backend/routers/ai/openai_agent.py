@@ -4,7 +4,7 @@ from ...schemas import ConversationSchema
 from .tools import tool_schemas, ToolDict
 from openai import AsyncOpenAI
 import json
-from .prompt_router import get_semantic_rules
+from .prompt_router import get_routed_rules, llm_router
 
 client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -12,13 +12,11 @@ client = AsyncOpenAI(
 )
 
 async def openai_agent(conversation:ConversationSchema, model, max_inferences = 5):
-    rules = get_semantic_rules(conversation)
+    rules = get_routed_rules(conversation)
     messages = [{'role':'developer','content':rules}]
 
     for i, msg in enumerate(conversation.messages):
         messages.append({'role':'user' if msg.is_user else 'assistant', 'content':msg.text})
-
-    print(f'[DEBUG] MESSAGES: {messages}')
 
     try:
         for i in range(max_inferences):
@@ -40,7 +38,7 @@ async def openai_agent(conversation:ConversationSchema, model, max_inferences = 
             async for chunk in response:
                 delta = chunk.choices[0].delta
                 if delta.tool_calls:
-                    print(f'[DEBUG] TOOL CALL CHUNK: {delta.tool_calls}')
+                    # print(f'[DEBUG] TOOL CALL CHUNK: {delta.tool_calls}')
                     for call_data in delta.tool_calls:
                         idx = call_data.index
                         
@@ -64,7 +62,6 @@ async def openai_agent(conversation:ConversationSchema, model, max_inferences = 
                     continue
 
                 if delta.content:
-                    print(f'[DEBUG] CONTENT: {delta.content}')
                     yield delta.content
 
             if full_tool_calls:

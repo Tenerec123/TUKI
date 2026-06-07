@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from ..conversations import edit_conversation_logic
 import asyncio
 from .fake_ai import fake_ai
-from .openai import openai_agent
+from .openai_agent import openai_agent
 router = APIRouter(
     prefix="/api/ai", # Todos los endpoints empezarán con esto
     tags=["ai"]        # Organiza la documentación automática (/docs)
@@ -34,6 +34,7 @@ async def chat_persistence_wrapper(prompt:Prompt):
         global ON_STREAM,CONV_ID
         CONV_ID = None
         ON_STREAM = False
+        print("AI_FINISH")
         db.close()
 
 @router.post("/execute")
