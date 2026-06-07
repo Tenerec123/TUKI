@@ -267,7 +267,7 @@ tool_schemas = [
         'type': 'function',
         'function': {
             'name': 'CreateTask',
-            'description': 'Creates a task. Format deadline as dd/mm/yyyy.',
+            'description': 'Creates a task. Format deadline as dd/mm/yyyy. Set project_id ONLY if explicitly provided; otherwise leave it empty.',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -275,9 +275,10 @@ tool_schemas = [
                     'description': {'type': 'string'},
                     'priority': {'type': 'integer'},
                     'deadline': {'type': 'string'},
-                    'project_id': {'type': 'integer'}
+                    # Permitimos explícitamente que sea null a nivel de esquema JSON
+                    'project_id': {'type': ['integer'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
                 },
-                'required': ['name', 'description', 'priority', 'deadline']
+                'required': ['name', 'description', 'priority', 'deadline'] # Sacado de la obligatoriedad
             }
         }
     },
@@ -335,7 +336,8 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
                     'init_date': {'type': 'string'},
-                    'project_id': {'type': 'integer'}
+                    'project_id': {'type': ['integer'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
+
                 },
                 'required': ['name', 'description', 'priority', 'frequency']
             }
@@ -423,7 +425,8 @@ tool_schemas = [
                     'name': {'type': 'string'},
                     'description': {'type': 'string'},
                     'priority': {'type': 'integer'},
-                    'parent_id': {'type': 'integer'}
+                    'parent_id': {'type': ['integer'], 'description': 'Optional parent (another project) ID. DO NOT guess or invent an ID if not explicitly known.'}
+
                 },
                 'required': ['project_id']
             }
