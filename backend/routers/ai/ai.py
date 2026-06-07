@@ -6,7 +6,7 @@ from ...models import Conversation
 from sqlalchemy.orm import Session
 from ..conversations import edit_conversation_logic
 import asyncio
-from .fake_ai import fake_ai
+from .stt import stt_conversion_logic
 from .openai_agent import openai_agent
 router = APIRouter(
     prefix="/api/ai", # Todos los endpoints empezarán con esto
@@ -62,3 +62,9 @@ def connect_streaming(conv_id:int):
     if conv_id != CONV_ID:
         raise HTTPException(status_code=400, detail="AI not running for this conversation")
     return StreamingResponse(ram_streaming_collector(), media_type="text/plain")
+
+
+@router.post('/stt')
+async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:Session = Depends(get_db)):
+    result_text = await stt_conversion_logic(file, conv_id, db)
+    return result_text

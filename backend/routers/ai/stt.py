@@ -3,8 +3,6 @@ from ...database import get_db
 from sqlalchemy.orm import Session
 import io
 from faster_whisper import WhisperModel
-import io
-from .ai import router
 
 _model = None
 
@@ -14,8 +12,7 @@ def get_whisper_model():
         _model = WhisperModel("tiny", device="cpu", compute_type="int8")
     return _model
 
-@router.post('/stt')
-async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:Session = Depends(get_db)):
+async def stt_conversion_logic(file: UploadFile, conv_id, db:Session):
     model = get_whisper_model()
     audio_data = await file.read()
     audio_file = io.BytesIO(audio_data)

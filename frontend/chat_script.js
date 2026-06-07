@@ -37,7 +37,7 @@ function SetupStream(stream) {
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
         formData.append('conv_id', idOfSelectedConv)
-        const response = await fetch('http://localhost:8000/api/ai/stt/', {
+        const response = await fetch('http://localhost:8000/api/ai/stt', {
             method: 'POST',
             body: formData,
         }).then(response => response.json())
