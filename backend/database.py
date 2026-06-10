@@ -8,9 +8,8 @@ load_dotenv(basedir / ".env")
 
 # Engine con tipado implícito
 engine = create_engine(
-    os.getenv('DATABASE_URL', 'sqlite:///database.db'), 
-    echo=False, 
-    connect_args={"check_same_thread": False}
+    os.getenv('DATABASE_URL'),
+    echo=False
 )
 
 # Definición de Base moderna
@@ -39,8 +38,3 @@ def get_db():
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
 
-@event.listens_for(Engine, "connect")
-def set_sqlite_pragma(dbapi_connection, connection_record):
-    cursor = dbapi_connection.cursor()
-    cursor.execute("PRAGMA foreign_keys=ON")
-    cursor.close()
