@@ -56,3 +56,7 @@ venv.bak/
 # Logs
 *.log
 logs/
+
+# Gentle AI workspace (auto-generated, machine-specific paths)
+.atl/
+.gga
