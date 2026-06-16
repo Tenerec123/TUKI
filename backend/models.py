@@ -1,8 +1,22 @@
-from .database import Base, engine
+from database import Base, engine
 from sqlalchemy import Integer, String, ForeignKey
 from typing import List, Optional
 from datetime import date,datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy import event
+from pgvector.sqlalchemy import VECTOR
+from sqlalchemy.inspection import inspect
+from sentence_transformers import SentenceTransformer
+
+_embedding_model = None
+
+def get_embedding_model():
+    """Load and cache the embedding model on first use"""
+    global _embedding_model
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+    return _embedding_model
+# Create your models here.
 
 # Mixin: Provee columnas comunes sin ser una tabla por sí misma
 class TimestampMixin:
@@ -10,6 +24,7 @@ class TimestampMixin:
     name: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String(512))
     priority: Mapped[Optional[int]] = mapped_column(Integer)
+    embedding = mapped_column(VECTOR(384))
 
 class Project(Base, TimestampMixin):
     __tablename__ = 'projects'
@@ -34,8 +49,6 @@ class Project(Base, TimestampMixin):
         if value is not None and value == self.id:
             raise ValueError("Ciclo detectado: Un proyecto no puede ser padre de sí mismo.")
         return value
-
-    # Relaciones con otras entidades (necesarias para back_populates)
     sub_tasks: Mapped[List["Task"]] = relationship("Task", back_populates="project", cascade="all, delete-orphan")
     sub_routines: Mapped[List["Routine"]] = relationship("Routine", back_populates="project", cascade="all, delete-orphan")
 
@@ -78,3 +91,32 @@ class RoutineCheck(Base):
     id:Mapped[int] = mapped_column(primary_key=True)
     routine_id:Mapped[int] = mapped_column(ForeignKey('routines.id', ondelete='CASCADE'))
     check_date:Mapped[date] = mapped_column(nullable=False)
+
+
+@event.listens_for(Project, 'before_insert')
+@event.listens_for(Project, 'before_update')
+@event.listens_for(Task, 'before_insert')
+@event.listens_for(Task, 'before_update')
+@event.listens_for(Routine, 'before_insert')
+@event.listens_for(Routine, 'before_update')
+def handle_project_embeddings(mapper, connection, target):
+    state = inspect(target)
+    
+    # 1. Determinar si requiere cálculo de embedding
+    is_insert = state.transient or state.pending
+    
+    if is_insert:
+        should_update = not target.embedding
+    else:
+        name_changed = state.get_history('name', passive=True).has_changes()
+        desc_changed = state.get_history('description', passive=True).has_changes()
+        should_update = not target.embedding or name_changed or desc_changed
+
+    # 2. Calcular si corresponde
+    if should_update:
+        model = get_embedding_model()
+        text_to_embed = target.name
+        if getattr(target, 'description', None):
+            text_to_embed += " " + target.description
+            
+        target.embedding = list(model.encode(text_to_embed))

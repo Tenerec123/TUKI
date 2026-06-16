@@ -8,14 +8,14 @@ load_dotenv(basedir / ".env")
 
 # Engine con tipado implícito
 engine = create_engine(
-    os.getenv('DATABASE_URL'),
-    echo=False
+    os.getenv('DATABASE_URL'), 
+    echo=False, 
 )
 
 # Definición de Base moderna
 class Base(DeclarativeBase):
     pass
-from .models import Project, Task, Routine, Conversation, Message
+# from .models import Project, Task, Routine, Conversation, Message
 
 # Create tables automatically when the app starts (development mode)
 Base.metadata.create_all(engine)
@@ -34,7 +34,3 @@ def get_db():
         yield db
     finally:
         db.close()
-
-from sqlalchemy import event
-from sqlalchemy.engine import Engine
-

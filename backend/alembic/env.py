@@ -1,21 +1,28 @@
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+import os
 from os.path import abspath, dirname
 from logging.config import fileConfig
 import sys
+from dotenv import load_dotenv  # Asegúrate de tener 'pip install python-dotenv'
 # Esto añade la carpeta raíz de tu proyecto al path de Python
 sys.path.insert(0, abspath(dirname(dirname(__file__))))
-
-
 from database import Base
+import models
 
+load_dotenv()
 config = context.config
+database_url = os.getenv("DATABASE_URL")
+
+if not database_url:
+    raise ValueError("'DATABASE_URL' not defined")
+
+config.set_main_option("sqlalchemy.url", database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Ahora Base.metadata contiene las definiciones de Task, Project y Routine
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
