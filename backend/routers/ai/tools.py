@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List, Callable
+import json
 from ...schemas import TaskCreate, TaskUpdate, TaskSchema, ProjectCreate, ProjectUpdate, ProjectSchema, RoutineCreate, RoutineUpdate, RoutineSchema
 from ...database import SessionLocal
 from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic
@@ -435,3 +436,49 @@ tool_schemas = [
         }
     }
 ]
+
+# --- Tool groups for phase-based execution ---
+TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines'}
+TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
+TOOL_SKIP_NAMES = {'ProcessBatch', 'CreateTree'}
+
+READ_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] in TOOL_READ_NAMES]
+WRITE_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] in TOOL_WRITE_NAMES]
+ALL_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] not in TOOL_SKIP_NAMES]
+
+
+def _sanitize_args(args: dict) -> dict:
+    """Clean model-generated args before passing to tool functions.
+    
+    Models often send the string "null" instead of JSON null for optional fields.
+    We convert those to None and drop any None-valued keys (the function already has defaults).
+    """
+    cleaned = {}
+    for key, value in args.items():
+        # String "null" or "None" → skip (let the default handle it)
+        if isinstance(value, str) and value.lower() in ("null", "none"):
+            continue
+        # JSON null (Python None) → skip, default handles it
+        if value is None:
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+def execute_tool_call(name: str, arguments: str) -> str:
+    """Execute a tool by name with JSON arguments string. Returns result JSON string."""
+    func = ToolDict.get(name)
+    if not func:
+        print(f"[TOOL] {name} NOT FOUND in ToolDict")
+        return f'"Error: Tool {name} not found"'
+    try:
+        args = json.loads(arguments) if isinstance(arguments, str) else arguments
+        args = _sanitize_args(args)
+        print(f"[TOOL] {name}(args={args})")
+        result = func(**args)
+        result_str = result if isinstance(result, str) else json.dumps(result, default=str)
+        print(f"[TOOL] {name} → OK ({len(result_str)} chars)")
+        return result_str
+    except Exception as e:
+        print(f"[TOOL] {name} → ERROR: {e}")
+        return json.dumps(f"Execution Error: {str(e)}", default=str)

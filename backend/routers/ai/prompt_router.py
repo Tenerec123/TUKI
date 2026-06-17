@@ -11,66 +11,50 @@ client = OpenAI(
     api_key="ollama" 
 )
 
-router_prompt = """SYSTEM:
-You are a high-precision semantic routing microservice for an AI assistant backend.
-Your sole task is to analyze the user's intent and determine the necessary infrastructure flags based EXCLUSIVELY on the final message of the provided conversation snippet.
+router_prompt = """You are a routing classifier for a productivity assistant. Your ONLY output is one of four classes.
 
-ROUTING PARAMETERS:
-1. "read" (boolean): 
-   - Set to true if the user's request requires retrieving historical data, projects routines or tasks.
-   - Set to false if it is a generic query, asking for advice, greeting, or philosophical/conceptual explanation that the model can answer using its parametric knowledge.
+CLASSES:
+- "normal": Greetings, general chat, conceptual questions, advice. NO database access needed.
+- "query": The user wants to SEE, LIST, REVIEW, or CHECK data from the database (tasks, projects, routines).
+- "execution": The user wants to CREATE, UPDATE, DELETE, or MODIFY data in the database.
+- "unsure": ANY doubt, vague request, or ambiguous intent. Better unsure than wrong.
 
-2. "write" (boolean):
-   - Set to true if the user explicitly asks to perform an action, trigger an external script, run code, execute a specific function, or hardware-related automation.
+CRITICAL RULE: False positives (classifying "execution" when unsure) are MUCH worse than returning "unsure".
+If you have even a hint of doubt → "unsure".
 
-Input: "Show me all my active tasks for this week."
-Output: {"read": true, "write": false}
+Examples:
+"Show me all my active tasks for this week." → {"route": "query"}
+"Add a new routine called Gym Push Day." → {"route": "execution"}
+"Change the deadline of my SolveSheep task to tomorrow." → {"route": "execution"}
+"Do you think I should create any other project?" → {"route": "unsure"}
+"How can I improve my daily focus?" → {"route": "normal"}
+"hola" → {"route": "normal"}
+"borrá la tercera tarea" → {"route": "execution"}
+"qué hay en mi lista" → {"route": "query"}
+"hacé lo que sea mejor" → {"route": "unsure"}
+"organizame el día" → {"route": "unsure"}
 
-Input: "Add a new routine called Gym Push Day."
-Output: {"read": false, "write": true}
+Output ONLY a raw JSON object: {"route": "normal" | "query" | "execution" | "unsure"}
+No explanations, no markdown."""
 
-Input: "Change the deadline of my SolveSheep task to tomorrow."
-Output: {"read": false, "write": true}
 
-Input: "Do you think I should create any other project?"
-Output: {"read": false, "write": false}
-
-Input: "How can I improve my daily focus?"
-Output: {"read": false, "write": false}
-
-OPERATIONAL RULES:
-1. You will be provided with a brief conversation history.
-2. Analyze the context to understand the evolution of the topic, but evaluate the intent based ONLY on the LAST message in the transcript (the current user request).
-3. Output strictly a raw JSON object with the keys "read" and "write". Both values must be booleans (true/false).
-4. Do not include any explanations, markdown code blocks (```json), or extra tokens.
-"""
-
-def get_llm_predictions(history_context: list[dict]) -> dict:
-    print(history_context)
+def get_llm_predictions(query:str) -> dict:
     msgs = [
-            {
-                "role": "system", 
-                "content": router_prompt
-            },
-            {
-                "role": "user", 
-                "content": f"[HISTORY]{''.join([f"\n{msg['role']}: {msg['text']}" for msg in history_context])}"
-            }
-        ]
+        {"role": "system", "content": router_prompt},
+        {"role": "user", "content": f"[LAST MESSAGE] {query}"}
+    ]
     response = client.chat.completions.create(
-        model="cieloforge/qwen2.5-coder-3b-instruct-spec:latest",  # El nombre exacto que te sale en 'ollama list'
+        model="granite4.1:3b",
         messages=msgs,
-        temperature=0.0, # Evita variaciones estadísticas
-        # Forzar formato JSON compatible con el motor local
-        response_format={"type": "json_object"} 
+        temperature=0.0,
+        response_format={"type": "json_object"}
     )
-    
     raw_content = response.choices[0].message.content
     return json.loads(raw_content)
 
 
 def get_base_rules():
-    today_str = date.today().strftime('%A, %d/%m/%Y')     
+    today_str = date.today().strftime('%A, %d/%m/%Y')
     return f"""
 [IDENTITY & STYLE]
 Role: T.U.K.I. (Technical Utility & Knowledge Interface). You are the advanced AI assistant of a personal productivity system, operating as a background Jarvis-like interface.
@@ -87,23 +71,23 @@ Priority = Urgency (0-32, risk if not done before deadline) + Importance (0-32, 
 Range: [1, 64]
 
 [FORMATTING]
-- JSON RESTRICTION: Never output raw JSON blocks in the final response text. JSON formatting is strictly reserved for tool/function calling parameters, unless explicitly requested by the user.- Math/Science: Use $ for inline LaTeX and $$ for display blocks. No markdown alternatives for math equations.
-- You MUSTN'T WRITE TOOL CALLS IN THE RESPONSE (what user reads)
+- Never output raw JSON blocks in the final response text. JSON is reserved for tool calls.
+- Math/Science: Use $ for inline LaTeX and $$ for display blocks.
+- Never write tool calls in the visible response.
 """
 
-normal_rules = "You will not need (almost sure, but maybe yes) function calling, respond as a normal text agent"
-
 specific_rules = {
-    'query_db':"you MUST use a get-info function in order to respond the user's answer",
-    'execution':
-"""FOLLOW STRICTLY THESE STEPS:
-1-use get-info functions to be sure you don't create an object that already exists or to find the ids of the objects you have to upadte/delete
-2-use create/update/delete functions to make the changes the user demands.""",
-    None:normal_rules,
-    'normal':normal_rules
+    'normal': "You will not need function calling. Respond as a normal text agent.",
+    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines) to answer the user's request. Do NOT create, update, or delete anything.",
+    'execution': """FOLLOW THESE STEPS:
+1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines) to verify existing data and find the correct IDs.
+2. THEN: use Create/Update/Delete tools to make the requested changes.
+3. Never guess IDs — always read first.""",
+    'unsure': "You have full freedom. Use tools if the user needs data or actions. Respond normally if it's general chat. Decide based on what makes sense.",
 }
 
 _sr = None
+
 
 def get_sr():
     global _sr
@@ -115,22 +99,23 @@ def get_sr():
                 "hola buenas como estas tuki",
                 "explicame un concepto teorico o filosofico",
                 "dame consejos y recomendaciones generales sobre un tema",
-                "que opinas acerca de esto, dame tu criterio",
+                "que opinas acerca de esto dame tu criterio",
                 "necesito ideas creativas o ayuda para pensar",
-                "gracias por la explicacion, entiendo el punto",
+                "gracias por la explicacion entiendo el punto",
                 "puedes hablarme de la historia o teoria de algo",
                 "que piensas sobre el examen o la prueba de",
                 "dame una explicacion tecnica de como funciona"
             ]
         )
-        query_db = Route(
-            name="query_db",
+        query = Route(
+            name="query",
             utterances=[
                 "mostrar", "listar", "ver", "consultar", "buscar", "enseñame",
                 "que tengo pendiente para hacer", "dime que hay registrado en el sistema",
-                "revisar el historial o los logs", "cuales son mis elementos activos",
+                "revisar el historial", "cuales son mis elementos activos",
                 "dame una lista de", "comprobar el estado de", "visualizar registros",
-                "muestra las cosas que tengo", "enseñame lo que hay guardado"
+                "muestra las cosas que tengo", "enseñame lo que hay guardado",
+                "que tareas tengo", "mostrame los proyectos"
             ]
         )
         execution = Route(
@@ -138,12 +123,23 @@ def get_sr():
             utterances=[
                 "crear", "añadir", "eliminar", "borrar", "modificar", "actualizar",
                 "quita esto inmediatamente", "pon una nueva entrada", "cambia el estado a",
-                "ejecutar script o comando", "inserta un elemento", "actualizame este registro",
+                "inserta un elemento", "actualizame este registro",
                 "cancela la ejecucion de", "registra un nuevo", "saca esto del sistema",
                 "modificame el parametro de"
             ]
         )
-        routes = [query_db, execution, normal]
+        unsure = Route(
+            name="unsure",
+            utterances=[
+                "no se que hacer", "tu decides", "haz lo que creas mejor",
+                "ayudame con esto", "dame una mano", "organizame el dia",
+                "revisa todo y decideme", "echale un ojo a todo",
+                "que me recomiendas hacer", "pon orden en el sistema",
+                "ocupate de lo que haya que hacer", "no estoy seguro",
+                "hace lo que sea necesario", "como ves todo"
+            ]
+        )
+        routes = [query, execution, normal, unsure]
         encoder = HuggingFaceEncoder(name="lightonai/modernbert-embed-large")
 
         _sr = SemanticRouter(
@@ -154,19 +150,21 @@ def get_sr():
         )
     return _sr
 
-def get_routed_rules(conversation:ConversationSchema):
-    sr = get_sr()
 
-    result = sr(conversation.messages[-1].text).name
-    if result is None: 
-        result = llm_router(conversation)
-    print(result)
-    return get_base_rules() + "\n" + specific_rules[result]
-    
-def llm_router(conversation:ConversationSchema):
-    role_namer={False:'AI', True:'USER'}
-    prediction = get_llm_predictions([
-        {'role':role_namer[message.is_user],'text':message.text} for message in conversation.messages[-3:]
-    ])
-    return 'normal' if not prediction['read'] and not prediction['write'] else ('execution' if prediction['write'] else 'query_db') 
-    
+def classify(conversation: ConversationSchema) -> str:
+    """Returns one of: normal, query, execution, unsure
+    Uses LLM router only (semantic router disabled until false-positive rate improves)."""
+    msg_preview = conversation.messages[-1].text[:120]
+    result = llm_router(conversation)
+    print(f"[ROUTER] '{msg_preview}' → {result}")
+    return result
+
+
+def get_routed_rules(conversation: ConversationSchema) -> str:
+    route = classify(conversation)
+    return get_base_rules() + "\n" + specific_rules[route]
+
+
+def llm_router(conversation: ConversationSchema) -> str:
+    prediction = get_llm_predictions(conversation.messages[-1].text)
+    return prediction.get('route', 'unsure')

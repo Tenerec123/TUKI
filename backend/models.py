@@ -106,11 +106,11 @@ def handle_project_embeddings(mapper, connection, target):
     is_insert = state.transient or state.pending
     
     if is_insert:
-        should_update = not target.embedding
+        should_update = target.embedding is None
     else:
         name_changed = state.get_history('name', passive=True).has_changes()
         desc_changed = state.get_history('description', passive=True).has_changes()
-        should_update = not target.embedding or name_changed or desc_changed
+        should_update = target.embedding is None or name_changed or desc_changed
 
     # 2. Calcular si corresponde
     if should_update:
