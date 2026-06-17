@@ -34,11 +34,13 @@ class RoutineCreate(BaseItem):
     frequency: str = Field(..., description='Frequency in RRULE or custom string')
     project_id:Optional[int] = Field(None)
     init_date: date = Field(...)
+    icon: Optional[str] = Field(None, max_length=64, description='Bootstrap icon class (e.g. bell-fill, clock, calendar-check)')
 
 class RoutineToday(BaseModel):
     name: str = Field(..., max_length=512, description='Name of the todo')
     checked:bool = Field(...)
     id:int = Field(..., description="Unique identifier")
+    icon: Optional[str] = Field(None, max_length=64, description='Bootstrap icon class')
 
 class RoutineSchema(RoutineCreate):
     id:int = Field(..., description="Unique identifier")
@@ -54,6 +56,7 @@ class RoutineUpdate(BaseModel):
     frequency: Optional[str] = Field(None)
     project_id:Optional[int] = Field(None)
     init_date:Optional[date] = Field(None)
+    icon: Optional[str] = Field(None, max_length=64, description='Bootstrap icon class')
 
 class RoutineCheckSchema(BaseModel):
     routine_id:int = Field(...)

@@ -6,6 +6,51 @@ from ...database import SessionLocal
 from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic
 from ..projects_logic import get_all_project_logic, create_project_logic, delete_project_logic, update_project_logic
 from ..routines_logic import get_all_routine_logic, create_routine_logic, delete_routine_logic, update_routine_logic
+
+# ── Bootstrap icon fallback for routines ──────────────────────────────
+_ICON_KEYWORDS = [
+    # (keywords, icon)
+    (['daily','diaria','dia','day','cada dia','todos los dias','diario'], 'calendar-day'),
+    (['weekly','semanal','semana','week','cada semana'], 'calendar-week'),
+    (['monthly','mensual','month','cada mes'], 'calendar-month'),
+    (['reminder','recordatorio','remind','aviso','alert'], 'bell-fill'),
+    (['alarm','alarma','despertar'], 'alarm-fill'),
+    (['report','informe','reporte','analytics'], 'file-text'),
+    (['email','mail','correo','newsletter'], 'envelope-fill'),
+    (['meeting','reunion','reunión','standup','sync'], 'people-fill'),
+    (['task','tarea','chore','pendiente'], 'check2-square'),
+    (['clean','limpiar','cleaning','limpieza','order'], 'broom'),
+    (['health','salud','exercise','ejercicio','workout','gym'], 'heart-pulse-fill'),
+    (['water','agua','drink'], 'droplet-fill'),
+    (['medication','medicina','pill','medicacion','medicación'], 'capsule'),
+    (['study','estudio','learn','aprender','training','train'], 'book-fill'),
+    (['read','leer','reading','lectura'], 'book'),
+    (['call','llamar','llamada','phone','telefono','teléfono'], 'telephone-fill'),
+    (['pay','pagar','pago','bill','factura','invoice'], 'credit-card-fill'),
+    (['backup','copia','backup'], 'cloud-arrow-up-fill'),
+    (['check','verificar','verify','review','revisar'], 'clipboard-check-fill'),
+    (['birthday','cumpleaños','gift','regalo'], 'gift-fill'),
+    (['meditate','meditacion','meditación','mindfulness','peace'], 'peace-fill'),
+    (['write','escribir','journal','diario','blog'], 'pencil-fill'),
+    (['code','codigo','código','programar','dev','developer'], 'code-slash'),
+    (['music','musica','música','podcast'], 'music-note-beamed'),
+    (['travel','viaje','viajar','commute'], 'airplane-engines-fill'),
+    (['buy','comprar','purchase','shopping'], 'cart-fill'),
+    (['cook','cocinar','food','comida','meal'], 'egg-fill'),
+    (    ['walk','caminar','walking','dog','perro'], 'person-walking'),
+    (['run','correr','running','sprint','trotar','jog'], 'person-walking'),
+    (['garden','jardin','jardín','plant','planta'], 'flower1'),
+    (['pray','rezar','oracion','oración'], 'church'),
+]
+
+def _icon_fallback(name: str, description: str = "") -> str:
+    """Match a routine name/description to a Bootstrap icon."""
+    text = f"{name} {description}".lower()
+    for keywords, icon in _ICON_KEYWORDS:
+        if any(kw in text for kw in keywords):
+            return icon
+    return 'check-circle-fill'
+
 def GetAllTasks():
     '''
     Returns all the tasks in the db as a list of dictionaries.
@@ -70,13 +115,16 @@ def GetAllRoutines():
         routines = get_all_routine_logic(db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
-def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str = None, project_id:int = None):
+def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str = None, project_id:int = None, icon:str = None):
     '''
     Creates a routine with using the input characteristics.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
     init_date value in dd/mm/yyyy format.
-    Args: [name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None]
+    icon: Bootstrap icon CSS class name, NOT an emoji or unicode (optional, e.g. bell-fill, clock, calendar-check, person-walking)
+    Args: [name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None, icon:str = None]
     '''
+    if icon is None:
+        icon = _icon_fallback(name, description)
     with SessionLocal() as db:
         new_routine = create_routine_logic(
             routine=RoutineCreate(
@@ -85,6 +133,7 @@ def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_d
                 priority=priority,
                 frequency=frequency,
                 project_id=project_id,
+                icon=icon,
                 init_date= datetime.today().date() if init_date == None else datetime.strptime(init_date, '%d/%m/%Y').date() 
                 ),
                 db=db)
@@ -100,11 +149,12 @@ def DeleteRoutine(routine_id:int):
         deleted_routine = delete_routine_logic(id=routine_id, db=db)
         return f"Routine {deleted_routine.name} with id {deleted_routine.id} successfully deleted"
 
-def UpdateRoutine(routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None, init_date:str = None, project_id:int = None):
+def UpdateRoutine(routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None, init_date:str = None, project_id:int = None, icon:str = None):
     '''
     Updates the parameters you select of the object with the routine_id you choose. Set only what you want to change.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
-    Args: [routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None]
+    icon: Bootstrap icon CSS class name, NOT an emoji or unicode (optional, e.g. bell-fill, clock, calendar-check)
+    Args: [routine_id:int, name:str = None, description:str = None, priority:int = None, frequency:str = None, icon:str = None]
     '''
     with SessionLocal() as db:
         routine = update_routine_logic(
@@ -115,6 +165,7 @@ def UpdateRoutine(routine_id:int, name:str = None, description:str = None, prior
                 priority=priority,
                 frequency=frequency,
                 project_id=project_id,
+                icon=icon,
                 init_date= None if init_date is None else datetime.strptime(init_date, '%d/%m/%Y').date()),
             db=db)
         return f"Routine {routine.name} with id:{routine_id} successfully updated."
@@ -338,7 +389,8 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
                     'init_date': {'type': 'string'},
-                    'project_id': {'type': ['integer','null'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
+                    'project_id': {'type': ['integer','null'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'},
+                    'icon': {'type': 'string', 'description': 'Bootstrap icon CSS class name — NOT an emoji or unicode character. Examples: bell-fill, clock, calendar-check (optional).'}
 
                 },
                 'required': ['name', 'description', 'priority', 'frequency']
@@ -371,7 +423,8 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'frequency': {'type': 'string', 'description': 'RRULE syntax.'},
                     'init_date': {'type': 'string'},
-                    'project_id': {'type': 'integer'}
+                    'project_id': {'type': 'integer'},
+                    'icon': {'type': 'string', 'description': 'Bootstrap icon CSS class name — NOT an emoji or unicode character. Examples: bell-fill, clock, calendar-check (optional).'}
                 },
                 'required': ['routine_id']
             }

@@ -600,6 +600,21 @@ TABLE DATA COLUMNS
     border: none;
     width: 100%;
 }
+.icon {
+    width: 60px;
+    text-align: center;
+    font-size: 2rem;
+    padding: 0;
+}
+.form-icon {
+    width: 60px;
+    text-align: center;
+}
+.form-icon input {
+    width: 50px;
+    font-size: 0.7rem;
+    text-align: center;
+}
 
 
 .delete button{

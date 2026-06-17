@@ -53,6 +53,7 @@ def get_today_routine_logic(db:Session):
         id=routine.id,
         name=routine.name,
         checked=routine.id in checked_today_ids,
+        icon=routine.icon,
     )
     for routine in db_routine if today in rrulestr(str(routine.frequency), dtstart=datetime.combine(routine.init_date, datetime.min.time()))]
 
@@ -94,6 +95,7 @@ def update_routine_logic(id:int, updated_routine:RoutineUpdate, db: Session):
     if updated_routine.frequency is not None:db_routine.frequency = updated_routine.frequency
     if updated_routine.project_id is not None:db_routine.project_id = updated_routine.project_id
     if updated_routine.init_date is not None:db_routine.init_date = updated_routine.init_date
+    if updated_routine.icon is not None:db_routine.icon = updated_routine.icon
     db.commit()
     return db_routine
 

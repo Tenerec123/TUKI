@@ -10,6 +10,17 @@ const SERVER_IP = window.location.hostname;
 const API_PORT = window.location.port || "8000"
 window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 
+function getIcon(iconName) {
+    if (!iconName) return 'person-walking';
+    const el = document.createElement('i');
+    el.className = `bi bi-${iconName}`;
+    el.style.cssText = 'position:absolute;visibility:hidden';
+    document.body.appendChild(el);
+    const content = getComputedStyle(el, '::before').getPropertyValue('content');
+    document.body.removeChild(el);
+    return (content && content !== 'none') ? iconName : 'person-walking';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     LoadTasks();
     LoadProjects();
@@ -81,6 +92,7 @@ async function LoadRoutines() {
         Char = "☑";
       }
       divRoutine.innerHTML = `
+        <td class="icon"><i class="bi bi-${getIcon(routine.icon)}"></i></td>
         <td class="name">${routine.name}</td>
         <td class="description">${routine.description}</td>
         <td class="priority">${routine.priority}</td>
@@ -131,7 +143,7 @@ async function LoadTodayRoutines() {
             newRoutine.classList.toggle('checked')
         });
         newRoutine.setAttribute('data-name', routine.name);
-        newRoutine.innerHTML = `<i class="bi bi-person-walking"></i>`;
+        newRoutine.innerHTML = `<i class="bi bi-${getIcon(routine.icon)}"></i>`;
         TodayRoutines.appendChild(newRoutine);
     })  
    });

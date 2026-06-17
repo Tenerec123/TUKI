@@ -68,6 +68,7 @@ class Routine(Base, TimestampMixin):
     project: Mapped[Optional["Project"]] = relationship("Project", back_populates="sub_routines")
     frequency: Mapped[str] = mapped_column(nullable=False)
     init_date:Mapped[Optional[date]]= mapped_column(nullable=True)
+    icon: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
 class Conversation(Base):
     __tablename__="conversations"
