@@ -4,7 +4,7 @@ from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from ..schemas import RoutineCreate, RoutineUpdate, RoutineToday
 from ..models import Routine, RoutineCheck
-from datetime import datetime,date,time
+from datetime import datetime,date,time,timedelta
 
 
 # non-endpoint function
@@ -34,7 +34,7 @@ def get_routine_logic(id:int, db: Session):
 
 def get_routine_stats_logic(id:int, db: Session):
     if db.query(Routine).where(Routine.id == id).first() is None: return []
-    restriction = func.date('now', '-1 year')
+    restriction = date.today() - timedelta(days=365)
     db_check = db.query(RoutineCheck).where(RoutineCheck.routine_id == id, restriction < RoutineCheck.check_date).all()
     return db_check
 
