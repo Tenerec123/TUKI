@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Callable
 import json
+import os
 from ...schemas import TaskCreate, TaskUpdate, TaskSchema, ProjectCreate, ProjectUpdate, ProjectSchema, RoutineCreate, RoutineUpdate, RoutineSchema
 from ...database import SessionLocal
 from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic
@@ -137,6 +138,56 @@ def GetAllRoutines():
         routines = get_all_routine_logic(db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
+def CheckEmail(max_unreads:int = 5):
+    '''
+    Checks the configured email inbox for unread messages.
+    Returns sender, subject, and a snippet for each unread.
+    Supports any IMAP server (Gmail, Outlook, custom).
+    Args: [max_unreads:int = 5]
+    '''
+    import imaplib
+    import email as email_lib
+
+    server = os.environ.get('IMAP_SERVER', 'imap.gmail.com')
+    user = os.environ.get('EMAIL_USER', '')
+    passwd = os.environ.get('EMAIL_PASS', '')
+
+    if not user or not passwd:
+        return {'error': 'Email not configured. Set EMAIL_USER and EMAIL_PASS in .env'}
+
+    try:
+        mail = imaplib.IMAP4_SSL(server)
+        mail.login(user, passwd)
+        mail.select('INBOX')
+
+        _, data = mail.search(None, 'UNSEEN')
+        ids = data[0].split() if data[0] else []
+        results = []
+
+        for i in ids[-max_unreads:]:
+            _, msg_data = mail.fetch(i, '(RFC822)')
+            msg = email_lib.message_from_bytes(msg_data[0][1])
+            payload = ''
+            if msg.is_multipart():
+                for part in msg.walk():
+                    if part.get_content_type() == 'text/plain':
+                        payload = part.get_payload(decode=True).decode('utf-8', errors='replace')[:200]
+                        break
+            else:
+                payload = msg.get_payload(decode=True).decode('utf-8', errors='replace')[:200]
+            results.append({
+                'from': msg.get('From', ''),
+                'subject': msg.get('Subject', ''),
+                'date': msg.get('Date', ''),
+                'snippet': payload.strip().replace('\n', ' ')[:200]
+            })
+
+        mail.logout()
+        return {'unread_count': len(ids), 'emails': results}
+    except Exception as e:
+        return {'error': f'Failed to check email: {str(e)}'}
+
+
 def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str = None, project_id:int = None, project_name:str = None, icon:str = None):
     '''
     Creates a routine with using the input characteristics.
@@ -254,7 +305,7 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
     
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail]
 ToolDict = {t.__name__: t for t in ToolList}
 
 tool_schemas = [
@@ -439,11 +490,29 @@ tool_schemas = [
                 'required': ['project_id']
             }
         }
+    },
+    # --- EMAIL ---
+    {
+        'type': 'function',
+        'function': {
+            'name': 'CheckEmail',
+            'description': 'Checks the configured IMAP inbox for unread messages. Returns sender, subject, and a text snippet per email.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'max_unreads': {
+                        'type': 'integer',
+                        'description': 'Maximum number of unread emails to fetch (default 5).'
+                    }
+                },
+                'required': []
+            }
+        }
     }
 ]
 
 # --- Tool groups for phase-based execution ---
-TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines'}
+TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail'}
 TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
 TOOL_SKIP_NAMES = set()
 

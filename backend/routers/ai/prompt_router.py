@@ -15,7 +15,7 @@ router_prompt = """You are a routing classifier for a productivity assistant. Yo
 
 CLASSES:
 - "normal": Greetings, general chat, conceptual questions, advice. NO database access needed.
-- "query": The user wants to SEE, LIST, REVIEW, or CHECK data from the database (tasks, projects, routines).
+- "query": The user wants to SEE, LIST, REVIEW, or CHECK data from the database (tasks, projects, routines, emails).
 - "execution": The user wants to CREATE, UPDATE, DELETE, or MODIFY data in the database.
 - "unsure": ANY doubt, vague request, or ambiguous intent. Better unsure than wrong.
 
@@ -33,6 +33,9 @@ Examples:
 "qué hay en mi lista" → {"route": "query"}
 "hacé lo que sea mejor" → {"route": "unsure"}
 "organizame el día" → {"route": "unsure"}
+"revisá si tengo emails nuevos" → {"route": "query"}
+"chequeame el correo" → {"route": "query"}
+"hay algo importante en mi bandeja de entrada" → {"route": "query"}
 
 Output ONLY a raw JSON object: {"route": "normal" | "query" | "execution" | "unsure"}
 No explanations, no markdown."""
@@ -78,9 +81,9 @@ Range: [1, 64]
 
 specific_rules = {
     'normal': "You will not need function calling. Respond as a normal text agent.",
-    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines) to answer the user's request. Do NOT create, update, or delete anything.",
+    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail) to answer the user's request. Do NOT create, update, or delete anything.",
     'execution': """FOLLOW THESE STEPS:
-1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines) to verify existing data and find the correct IDs.
+1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail) to verify existing data and find the correct IDs.
 2. THEN: use Create/Update/Delete tools to make the requested changes.
 3. Never guess IDs — always read first.""",
     'unsure': "You have full freedom. Use tools if the user needs data or actions. Respond normally if it's general chat. Decide based on what makes sense.",
