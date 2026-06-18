@@ -51,6 +51,26 @@ def _icon_fallback(name: str, description: str = "") -> str:
             return icon
     return 'check-circle-fill'
 
+def _resolve_project(db, project_id: int = None, project_name: str = None):
+    """Resolve a project ID from direct integer or name lookup.
+    
+    If project_id is given, validates it exists. If only project_name is given,
+    searches by exact name. Returns (resolved_id, log_suffix) where log_suffix
+    is a short note appended to the tool result so the AI understands.
+    """
+    from ...models import Project
+    if project_id is not None:
+        proj = db.query(Project).filter(Project.id == project_id).first()
+        if proj:
+            return project_id, ""
+        return None, f" (WARNING: project id {project_id} not found, no parent assigned)"
+    if project_name is not None:
+        proj = db.query(Project).filter(Project.name == project_name).first()
+        if proj:
+            return proj.id, f" (auto-assigned to project '{project_name}', id {proj.id})"
+        return None, f" (WARNING: project '{project_name}' not found, no parent assigned)"
+    return None, ""
+
 def GetAllTasks():
     '''
     Returns all the tasks in the db as a list of dictionaries.
@@ -60,23 +80,25 @@ def GetAllTasks():
         tasks = get_all_tasks_logic(first_n=None,db=db)
         return [TaskSchema.model_validate(t).model_dump() for t in tasks]
 
-def CreateTask(name:str, description:str, priority:int, deadline:str, project_id:int = None):
+def CreateTask(name:str, description:str, priority:int, deadline:str, project_id:int = None, project_name:str = None):
     '''
     Creates a task with using the input characteristics.
     Deadline value in dd/mm/yyyy format.
-    Args: [name:str, description:str, priority:int, deadline:str, project_id:int = None]
+    project_id: project id (preferred). project_name: alternative lookup by exact name.
+    Args: [name:str, description:str, priority:int, deadline:str, project_id:int = None, project_name:str = None]
     '''
     with SessionLocal() as db:
+        resolved, note = _resolve_project(db, project_id, project_name)
         new_task = create_task_logic(
             task=TaskCreate(
                 name=name,
                 description=description,
                 priority=priority,
                 deadline=datetime.strptime(deadline, '%d/%m/%Y').date(),
-                project_id=project_id
+                project_id=resolved
                 ),
                 db=db)
-        return f"Task {name} with id {new_task.id} successfully created"
+        return f"Task {name} with id {new_task.id} successfully created{note}"
 
 def DeleteTask(task_id:int):
     '''
@@ -115,29 +137,31 @@ def GetAllRoutines():
         routines = get_all_routine_logic(db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
-def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str = None, project_id:int = None, icon:str = None):
+def CreateRoutine(name:str, description:str, priority:int, frequency:str, init_date:str = None, project_id:int = None, project_name:str = None, icon:str = None):
     '''
     Creates a routine with using the input characteristics.
     Frequency in valid RRULE code. (e.g 'FREQ=WEEKLY;BYDAY=MO,WE,FR')
     init_date value in dd/mm/yyyy format.
+    project_id: project id (preferred). project_name: alternative lookup by exact name.
     icon: Bootstrap icon CSS class name, NOT an emoji or unicode (optional, e.g. bell-fill, clock, calendar-check, person-walking)
-    Args: [name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None, icon:str = None]
+    Args: [name:str, description:str, priority:int, frequency:str, init_date:str, project_id:int = None, project_name:str = None, icon:str = None]
     '''
     if icon is None:
         icon = _icon_fallback(name, description)
     with SessionLocal() as db:
+        resolved, note = _resolve_project(db, project_id, project_name)
         new_routine = create_routine_logic(
             routine=RoutineCreate(
                 name=name,
                 description=description,
                 priority=priority,
                 frequency=frequency,
-                project_id=project_id,
+                project_id=resolved,
                 icon=icon,
                 init_date= datetime.today().date() if init_date == None else datetime.strptime(init_date, '%d/%m/%Y').date() 
                 ),
                 db=db)
-        return f"Routine {name} with id {new_routine.id} successfully created"
+        return f"Routine {name} with id {new_routine.id} successfully created{note}"
 
 def DeleteRoutine(routine_id:int):
     '''
@@ -179,24 +203,28 @@ def GetAllProjects():
         projects = get_all_project_logic(first_n=None,db=db)
         return [ProjectSchema.model_validate(p).model_dump() for p in projects]
 
-def CreateProject(name: str, description: str = None, priority: int = None, parent_id: int = None):
+def CreateProject(name: str, description: str = None, priority: int = None, parent_id: int = None, parent_name: str = None):
     '''
     Creates a project with using the input characteristics.
     Be careful setting the parent_id. If it has not parent, don't set it.
     There will be many problems if you create a parent loop, for example if the project's parent is also its son
-    Args: [name: str, description: str = None, priority: int = None, parent_id: int = None]
+    parent_id: parent project id (preferred). parent_name: alternative lookup by exact name.
+    Args: [name: str, description: str = None, priority: int = None, parent_id: int = None, parent_name: str = None]
     '''
     if parent_id is not None and parent_id <= 0: 
         parent_id = None
     with SessionLocal() as db:
+        resolved, note = _resolve_project(db, parent_id, parent_name)
+        if resolved is not None and resolved <= 0:
+            resolved = None
         project_data = ProjectCreate(
             name=name, 
             description=description, 
             priority=priority, 
-            parent_id=parent_id
+            parent_id=resolved
         )
         new_project = create_project_logic(project=project_data, db=db)
-        return f"Project '{name}' created successfully with ID: {new_project.id}"
+        return f"Project '{name}' created successfully with ID: {new_project.id}{note}"
 
 def DeleteProject(project_id: int):
     '''
@@ -328,10 +356,10 @@ tool_schemas = [
                     'description': {'type': 'string'},
                     'priority': {'type': 'integer'},
                     'deadline': {'type': 'string'},
-                    # Permitimos explícitamente que sea null a nivel de esquema JSON
-                    'project_id': {'type': ['integer', 'null'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'}
+                    'project_id': {'type': ['integer', 'null'], 'description': 'Project ID (preferred if known). Leave null if you do NOT have an explicit ID.'},
+                    'project_name': {'type': 'string', 'description': 'Project name as alternative to project_id. Only use if you know the exact name and do NOT have the ID. Ignored if project_id is set.'}
                 },
-                'required': ['name', 'description', 'priority', 'deadline'] # Sacado de la obligatoriedad
+                'required': ['name', 'description', 'priority', 'deadline']
             }
         }
     },
@@ -389,9 +417,9 @@ tool_schemas = [
                     'priority': {'type': 'integer'},
                     'frequency': {'type': 'string', 'description': "RRULE syntax (e.g., 'FREQ=WEEKLY;BYDAY=MO,WE')."},
                     'init_date': {'type': 'string'},
-                    'project_id': {'type': ['integer','null'], 'description': 'Optional project ID. DO NOT guess or invent an ID if not explicitly known.'},
+                    'project_id': {'type': ['integer','null'], 'description': 'Project ID (preferred if known). Leave null if you do NOT have an explicit ID.'},
+                    'project_name': {'type': 'string', 'description': 'Project name as alternative to project_id. Only use if you know the exact name and do NOT have the ID. Ignored if project_id is set.'},
                     'icon': {'type': 'string', 'description': 'Bootstrap icon CSS class name — NOT an emoji or unicode character. Examples: bell-fill, clock, calendar-check (optional).'}
-
                 },
                 'required': ['name', 'description', 'priority', 'frequency']
             }
@@ -451,7 +479,8 @@ tool_schemas = [
                     'name': {'type': 'string'},
                     'description': {'type': 'string'},
                     'priority': {'type': 'integer'},
-                    'parent_id': {'type': 'integer'}
+                    'parent_id': {'type': ['integer','null'], 'description': 'Parent project ID (preferred if known). Leave null if you do NOT have an explicit ID.'},
+                    'parent_name': {'type': 'string', 'description': 'Parent project name as alternative to parent_id. Only use if you know the exact name. Ignored if parent_id is set.'}
                 },
                 'required': ['name']
             }
