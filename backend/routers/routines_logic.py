@@ -3,7 +3,7 @@ from dateutil.rrule import rrulestr
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 from ..schemas import RoutineCreate, RoutineUpdate, RoutineToday
-from ..models import Routine, RoutineCheck
+from ..models import Routine, RoutineCheck, get_embedding_model
 from datetime import datetime,date,time,timedelta
 
 
@@ -105,3 +105,8 @@ def delete_routine_logic(id:int, db: Session):
     db.delete(db_routine)
     db.commit()
     return db_routine
+
+def search_routines_logic(text: str, limit: int, db: Session):
+    model = get_embedding_model()
+    embedding = list(model.encode(text))
+    return db.query(Routine).order_by(Routine.embedding.cosine_distance(embedding)).limit(limit).all()

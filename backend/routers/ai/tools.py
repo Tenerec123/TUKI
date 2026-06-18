@@ -4,9 +4,9 @@ import json
 import os
 from ...schemas import TaskCreate, TaskUpdate, TaskSchema, ProjectCreate, ProjectUpdate, ProjectSchema, RoutineCreate, RoutineUpdate, RoutineSchema
 from ...database import SessionLocal
-from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic
-from ..projects_logic import get_all_project_logic, create_project_logic, delete_project_logic, update_project_logic
-from ..routines_logic import get_all_routine_logic, create_routine_logic, delete_routine_logic, update_routine_logic
+from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic, search_tasks_logic
+from ..projects_logic import get_all_project_logic, create_project_logic, delete_project_logic, update_project_logic, search_projects_logic
+from ..routines_logic import get_all_routine_logic, create_routine_logic, delete_routine_logic, update_routine_logic, search_routines_logic
 
 # ── Bootstrap icon fallback for routines ──────────────────────────────
 _ICON_KEYWORDS = [
@@ -136,6 +136,36 @@ def GetAllRoutines():
     '''
     with SessionLocal() as db:
         routines = get_all_routine_logic(db=db)
+        return [RoutineSchema.model_validate(r).model_dump() for r in routines]
+
+def SearchTasks(text:str, limit:int = 5):
+    '''
+    Searches tasks by semantic similarity to the given text.
+    Returns the most relevant tasks ranked by relevance (cosine distance).
+    Args: [text:str, limit:int = 5]
+    '''
+    with SessionLocal() as db:
+        tasks = search_tasks_logic(text=text, limit=limit, db=db)
+        return [TaskSchema.model_validate(t).model_dump() for t in tasks]
+
+def SearchProjects(text:str, limit:int = 5):
+    '''
+    Searches projects by semantic similarity to the given text.
+    Returns the most relevant projects ranked by relevance (cosine distance).
+    Args: [text:str, limit:int = 5]
+    '''
+    with SessionLocal() as db:
+        projects = search_projects_logic(text=text, limit=limit, db=db)
+        return [ProjectSchema.model_validate(p).model_dump() for p in projects]
+
+def SearchRoutines(text:str, limit:int = 5):
+    '''
+    Searches routines by semantic similarity to the given text.
+    Returns the most relevant routines ranked by relevance (cosine distance).
+    Args: [text:str, limit:int = 5]
+    '''
+    with SessionLocal() as db:
+        routines = search_routines_logic(text=text, limit=limit, db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
 def CheckEmail(max_unreads:int = 5):
@@ -305,7 +335,7 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
     
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines]
 ToolDict = {t.__name__: t for t in ToolList}
 
 tool_schemas = [
@@ -508,11 +538,57 @@ tool_schemas = [
                 'required': []
             }
         }
+    },
+    # --- SEMANTIC SEARCH ---
+    {
+        'type': 'function',
+        'function': {
+            'name': 'SearchTasks',
+            'description': 'Finds tasks by meaning, not keywords. Searches by semantic similarity to natural language queries (e.g. "cosas de la facu", "bugs urgentes"). Returns ranked results.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'text': {'type': 'string', 'description': 'Natural language query to search for.'},
+                    'limit': {'type': 'integer', 'description': 'Max results (default 5).'}
+                },
+                'required': ['text']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'SearchProjects',
+            'description': 'Finds projects by meaning, not keywords. Searches by semantic similarity to natural language queries (e.g. "proyectos personales", "laburo"). Returns ranked results.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'text': {'type': 'string', 'description': 'Natural language query to search for.'},
+                    'limit': {'type': 'integer', 'description': 'Max results (default 5).'}
+                },
+                'required': ['text']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'SearchRoutines',
+            'description': 'Finds routines by meaning, not keywords. Searches by semantic similarity to natural language queries (e.g. "hábitos diarios", "ejercicio"). Returns ranked results.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'text': {'type': 'string', 'description': 'Natural language query to search for.'},
+                    'limit': {'type': 'integer', 'description': 'Max results (default 5).'}
+                },
+                'required': ['text']
+            }
+        }
     }
 ]
 
 # --- Tool groups for phase-based execution ---
-TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail'}
+TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines'}
 TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
 TOOL_SKIP_NAMES = set()
 

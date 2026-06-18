@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from ..schemas import TaskCreate, TaskUpdate
-from ..models import Task
+from ..models import Task, get_embedding_model
 
 def get_task_logic(id:int, db: Session):
     db_task = db.query(Task).where(Task.id == id).first()
@@ -41,3 +41,8 @@ def delete_task_logic(id:int, db: Session):
     db.delete(db_task)
     db.commit()
     return db_task
+
+def search_tasks_logic(text: str, limit: int, db: Session):
+    model = get_embedding_model()
+    embedding = list(model.encode(text))
+    return db.query(Task).order_by(Task.embedding.cosine_distance(embedding)).limit(limit).all()

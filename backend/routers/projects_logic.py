@@ -1,7 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from ..schemas import ProjectCreate, ProjectUpdate
-from ..models import Project
+from ..models import Project, get_embedding_model
 
 def get_project_logic(id:int, db: Session):
     db_project = db.query(Project).where(Project.id == id).first()
@@ -38,3 +38,8 @@ def delete_project_logic(id:int, db: Session):
     db.delete(project_db)
     db.commit()
     return project_db
+
+def search_projects_logic(text: str, limit: int, db: Session):
+    model = get_embedding_model()
+    embedding = list(model.encode(text))
+    return db.query(Project).order_by(Project.embedding.cosine_distance(embedding)).limit(limit).all()
