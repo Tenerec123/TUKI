@@ -254,87 +254,10 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
     
-def CreateTree():
-    pass
-
-def ProcessBatch(commands:List[dict]):
-    output_log = []
-    for command in commands:
-        func = ToolDict.get(command['tool'], None)
-        if func is None:
-            output_log.append(f"{command} -> That command does not exist")
-            continue
-        try:
-            output = func(**command['args'])
-            output_log.append(f"{command} -> {output}")
-        except Exception as e:
-            output_log.append(f"{command} -> Error: {e}")
-    return output_log
-
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, UpdateProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, ProcessBatch]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine]
 ToolDict = {t.__name__: t for t in ToolList}
 
-def DocCreator():
-    doc = '''
-This is the only tool calling command, with this you can call all the functios many times.
-After this, you will receive all the tool ouptuts, so, for example make sure you don't ask for information and execute something for which you need that info in the same Bach.
-IDs are assigned during execution. If you need a new ID, you must call the creation in one turn and use the ID in the next turn.
-
-Each command has this format:
-    {tool:"tool_name", args:{dict with all args}}
-
-If there's an error, the tool with the error will not be executed but the others will.
-
-All tool:
-
-'''
-    for tool in ToolList:
-        doc+=f"{tool.__name__}:{tool.__doc__}\n"
-
-    return doc
-
-ProcessBatch.__doc__ = DocCreator()
-
 tool_schemas = [
-    # --- PROCESS BATCH ---
-    {
-        'type': 'function',
-        'function': {
-            'name': 'ProcessBatch',
-            'description': 'Executes multiple task, project, or routine mutations sequentially in a single API roundtrip. Use ONLY when the user requests multiple creations or mutations.',
-            'parameters': {
-                'type': 'object',
-                'properties': {
-                    'commands': {
-                        'type': 'array',
-                        'description': 'Ordered list of tools to execute.',
-                        'items': {
-                            'type': 'object',
-                            'properties': {
-                                'tool': {
-                                    'type': 'string',
-                                    'description': 'The exact name of the tool.',
-                                    'enum': [
-                                        'GetAllTasks', 'GetAllProjects', 'GetAllRoutines',
-                                        'CreateTask', 'DeleteTask', 'UpdateTask',
-                                        'CreateProject', 'DeleteProject', 'UpdateProject',
-                                        'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'
-                                    ]
-                                },
-                                'args': {
-                                    'type': 'object',
-                                    'description': 'Arguments dict mapping exactly to the chosen tool parameters.'
-                                }
-                            },
-                            'required': ['tool', 'args']
-                        }
-                    }
-                },
-                'required': ['commands']
-            }
-        }
-    },
-    
     # --- TASKS ---
     {
         'type': 'function',
@@ -522,7 +445,7 @@ tool_schemas = [
 # --- Tool groups for phase-based execution ---
 TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines'}
 TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
-TOOL_SKIP_NAMES = {'ProcessBatch', 'CreateTree'}
+TOOL_SKIP_NAMES = set()
 
 READ_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] in TOOL_READ_NAMES]
 WRITE_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] in TOOL_WRITE_NAMES]
