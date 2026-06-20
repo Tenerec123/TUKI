@@ -47,6 +47,9 @@ Examples:
 "qué pasó con el caso de GameStop" → {"route": "query"}
 "última version de fastapi" → {"route": "query"}
 "clima en Montevideo hoy" → {"route": "query"}
+"hace calor afuera?" → {"route": "query"}
+"va a llover mañana?" → {"route": "query"}
+"qué tiempo va a hacer en Madrid el finde?" → {"route": "query"}
 "explícame qué es blockchain" → {"route": "normal"}
 "dame consejos para enfocarme mejor" → {"route": "normal"}
 
@@ -94,9 +97,9 @@ Range: [1, 64]
 
 specific_rules = {
     'normal': "You will not need function calling. Respond as a normal text agent.",
-    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, WebSearch) to answer the user's request. Do NOT create, update, or delete anything. Use WebSearch when the user asks about current events, news, recent tech info, or factual questions that need up-to-date external information.",
+    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch) to answer the user's request. Do NOT create, update, or delete anything. Use Weather for current conditions and forecasts. Use WebSearch when the user asks about current events, news, recent tech info, or factual questions that need up-to-date external information.",
     'execution': """FOLLOW THESE STEPS:
-1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, WebSearch) to verify existing data and find the correct IDs.
+1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch) to verify existing data and find the correct IDs.
 2. THEN: use Create/Update/Delete tools to make the requested changes.
 3. Never guess IDs — always read first.""",
     'unsure': "You have full freedom. Use tools if the user needs data or actions. Respond normally if it's general chat. Decide based on what makes sense.",

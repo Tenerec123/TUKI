@@ -168,6 +168,54 @@ def SearchRoutines(text:str, limit:int = 5):
         routines = search_routines_logic(text=text, limit=limit, db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
+def Weather(city:str = None):
+    '''
+    Gets current weather and forecast for a city.
+    If no city is provided, uses the default from WEATHER_DEFAULT_CITY in .env.
+    Returns current conditions, temperature, humidity, wind, visibility, UV, and short forecast for the next 3 days.
+    Args: [city:str = None]
+    '''
+    import urllib.request
+    import json
+
+    if city is None:
+        city = os.environ.get('WEATHER_DEFAULT_CITY', '')
+        if not city:
+            return {'error': 'No city specified and WEATHER_DEFAULT_CITY not set in .env'}
+
+    try:
+        url = f"https://wttr.in/{city}?format=j1"
+        with urllib.request.urlopen(url, timeout=10) as response:
+            data = json.loads(response.read().decode())
+
+        current = data['current_condition'][0]
+        result = {
+            'city': data['nearest_area'][0]['areaName'][0]['value'],
+            'country': data['nearest_area'][0]['country'][0]['value'],
+            'temp_c': current['temp_C'],
+            'feels_like_c': current['FeelsLikeC'],
+            'humidity': current['humidity'],
+            'wind_kph': current['windspeedKmph'],
+            'wind_dir': current['winddir16Point'],
+            'visibility_km': current['visibility'],
+            'uv_index': current['uvIndex'],
+            'condition': current['weatherDesc'][0]['value'],
+            'forecast': []
+        }
+
+        for day in data['weather'][:3]:
+            result['forecast'].append({
+                'date': day['date'],
+                'max_temp': day['maxtempC'],
+                'min_temp': day['mintempC'],
+                'condition': day['hourly'][0]['weatherDesc'][0]['value'],
+                'chance_of_rain': day['hourly'][0]['chanceofrain']
+            })
+
+        return result
+    except Exception as e:
+        return {'error': f'Failed to get weather: {str(e)}'}
+
 def WebSearch(query:str, max_results:int = 5):
     '''
     Searches the web using DuckDuckGo.
@@ -353,7 +401,7 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
     
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, WebSearch]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch]
 ToolDict = {t.__name__: t for t in ToolList}
 
 tool_schemas = [
@@ -603,6 +651,21 @@ tool_schemas = [
             }
         }
     },
+    # --- WEATHER ---
+    {
+        'type': 'function',
+        'function': {
+            'name': 'Weather',
+            'description': 'Gets current weather and 3-day forecast for any city. If no city is given, uses the default city from configuration. Returns temperature, feels-like, humidity, wind, visibility, UV, and forecast.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'city': {'type': 'string', 'description': 'City name. Optional — if omitted, uses the default configured city.'}
+                },
+                'required': []
+            }
+        }
+    },
     # --- WEB SEARCH ---
     {
         'type': 'function',
@@ -622,7 +685,7 @@ tool_schemas = [
 ]
 
 # --- Tool groups for phase-based execution ---
-TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines', 'WebSearch'}
+TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines', 'Weather', 'WebSearch'}
 TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
 TOOL_SKIP_NAMES = set()
 
