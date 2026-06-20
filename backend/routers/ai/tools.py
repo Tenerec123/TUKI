@@ -176,6 +176,10 @@ def WebSearch(query:str, max_results:int = 5):
     the model's training data might not cover.
     Args: [query:str, max_results:int = 5]
     '''
+    import logging
+    logging.getLogger('primp').setLevel(logging.WARNING)
+    import warnings
+    warnings.filterwarnings('ignore', message="This package.*renamed to ddgs")
     from duckduckgo_search import DDGS
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=max_results))
