@@ -177,6 +177,7 @@ def Weather(city:str = None):
     '''
     import urllib.request
     import json
+    import urllib.parse
 
     if city is None:
         city = os.environ.get('WEATHER_DEFAULT_CITY', '')
@@ -184,7 +185,8 @@ def Weather(city:str = None):
             return {'error': 'No city specified and WEATHER_DEFAULT_CITY not set in .env'}
 
     try:
-        url = f"https://wttr.in/{city}?format=j1"
+        encoded = urllib.parse.quote(city)
+        url = f"https://wttr.in/{encoded}?format=j1"
         with urllib.request.urlopen(url, timeout=10) as response:
             data = json.loads(response.read().decode())
 
