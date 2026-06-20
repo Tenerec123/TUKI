@@ -13,3 +13,4 @@ faster-whisper>=1.0.0
 python-multipart>=0.0.9
 pgvector
 psycopg[binary]
+duckduckgo-search>=6.0.0

@@ -168,6 +168,22 @@ def SearchRoutines(text:str, limit:int = 5):
         routines = search_routines_logic(text=text, limit=limit, db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
+def WebSearch(query:str, max_results:int = 5):
+    '''
+    Searches the web using DuckDuckGo.
+    Returns title, snippet, and URL for each result.
+    Use for current events, recent technical info, or anything
+    the model's training data might not cover.
+    Args: [query:str, max_results:int = 5]
+    '''
+    from duckduckgo_search import DDGS
+    with DDGS() as ddgs:
+        results = list(ddgs.text(query, max_results=max_results))
+        return [
+            {'title': r['title'], 'url': r['href'], 'snippet': r['body']}
+            for r in results
+        ]
+
 def CheckEmail(max_unreads:int = 5):
     '''
     Checks the configured email inbox for unread messages.
@@ -335,7 +351,7 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
     
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, WebSearch]
 ToolDict = {t.__name__: t for t in ToolList}
 
 tool_schemas = [
@@ -584,11 +600,27 @@ tool_schemas = [
                 'required': ['text']
             }
         }
+    },
+    # --- WEB SEARCH ---
+    {
+        'type': 'function',
+        'function': {
+            'name': 'WebSearch',
+            'description': 'Searches the web using DuckDuckGo. Returns titles, snippets and URLs. Use for current events, news, recent technical info, or any factual question the model might not know from training.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'query': {'type': 'string', 'description': 'Search query, same as typing in a search engine.'},
+                    'max_results': {'type': 'integer', 'description': 'Max results (default 5).'}
+                },
+                'required': ['query']
+            }
+        }
     }
 ]
 
 # --- Tool groups for phase-based execution ---
-TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines'}
+TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines', 'WebSearch'}
 TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
 TOOL_SKIP_NAMES = set()
 

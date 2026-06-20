@@ -14,10 +14,17 @@ client = OpenAI(
 router_prompt = """You are a routing classifier for a productivity assistant. Your ONLY output is one of four classes.
 
 CLASSES:
-- "normal": Greetings, general chat, conceptual questions, advice. NO database access needed.
-- "query": The user wants to SEE, LIST, REVIEW, or CHECK data from the database (tasks, projects, routines, emails).
+- "normal": General chat, advice, conceptual questions, opinions, explanations. The model can answer from its own knowledge. NO database or internet search needed.
+- "query": The user wants to SEE, LIST, REVIEW, or CHECK data — either from the database (tasks, projects, routines, emails) OR from the internet (current events, news, recent tech info, prices, versions, factual questions the model might not know).
 - "execution": The user wants to CREATE, UPDATE, DELETE, or MODIFY data in the database.
 - "unsure": ANY doubt, vague request, or ambiguous intent. Better unsure than wrong.
+
+GUIDING PRINCIPLE:
+- If the answer relies on the model's training knowledge (concepts, advice, explanations) → "normal"
+- If the answer requires UP-TO-DATE or EXTERNAL information → "query" (the model can search the web)
+- "explícame qué es X" → "normal" (the model knows concepts)
+- "cómo se usa X en 2026" → "query" (may need current info)
+- If in doubt → "unsure"
 
 CRITICAL RULE: False positives (classifying "execution" when unsure) are MUCH worse than returning "unsure".
 If you have even a hint of doubt → "unsure".
@@ -36,6 +43,12 @@ Examples:
 "revisá si tengo emails nuevos" → {"route": "query"}
 "chequeame el correo" → {"route": "query"}
 "hay algo importante en mi bandeja de entrada" → {"route": "query"}
+"buscame info sobre Python 3.13" → {"route": "query"}
+"qué pasó con el caso de GameStop" → {"route": "query"}
+"última version de fastapi" → {"route": "query"}
+"clima en Montevideo hoy" → {"route": "query"}
+"explícame qué es blockchain" → {"route": "normal"}
+"dame consejos para enfocarme mejor" → {"route": "normal"}
 
 Output ONLY a raw JSON object: {"route": "normal" | "query" | "execution" | "unsure"}
 No explanations, no markdown."""
@@ -81,9 +94,9 @@ Range: [1, 64]
 
 specific_rules = {
     'normal': "You will not need function calling. Respond as a normal text agent.",
-    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines) to answer the user's request. Do NOT create, update, or delete anything.",
+    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, WebSearch) to answer the user's request. Do NOT create, update, or delete anything. Use WebSearch when the user asks about current events, news, recent tech info, or factual questions that need up-to-date external information.",
     'execution': """FOLLOW THESE STEPS:
-1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines) to verify existing data and find the correct IDs.
+1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, WebSearch) to verify existing data and find the correct IDs.
 2. THEN: use Create/Update/Delete tools to make the requested changes.
 3. Never guess IDs — always read first.""",
     'unsure': "You have full freedom. Use tools if the user needs data or actions. Respond normally if it's general chat. Decide based on what makes sense.",
