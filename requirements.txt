@@ -14,3 +14,4 @@ python-multipart>=0.0.9
 pgvector
 psycopg[binary]
 ddgs>=9.0.0
+yfinance

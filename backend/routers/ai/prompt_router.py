@@ -15,7 +15,7 @@ router_prompt = """You are a routing classifier for a productivity assistant. Yo
 
 CLASSES:
 - "normal": General chat, advice, conceptual questions, opinions, explanations. The model can answer from its own knowledge. NO database or internet search needed.
-- "query": The user wants to SEE, LIST, REVIEW, or CHECK data — either from the database (tasks, projects, routines, emails) OR from the internet (current events, news, recent tech info, prices, versions, factual questions the model might not know).
+- "query": The user wants to SEE, LIST, REVIEW, or CHECK data — either from the database (tasks, projects, routines, emails) OR from the internet (current events, news, recent tech info, prices, versions, factual questions the model might not know, stocks data).
 - "execution": The user wants to CREATE, UPDATE, DELETE, or MODIFY data in the database.
 - "unsure": ANY doubt, vague request, or ambiguous intent. Better unsure than wrong.
 
@@ -40,6 +40,7 @@ Examples:
 "qué hay en mi lista" → {"route": "query"}
 "hacé lo que sea mejor" → {"route": "unsure"}
 "organizame el día" → {"route": "unsure"}
+"Qué opciones de compra ves en el mercado ahora mismo?" → {"route": "query"}
 "revisá si tengo emails nuevos" → {"route": "query"}
 "chequeame el correo" → {"route": "query"}
 "hay algo importante en mi bandeja de entrada" → {"route": "query"}
@@ -50,6 +51,7 @@ Examples:
 "hace calor afuera?" → {"route": "query"}
 "va a llover mañana?" → {"route": "query"}
 "qué tiempo va a hacer en Madrid el finde?" → {"route": "query"}
+"Debería comprar acciones de nvidia?" → {"route": "query"}
 "explícame qué es blockchain" → {"route": "normal"}
 "dame consejos para enfocarme mejor" → {"route": "normal"}
 
