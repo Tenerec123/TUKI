@@ -8,8 +8,8 @@ import re
 import typing
 from typing import Callable, Union, get_origin, get_args
 
-from . import read_tools
-from . import exec_tools
+from . import tools_read
+from . import tools_exec
 
 # ── Type mapping for JSON schema generation ────────────────────────────
 
@@ -97,8 +97,8 @@ def _discover_tools():
     TOOL_WRITE_NAMES = set()
 
     modules = [
-        (read_tools, 'read'),
-        (exec_tools, 'write'),
+        (tools_read, 'read'),
+        (tools_exec, 'write'),
     ]
 
     for module, tool_type in modules:
