@@ -7,7 +7,7 @@ from ...database import SessionLocal
 from ..tasks_logic import get_all_tasks_logic, create_task_logic, delete_task_logic, update_task_logic, search_tasks_logic
 from ..projects_logic import get_all_project_logic, create_project_logic, delete_project_logic, update_project_logic, search_projects_logic
 from ..routines_logic import get_all_routine_logic, create_routine_logic, delete_routine_logic, update_routine_logic, search_routines_logic
-
+import yfinance as yf
 # ── Bootstrap icon fallback for routines ──────────────────────────────
 _ICON_KEYWORDS = [
     # (keywords, icon)
@@ -218,6 +218,41 @@ def Weather(city:str = None):
     except Exception as e:
         return {'error': f'Failed to get weather: {str(e)}'}
 
+def Stocks(stock:str):
+    '''
+    Gets current stock data and recent price history for a ticker symbol.
+    Type: read
+    Returns price, market cap, P/E ratio, 52-week range, volume, and 1-month history.
+    Args:
+        stock: Ticker symbol (e.g. AAPL, TSLA, MSFT, GOOGL)
+    '''
+    try:
+        dat = yf.Ticker(stock)
+        info = dat.info
+        return {
+            'price': info.get('currentPrice'),
+            'market_cap': info.get('marketCap'),
+            'pe_ratio': info.get('forwardPE'),
+            'dividend_yield': info.get('dividendYield'),
+            '52w_high': info.get('fiftyTwoWeekHigh'),
+            '52w_low': info.get('fiftyTwoWeekLow'),
+            'volume': info.get('volume'),
+            'avg_volume': info.get('averageVolume'),
+            'previous_close': info.get('previousClose'),
+            'open': info.get('open'),
+            'day_range': f"{info.get('dayLow')} - {info.get('dayHigh')}",
+            'sector': info.get('sector'),
+            'industry': info.get('industry'),
+            'employees': info.get('fullTimeEmployees'),
+            'exchange': info.get('exchange'),
+            'currency': info.get('currency'),
+            'short_name': info.get('shortName'),
+            'long_name': info.get('longName'),
+            'history_1mo': dat.history(period='1mo').reset_index().to_dict(orient='records'),
+        }
+    except Exception as e:
+        return {'error': f'Failed to get stock data: {str(e)}'}
+    
 def WebSearch(query:str, max_results:int = 5):
     '''
     Searches the web using DuckDuckGo.
@@ -403,7 +438,7 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
     
-ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch]
+ToolList:List[Callable] = [GetAllTasks, CreateTask, DeleteTask, UpdateTask, GetAllProjects, CreateProject, DeleteProject, GetAllRoutines, CreateRoutine, DeleteRoutine, UpdateRoutine, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch, Stocks]
 ToolDict = {t.__name__: t for t in ToolList}
 
 tool_schemas = [
@@ -683,11 +718,26 @@ tool_schemas = [
                 'required': ['query']
             }
         }
+    },
+    # --- STOCKS ---
+    {
+        'type': 'function',
+        'function': {
+            'name': 'Stocks',
+            'description': 'Gets current stock data and 1-month price history for a ticker symbol.',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'stock': {'type': 'string', 'description': 'Ticker symbol (e.g. AAPL, TSLA, MSFT, GOOGL).'},
+                },
+                'required': ['stock']
+            }
+        }
     }
 ]
 
 # --- Tool groups for phase-based execution ---
-TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines', 'Weather', 'WebSearch'}
+TOOL_READ_NAMES = {'GetAllTasks', 'GetAllProjects', 'GetAllRoutines', 'CheckEmail', 'SearchTasks', 'SearchProjects', 'SearchRoutines', 'Weather', 'WebSearch', 'Stocks'}
 TOOL_WRITE_NAMES = {'CreateTask', 'DeleteTask', 'UpdateTask', 'CreateProject', 'DeleteProject', 'UpdateProject', 'CreateRoutine', 'DeleteRoutine', 'UpdateRoutine'}
 TOOL_SKIP_NAMES = set()
 
