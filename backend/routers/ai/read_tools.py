@@ -1,8 +1,7 @@
 """Read-only tool functions for the AI agent.
 
 Each function has a standardized docstring:
-    - Description (everything before 'Type:')
-    - Type: read
+    - First line(s): description
     - Args: (optional, only for non-obvious parameters)
 """
 
@@ -18,8 +17,7 @@ import yfinance as yf
 def GetAllTasks():
     '''
     Returns all tasks in the database.
-    Type: read
-    '''
+'''
     with SessionLocal() as db:
         tasks = get_all_tasks_logic(first_n=None, db=db)
         return [TaskSchema.model_validate(t).model_dump() for t in tasks]
@@ -29,8 +27,7 @@ def SearchTasks(text: str, limit: int = 5):
     '''
     Searches tasks by semantic similarity to natural language.
     Returns the most relevant tasks ranked by relevance (cosine distance).
-    Type: read
-    '''
+'''
     with SessionLocal() as db:
         tasks = search_tasks_logic(text=text, limit=limit, db=db)
         return [TaskSchema.model_validate(t).model_dump() for t in tasks]
@@ -39,8 +36,7 @@ def SearchTasks(text: str, limit: int = 5):
 def GetAllProjects():
     '''
     Returns all projects in the database.
-    Type: read
-    '''
+'''
     with SessionLocal() as db:
         projects = get_all_project_logic(first_n=None, db=db)
         return [ProjectSchema.model_validate(p).model_dump() for p in projects]
@@ -50,8 +46,7 @@ def SearchProjects(text: str, limit: int = 5):
     '''
     Searches projects by semantic similarity to natural language.
     Returns the most relevant projects ranked by relevance (cosine distance).
-    Type: read
-    '''
+'''
     with SessionLocal() as db:
         projects = search_projects_logic(text=text, limit=limit, db=db)
         return [ProjectSchema.model_validate(p).model_dump() for p in projects]
@@ -60,8 +55,7 @@ def SearchProjects(text: str, limit: int = 5):
 def GetAllRoutines():
     '''
     Returns all routines in the database.
-    Type: read
-    '''
+'''
     with SessionLocal() as db:
         routines = get_all_routine_logic(db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
@@ -71,8 +65,7 @@ def SearchRoutines(text: str, limit: int = 5):
     '''
     Searches routines by semantic similarity to natural language.
     Returns the most relevant routines ranked by relevance (cosine distance).
-    Type: read
-    '''
+'''
     with SessionLocal() as db:
         routines = search_routines_logic(text=text, limit=limit, db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
@@ -83,7 +76,6 @@ def Weather(city: str = None):
     Gets current weather and forecast for a city.
     If no city is provided, uses the default from WEATHER_DEFAULT_CITY in .env.
     Returns current conditions, temperature, humidity, wind, visibility, UV, and short forecast for the next 3 days.
-    Type: read
     Args:
         city: City name. Optional — defaults to configured city if omitted.
     '''
@@ -136,8 +128,7 @@ def WebSearch(query: str, max_results: int = 5):
     Searches the web using DuckDuckGo.
     Returns title, snippet, and URL for each result.
     Use for current events, recent technical info, or anything the model's training data might not cover.
-    Type: read
-    '''
+'''
     import logging
     logging.getLogger('primp').setLevel(logging.WARNING)
     from ddgs import DDGS
@@ -154,7 +145,6 @@ def CheckEmail(max_unreads: int = 5):
     Checks the configured email inbox for unread messages.
     Returns sender, subject, and a snippet for each unread.
     Supports any IMAP server (Gmail, Outlook, custom).
-    Type: read
     Args:
         max_unreads: Maximum number of unread emails to fetch (default 5).
     '''
@@ -205,8 +195,7 @@ def Stocks(stock: str):
     '''
     Gets current stock data and recent price history for a ticker symbol.
     Returns price, market cap, P/E ratio, 52-week range, volume, and 1-month history.
-    Type: read
-    '''
+'''
     try:
         dat = yf.Ticker(stock)
         info = dat.info

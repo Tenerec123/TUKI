@@ -1,8 +1,7 @@
 """Write/execution tool functions for the AI agent.
 
 Each function has a standardized docstring:
-    - Description (everything before 'Type:')
-    - Type: write
+    - First line(s): description
     - Args: (optional, only for non-obvious parameters)
 """
 
@@ -18,7 +17,6 @@ from ._helpers import _icon_fallback, _resolve_project
 def CreateTask(name: str, description: str, priority: int, deadline: str, project_id: int = None, project_name: str = None):
     '''
     Creates a task with the given characteristics. Format deadline as dd/mm/yyyy.
-    Type: write
     Args:
         project_id: Project ID (preferred if known). Leave empty if not sure.
         project_name: Alternative to project_id — exact name lookup. Ignored if project_id is set.
@@ -40,8 +38,7 @@ def CreateTask(name: str, description: str, priority: int, deadline: str, projec
 def DeleteTask(task_id: int):
     '''
     Deletes a specific task. Be careful — this is irreversible.
-    Type: write
-    '''
+'''
     with SessionLocal() as db:
         deleted_task = delete_task_logic(id=task_id, db=db)
         return f"Task {deleted_task.name} with id {deleted_task.id} successfully deleted"
@@ -50,8 +47,7 @@ def DeleteTask(task_id: int):
 def UpdateTask(task_id: int, name: str = None, description: str = None, priority: int = None, deadline: str = None, finished: bool = None):
     '''
     Updates selected parameters of a specific task. Only provided fields will be changed. Format deadline as dd/mm/yyyy.
-    Type: write
-    '''
+'''
     with SessionLocal() as db:
         update_task_logic(
             id=task_id,
@@ -70,7 +66,6 @@ def CreateRoutine(name: str, description: str, priority: int, frequency: str, in
     '''
     Creates a routine with the given characteristics. Frequency in valid RRULE syntax (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR).
     init_date in dd/mm/yyyy format.
-    Type: write
     Args:
         project_id: Project ID (preferred if known). Leave empty if not sure.
         project_name: Alternative to project_id — exact name lookup. Ignored if project_id is set.
@@ -97,8 +92,7 @@ def CreateRoutine(name: str, description: str, priority: int, frequency: str, in
 def DeleteRoutine(routine_id: int):
     '''
     Deletes a specific routine. Be careful — this is irreversible.
-    Type: write
-    '''
+'''
     with SessionLocal() as db:
         deleted_routine = delete_routine_logic(id=routine_id, db=db)
         return f"Routine {deleted_routine.name} with id {deleted_routine.id} successfully deleted"
@@ -108,7 +102,6 @@ def UpdateRoutine(routine_id: int, name: str = None, description: str = None, pr
     '''
     Updates selected parameters of a specific routine. Only provided fields will be changed.
     Frequency in valid RRULE syntax. init_date in dd/mm/yyyy format.
-    Type: write
     Args:
         project_id: Project ID to reassign (optional).
         icon: Bootstrap icon CSS class name, NOT an emoji or unicode (optional, e.g. bell-fill, clock, calendar-check).
@@ -133,7 +126,6 @@ def CreateProject(name: str, description: str = None, priority: int = None, pare
     '''
     Creates a project with the given characteristics.
     Be careful with parent_id — creating a parent loop will cause problems.
-    Type: write
     Args:
         parent_id: Parent project ID (preferred if known). Leave empty if no parent or if unsure.
         parent_name: Alternative to parent_id — exact name lookup. Ignored if parent_id is set.
@@ -157,8 +149,7 @@ def CreateProject(name: str, description: str = None, priority: int = None, pare
 def DeleteProject(project_id: int):
     '''
     Deletes a project and all its sub-projects/tasks (cascade). Be careful — this is irreversible.
-    Type: write
-    '''
+'''
     with SessionLocal() as db:
         deleted = delete_project_logic(id=project_id, db=db)
         return f"Project {deleted.id} and its dependencies successfully deleted"
@@ -167,7 +158,6 @@ def DeleteProject(project_id: int):
 def UpdateProject(project_id: int, name: str = None, description: str = None, priority: int = None, parent_id: int = None):
     '''
     Updates selected project parameters. Only provided fields will be changed.
-    Type: write
     Args:
         parent_id: Optional parent project ID. Do not guess or invent if not known.
     '''

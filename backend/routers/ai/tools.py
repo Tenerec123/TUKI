@@ -49,29 +49,22 @@ def _py_type_to_json(tp):
 
 
 def _parse_docstring(doc: str):
-    """Parse standardized docstring into description, tool_type, and arg_descriptions.
-
+    """Parse standardized docstring into description and arg_descriptions.
+    
     Format:
-        First lines: description (everything before 'Type:').
-        Type: read|write
+        First lines: description (everything before 'Args:').
         Args:
             param_name: Description text.
-
+    
     Returns:
-        (description, tool_type, arg_descriptions_dict)
+        (description, arg_descriptions_dict)
     """
     desc_lines = []
-    tool_type = None
     arg_descriptions = {}
     current_section = "desc"
 
     for line in doc.split('\n'):
         stripped = line.strip()
-
-        if stripped.startswith('Type:'):
-            tool_type = stripped.split(':', 1)[1].strip().lower()
-            current_section = "type"
-            continue
 
         if stripped.startswith('Args:'):
             current_section = "args"
@@ -86,15 +79,15 @@ def _parse_docstring(doc: str):
                 arg_descriptions[m.group(1)] = m.group(2).strip()
 
     description = ' '.join(desc_lines) if desc_lines else ""
-    return description, tool_type, arg_descriptions
+    return description, arg_descriptions
 
 
 def _discover_tools():
     """Scan read_tools and exec_tools modules for tool functions.
-
-    Each function must have a docstring with 'Type: read' or 'Type: write'.
-    Function signature + docstring generate the JSON schema automatically.
-
+    
+    Tool type (read/write) is determined by which module the function
+    lives in. Function signature + docstring generate the JSON schema.
+    
     Returns:
         (ToolDict, tool_schemas, TOOL_READ_NAMES, TOOL_WRITE_NAMES)
     """
@@ -108,7 +101,7 @@ def _discover_tools():
         (exec_tools, 'write'),
     ]
 
-    for module, default_type in modules:
+    for module, tool_type in modules:
         for name, func in inspect.getmembers(module, inspect.isfunction):
             if name.startswith('_'):
                 continue
@@ -117,11 +110,7 @@ def _discover_tools():
             if not doc:
                 continue
 
-            description, doc_type, arg_descriptions = _parse_docstring(doc)
-            tool_type = doc_type or default_type
-
-            if tool_type not in ('read', 'write'):
-                continue
+            description, arg_descriptions = _parse_docstring(doc)
 
             sig = inspect.signature(func)
 
