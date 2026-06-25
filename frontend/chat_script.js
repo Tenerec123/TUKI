@@ -16,15 +16,11 @@ let id_of_menu_disp = null;
 let can_record = false;
 let is_recording = false;
 let recorder = null;
+let mediaStream = null;
 let chunks = [];
 
-// 2. Función de inicialización
-async function SetupAudio() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        return;
-    }
-}
 function SetupStream(stream) {
+    mediaStream = stream;
     recorder = new MediaRecorder(stream);
 
     recorder.ondataavailable = e => {
@@ -37,7 +33,7 @@ function SetupStream(stream) {
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
         formData.append('conv_id', idOfSelectedConv)
-        const response = await fetch('http://localhost:8000/api/ai/stt', {
+        const response = await fetch(`${window.API_URL}/api/ai/stt`, {
             method: 'POST',
             body: formData,
         }).then(response => response.json())
@@ -45,26 +41,46 @@ function SetupStream(stream) {
             sendPrompt(data)
         });
     };
+    recorder.start();
     can_record = true;
+    mic.innerHTML = `<i class="bi bi-mic-fill"></i>`;
 }
+
 async function ToggleMic() {
-    is_recording = !is_recording;
+    // ── Stop recording ──
     if (is_recording) {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.log("Acceso al micro concedido");
-            SetupStream(stream);
-        } catch (err) {
-            console.error("Error al obtener stream:", err);
+        if (recorder && recorder.state === 'recording') {
+            recorder.stop();
         }
-        if (can_record){
-            recorder.start();
-            mic.innerHTML = `<i class="bi bi-mic-fill"></i>`
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(t => t.stop());
         }
-        
-    } else {
-        recorder.stop();
-        mic.innerHTML = `<i class="bi bi-mic"></i>`
+        mediaStream = null;
+        recorder = null;
+        can_record = false;
+        is_recording = false;
+        mic.innerHTML = `<i class="bi bi-mic"></i>`;
+        return;
+    }
+
+    // ── Start recording ──
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("Micrófono no soportado en este navegador");
+        return;
+    }
+
+    try {
+        is_recording = true;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("Acceso al micro concedido");
+        SetupStream(stream);
+    } catch (err) {
+        console.error("Error al obtener stream:", err);
+        is_recording = false;
+        // En iOS, getUserMedia requiere HTTPS
+        if (/iPhone|iPad|iPod/i.test(navigator.userAgent) && location.protocol !== 'https:') {
+            alert("El micrófono requiere HTTPS en iOS. Usá la PC o conectate vía HTTPS.");
+        }
     }
 }
 mic.addEventListener('click', ToggleMic);
