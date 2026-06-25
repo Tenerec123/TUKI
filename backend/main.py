@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.routers.ai import ai
-from backend.routers import tasks, routines, projects, conversations
+from backend.routers import config, tasks, routines, projects, conversations
 from pathlib import Path
 import anyio
 from dotenv import load_dotenv
@@ -59,6 +59,7 @@ async def read_index():
 async def read_index():
     return FileResponse('frontend/kale.html')
 
+api.include_router(config.router)
 api.include_router(tasks.router)
 api.include_router(routines.router)
 api.include_router(projects.router)

@@ -18,6 +18,11 @@ def get_embedding_model():
     return _embedding_model
 # Create your models here.
 
+class Config(Base):
+    __tablename__ = "config"
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(128), nullable=False)
+
 # Mixin: Provee columnas comunes sin ser una tabla por sí misma
 class TimestampMixin:
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -121,3 +126,6 @@ def handle_project_embeddings(mapper, connection, target):
             text_to_embed += " " + target.description
             
         target.embedding = list(model.encode(text_to_embed))
+
+# Create all tables after all models are defined
+Base.metadata.create_all(engine)

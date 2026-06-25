@@ -380,18 +380,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     Render();
     SetupAudio();
 
-    const possibleModel = document.querySelectorAll('.model-item');
-    possibleModel.forEach(model => {
-        model.addEventListener('click', () => {
-            const selectedBefore = document.querySelector('.selected-model');
-            if (selectedBefore == model) {return}
-            selectedBefore.classList.remove('selected-model')
-            model.classList.add('selected-model');
-            document.getElementById('model-current-name').textContent = model.textContent
-            document.getElementById('model-selector-details').open = false;
+    const agentSelectors = document.querySelectorAll('.sub-details');
+    agentSelectors.forEach(agentS => {
+
+        possibleModels = agentS.querySelectorAll('.model-item');
+
+        possibleModels.forEach(model => {
+            model.addEventListener('click', () => {
+                const selectedBefore = agentS.querySelector('.selected-model');
+                if (selectedBefore == model) {return}
+                selectedBefore.classList.remove('selected-model')
+                model.classList.add('selected-model');
+                agentS.querySelector('.model-current-name').textContent = model.textContent;
+                agentS.open = false;
+
+            })
         })
     })
 })
+
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();
     const x = rect.left; 
@@ -425,6 +432,27 @@ function OpenMenu(button, id, position){
         id_of_menu_disp = id;
     }
 }
+
+function SendModelConfig(){
+    function getSelectedModel(spanId) {
+        const sub = document.getElementById(spanId).closest('.sub-details');
+        const sel = sub.querySelector('.selected-model');
+        return sel ? sel.getAttribute('data-model') : 'minimax/minimax-m2.5';
+    }
+    fetch(`${window.API_URL}/api/config/models`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            "get_data": getSelectedModel('get-data-name'),
+            "exec_tools": getSelectedModel('exec-tools-name'),
+            "final_resp": getSelectedModel('final-resp-name'),
+            "general": getSelectedModel('general-name')
+        })
+    });
+}
+
 document.addEventListener('click', (e) => {
     if (menu_displayed != null && !e.target.closest('.conv-options') && !menu_displayed.contains(e.target)){
         menu_displayed.remove();
@@ -432,6 +460,11 @@ document.addEventListener('click', (e) => {
         id_of_menu_disp = null;
     }
     if (!e.target.closest('.model-selector-details')){
-        document.getElementById('model-selector-details').open = false;
+        SendModelConfig();
+        console.log("Hello")
+        all = document.querySelectorAll('.model-selector-details')
+        all.forEach(obj =>{
+            obj.open = false;
+        })
     }
 })

@@ -17,8 +17,7 @@ class Base(DeclarativeBase):
     pass
 # from .models import Project, Task, Routine, Conversation, Message
 
-# Create tables automatically when the app starts (development mode)
-Base.metadata.create_all(engine)
+# Create tables will be called after all models are defined
 
 # Session factory
 SessionLocal = sessionmaker(

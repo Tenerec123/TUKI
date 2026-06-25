@@ -945,15 +945,15 @@ SELECT CALENDAR
     padding-top: 8px;
 }
 
-#model-selector-details {
+.model-selector-details {
     position: relative;
     display: inline-block;
 }
 
-#model-selector-details summary::-webkit-details-marker {
+.model-selector-details summary::-webkit-details-marker {
     display: none;
 }
-#model-dropdown-btn {
+.model-dropdown-btn {
     list-style: none;
     display: flex;
     align-items: center;
@@ -968,20 +968,20 @@ SELECT CALENDAR
     transition: all 0.2s ease;
 }
 
-#model-dropdown-btn:hover {
+.model-dropdown-btn:hover {
     text-shadow: var(--glow-yellow-on);
 }
 
-#model-dropdown-btn i {
+.model-dropdown-btn i {
     font-size: 0.8rem;
     transition: transform 0.2s ease;
 }
 
-#model-selector-details[open] #model-dropdown-btn i {
+.model-selector-details[open] .model-dropdown-btn i {
     transform: rotate(180deg);
 }
 
-#model-dropdown-menu {
+.model-dropdown-menu {
     position: absolute;
     bottom: calc(100% + 10px);
     right: 0;
@@ -1036,12 +1036,12 @@ SELECT CALENDAR
     text-shadow: var(--glow-red-on);
 }
 
-#model-dropdown-menu::-webkit-scrollbar {
+.model-dropdown-menu::-webkit-scrollbar {
     width: 4px;
 }
-#model-dropdown-menu::-webkit-scrollbar-track {
+.model-dropdown-menu::-webkit-scrollbar-track {
     background: var(--chacoal-grey);
 }
-#model-dropdown-menu::-webkit-scrollbar-thumb {
+.model-dropdown-menu::-webkit-scrollbar-thumb {
     background-color: var(--neon-yellow);
 }

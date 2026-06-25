@@ -43,22 +43,70 @@
     <textarea id="prompt-writer" name="text" placeholder="Ask something to TUKI" rows="1"></textarea>
     
     <div class="form-controls">
-      <details id="model-selector-details">
-        <summary id="model-dropdown-btn" title="Seleccionar Modelo">
-          <span id="model-current-name">MiniMax M2.5</span>
+      <details class="model-selector-details">
+        <summary class="model-dropdown-btn" title="Seleccionar Modelo">
+          
           <i class="bi bi-chevron-up"></i>
         </summary>
-        <ul id="model-dropdown-menu">
-          <li class="model-item selected-model" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
-          <li class="model-item" data-model="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</li>
-          <li class="model-item" data-model="meta-llama/llama-3.1-8b-instruct">Llama 3.3 8B</li>
-          <li class="model-item" data-model="google/gemini-2.5-flash">Gemini 2.5 Flash</li>
-          <li class="model-item" data-model="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</li>
-          <li class="model-item" data-model="deepseek/deepseek-v3">DeepSeek V3</li>
-        </ul>
+        <div class="model-dropdown-menu"  style="width: 200px;">
+          <details class="sub-details" class="model-selector-details">
+            <summary>
+              <span>get_data: </span>
+              <span class="model-current-name" id="get-data-name">MiniMax M2.5</span>
+            </summary>
+            <ul>
+              <li class="model-item selected-model" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
+              <li class="model-item" data-model="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</li>
+              <li class="model-item" data-model="meta-llama/llama-3.1-8b-instruct">Llama 3.3 8B</li>
+              <li class="model-item" data-model="google/gemini-2.5-flash">Gemini 2.5 Flash</li>
+              <li class="model-item" data-model="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</li>
+              <li class="model-item" data-model="deepseek/deepseek-v3">DeepSeek V3</li>
+            </ul>
+          </details>
+          <details class="sub-details" class="model-selector-details">
+            <summary>
+              <span>exec_tools: </span>
+              <span class="model-current-name" id="exec-tools-name">MiniMax M2.5</span>
+            </summary>
+            <ul>
+              <li class="model-item selected-model" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
+              <li class="model-item" data-model="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</li>
+              <li class="model-item" data-model="meta-llama/llama-3.1-8b-instruct">Llama 3.3 8B</li>
+              <li class="model-item" data-model="google/gemini-2.5-flash">Gemini 2.5 Flash</li>
+              <li class="model-item" data-model="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</li>
+              <li class="model-item" data-model="deepseek/deepseek-v3">DeepSeek V3</li>
+            </ul>
+          </details>
+          <details class="sub-details" class="model-selector-details">
+            <summary>
+              <span>final_resp: </span>
+              <span class="model-current-name" id="final-resp-name">MiniMax M2.5</span>
+            </summary>
+            <ul>
+              <li class="model-item selected-model" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
+              <li class="model-item" data-model="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</li>
+              <li class="model-item" data-model="meta-llama/llama-3.1-8b-instruct">Llama 3.3 8B</li>
+              <li class="model-item" data-model="google/gemini-2.5-flash">Gemini 2.5 Flash</li>
+              <li class="model-item" data-model="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</li>
+              <li class="model-item" data-model="deepseek/deepseek-v3">DeepSeek V3</li>
+            </ul>
+          </details>
+          <details class="sub-details" class="model-selector-details">
+            <summary>
+              <span>general: </span>
+              <span class="model-current-name" id="general-name">MiniMax M2.5</span>
+            </summary>
+            <ul>
+              <li class="model-item selected-model" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
+              <li class="model-item" data-model="meta-llama/llama-3.3-70b-instruct">Llama 3.3 70B</li>
+              <li class="model-item" data-model="meta-llama/llama-3.1-8b-instruct">Llama 3.3 8B</li>
+              <li class="model-item" data-model="google/gemini-2.5-flash">Gemini 2.5 Flash</li>
+              <li class="model-item" data-model="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</li>
+              <li class="model-item" data-model="deepseek/deepseek-v3">DeepSeek V3</li>
+            </ul>
+          </details>
+        </div>
       </details>
-
-      <input type="hidden" name="model" id="selected-model" value="minimax/minimax-m2.5">
 
       <button type="button" id="toggle-mic" class="btn-tuki">
         <i class="bi bi-mic"></i>
