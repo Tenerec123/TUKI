@@ -454,12 +454,9 @@ document.addEventListener('click', (e) => {
         menu_displayed = null;
         id_of_menu_disp = null;
     }
-    if (!e.target.closest('.model-selector-details')){
+    const modelSelector = document.querySelector('.model-selector-details');
+    if (!e.target.closest('.model-selector-details') && modelSelector && modelSelector.open){
         SendModelConfig();
-        console.log("Hello")
-        all = document.querySelectorAll('.model-selector-details')
-        all.forEach(obj =>{
-            obj.open = false;
-        })
+        modelSelector.open = false;
     }
 })
