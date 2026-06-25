@@ -291,7 +291,7 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
     tool_hist = _get_tool_history(read_msgs, len(conversation.messages))
     write_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['write'], conversation)
     write_msgs.extend(tool_hist)
-    write_msgs, final_text = await _tool_phase(write_msgs, model_config['exec_tools'], ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True)
+    write_msgs, final_text = await _tool_phase(write_msgs, model_config['exec_tools'], WRITE_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True)
 
     # If the model already responded with text, that IS the response — no extra inference
     if final_text:
