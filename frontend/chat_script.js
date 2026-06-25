@@ -18,12 +18,6 @@ let is_recording = false;
 let recorder = null;
 let chunks = [];
 
-// 2. Función de inicialización
-async function SetupAudio() {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        return;
-    }
-}
 function SetupStream(stream) {
     recorder = new MediaRecorder(stream);
 
@@ -37,7 +31,7 @@ function SetupStream(stream) {
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
         formData.append('conv_id', idOfSelectedConv)
-        const response = await fetch('http://localhost:8000/api/ai/stt', {
+        const response = await fetch(`${window.API_URL}/api/ai/stt`, {
             method: 'POST',
             body: formData,
         }).then(response => response.json())
@@ -48,23 +42,35 @@ function SetupStream(stream) {
     can_record = true;
 }
 async function ToggleMic() {
-    is_recording = !is_recording;
     if (is_recording) {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            console.log("Acceso al micro concedido");
-            SetupStream(stream);
-        } catch (err) {
-            console.error("Error al obtener stream:", err);
+        // ── Stop ──
+        if (recorder) {
+            recorder.stop();
         }
-        if (can_record){
-            recorder.start();
-            mic.innerHTML = `<i class="bi bi-mic-fill"></i>`
-        }
-        
-    } else {
-        recorder.stop();
-        mic.innerHTML = `<i class="bi bi-mic"></i>`
+        is_recording = false;
+        can_record = false;
+        recorder = null;
+        chunks = [];
+        mic.innerHTML = `<i class="bi bi-mic"></i>`;
+        return;
+    }
+
+    // ── Start ──
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn("Micrófono no disponible: navigator.mediaDevices.getUserMedia no existe.");
+        console.warn("En Android, navigator.mediaDevices solo está disponible en contextos seguros (HTTPS o localhost).");
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log("Acceso al micro concedido");
+        SetupStream(stream);
+        is_recording = true;
+        recorder.start();
+        mic.innerHTML = `<i class="bi bi-mic-fill"></i>`;
+    } catch (err) {
+        console.error("Error al obtener stream:", err);
     }
 }
 mic.addEventListener('click', ToggleMic);
@@ -455,6 +461,7 @@ document.addEventListener('click', (e) => {
         id_of_menu_disp = null;
     }
     const modelSelector = document.querySelector('.model-selector-details');
+    console.log(modelSelector, modelSelector.open)
     if (!e.target.closest('.model-selector-details') && modelSelector && modelSelector.open){
         SendModelConfig();
         modelSelector.open = false;

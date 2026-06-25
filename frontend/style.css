@@ -320,11 +320,6 @@ PROMPT
     align-items: center;
     justify-content: center;
     box-shadow: var(--glow-red-off);
-    touch-action: manipulation;
-}
-
-#toggle-mic i {
-    pointer-events: none;
 }
 
 #submit-btn:hover, #toggle-mic:hover{
