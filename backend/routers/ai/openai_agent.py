@@ -226,7 +226,7 @@ def get_model_config() -> dict:
     defaults = {
         'get_data': 'deepseek/deepseek-v4-flash',
         'exec_tools': 'deepseek/deepseek-v4-flash',
-        'final_resp': 'google/gemini-2.5-flash-lite',
+        'final_resp': 'deepseek/deepseek-v4-flash',
         'general': 'deepseek/deepseek-v4-flash',
     }
 
