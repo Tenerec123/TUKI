@@ -224,10 +224,10 @@ def get_model_config() -> dict:
     from ...models import Config
 
     defaults = {
-        'get_data': 'minimax/minimax-m2.5',
-        'exec_tools': 'minimax/minimax-m2.5',
-        'final_resp': 'minimax/minimax-m2.5',
-        'general': 'minimax/minimax-m2.5',
+        'get_data': 'deepseek/deepseek-v4-flash',
+        'exec_tools': 'deepseek/deepseek-v4-flash',
+        'final_resp': 'google/gemini-2.5-flash-lite',
+        'general': 'deepseek/deepseek-v4-flash',
     }
 
     try:

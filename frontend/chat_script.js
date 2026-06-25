@@ -432,7 +432,7 @@ function SendModelConfig(){
     function getSelectedModel(spanId) {
         const sub = document.getElementById(spanId).closest('.sub-details');
         const sel = sub.querySelector('.selected-model');
-        return sel ? sel.getAttribute('data-model') : 'minimax/minimax-m2.5';
+        return sel ? sel.getAttribute('data-model') : 'deepseek/deepseek-v4-flash';
     }
     fetch(`${window.API_URL}/api/config/models`, {
         method: 'POST',
