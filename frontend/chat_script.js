@@ -42,7 +42,7 @@ function SetupStream(stream) {
             body: formData,
         }).then(response => response.json())
         .then(data => {
-            sendPrompt(data, document.querySelector('.selected-model').getAttribute('data-model'))
+            sendPrompt(data)
         });
     };
     can_record = true;
@@ -260,29 +260,25 @@ async function getConversations(){
 chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(chatForm);
-    const model = document.querySelector('.selected-model').getAttribute('data-model')
-    console.log(model)
     const data = Object.fromEntries(formData.entries());
     if (!data.text || data.text.trim() === "") {
         return;
     }
-    sendPrompt(data.text, model);
+    sendPrompt(data.text);
 });
 textarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         const formData = new FormData(chatForm);
-        const model = document.querySelector('.selected-model').getAttribute('data-model')
-        console.log(model)
         const data = Object.fromEntries(formData.entries());
         if (!data.text || data.text.trim() === "") {
             return;
         }
-        sendPrompt(data.text, model);
+        sendPrompt(data.text);
     }
 });
 
-async function sendPrompt(text, model){
+async function sendPrompt(text){
     if (idOfSelectedConv == -1){return}
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
@@ -299,8 +295,7 @@ async function sendPrompt(text, model){
         },
         body: JSON.stringify({
             conversation_id:idOfSelectedConv,
-            user_message:text,
-            model:model
+            user_message:text
         })
     });
     console.log("DONE")

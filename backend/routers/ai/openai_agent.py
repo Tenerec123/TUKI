@@ -216,25 +216,53 @@ async def _stream_response(messages: list, model: str, phase_label: str = ""):
     _log(f"═══ STREAM [{phase_label}] done — {token_count} tokens yielded")
 
 
+# ── Model Config ────────────────────────────────────────────────────────
+
+def get_model_config() -> dict:
+    """Read per-phase model config from DB, falling back to defaults."""
+    from ...database import SessionLocal
+    from ...models import Config
+
+    defaults = {
+        'get_data': 'minimax/minimax-m2.5',
+        'exec_tools': 'minimax/minimax-m2.5',
+        'final_resp': 'minimax/minimax-m2.5',
+        'general': 'minimax/minimax-m2.5',
+    }
+
+    try:
+        db = SessionLocal()
+        rows = db.query(Config).all()
+        for row in rows:
+            if row.key in defaults:
+                defaults[row.key] = row.value
+    except Exception as e:
+        _log(f"[CONFIG] Error reading model config: {e}")
+    finally:
+        db.close()
+
+    return defaults
+
+
 # ── Route-specific paths ────────────────────────────────────────────────
 
-async def normal_path(conversation: ConversationSchema, model: str):
+async def normal_path(conversation: ConversationSchema, model_config: dict):
     """Pure chat — one streaming phase, no tools."""
     _log("═══ PATH: normal")
     base = get_base_rules() + "\n" + PHASE_PROMPTS['chat']
     msgs = _build_messages(base, conversation)
-    async for token in _stream_response(msgs, model, "chat"):
+    async for token in _stream_response(msgs, model_config['general'], "chat"):
         yield token
 
 
-async def query_path(conversation: ConversationSchema, model: str):
+async def query_path(conversation: ConversationSchema, model_config: dict):
     """Phase 1: Read data (no stream)  →  Phase 2: Stream response."""
     _log("═══ PATH: query")
     base = get_base_rules()
 
     read_msgs, final_text = await _tool_phase(
         _build_messages(base + "\n" + PHASE_PROMPTS['read'], conversation),
-        model, READ_TOOLS_SCHEMAS, "read", max_rounds=1,
+        model_config['get_data'], READ_TOOLS_SCHEMAS, "read", max_rounds=1,
     )
 
     if final_text:
@@ -245,24 +273,24 @@ async def query_path(conversation: ConversationSchema, model: str):
     respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_query'], conversation)
     respond_msgs.extend(tool_hist)
 
-    async for token in _stream_response(respond_msgs, model, "respond-query"):
+    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-query"):
         yield token
 
 
-async def execution_path(conversation: ConversationSchema, model: str):
+async def execution_path(conversation: ConversationSchema, model_config: dict):
     """Phase 1: Read  →  Phase 2: Write  →  Phase 3: Stream response (optional)."""
     _log("═══ PATH: execution")
     base = get_base_rules()
 
     read_msgs, _ = await _tool_phase(
         _build_messages(base + "\n" + PHASE_PROMPTS['read'], conversation),
-        model, READ_TOOLS_SCHEMAS, "read", max_rounds=1,
+        model_config['get_data'], READ_TOOLS_SCHEMAS, "read", max_rounds=1,
     )
 
     tool_hist = _get_tool_history(read_msgs, len(conversation.messages))
     write_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['write'], conversation)
     write_msgs.extend(tool_hist)
-    write_msgs, final_text = await _tool_phase(write_msgs, model, ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True)
+    write_msgs, final_text = await _tool_phase(write_msgs, model_config['exec_tools'], ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True)
 
     # If the model already responded with text, that IS the response — no extra inference
     if final_text:
@@ -273,18 +301,18 @@ async def execution_path(conversation: ConversationSchema, model: str):
     respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_execution'], conversation)
     respond_msgs.extend(tool_hist)
 
-    async for token in _stream_response(respond_msgs, model, "respond-execution"):
+    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-execution"):
         yield token
 
 
-async def unsure_path(conversation: ConversationSchema, model: str):
+async def unsure_path(conversation: ConversationSchema, model_config: dict):
     """Full freedom — model decides everything."""
     _log("═══ PATH: unsure")
     base = get_base_rules()
 
     msgs, final_text = await _tool_phase(
         _build_messages(base + "\n" + PHASE_PROMPTS['unsure'], conversation),
-        model, ALL_TOOLS_SCHEMAS, "unsure",
+        model_config['general'], ALL_TOOLS_SCHEMAS, "unsure",
     )
 
     if final_text:
@@ -295,13 +323,13 @@ async def unsure_path(conversation: ConversationSchema, model: str):
     respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_query'], conversation)
     respond_msgs.extend(tool_hist)
 
-    async for token in _stream_response(respond_msgs, model, "respond-unsure"):
+    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-unsure"):
         yield token
 
 
 # ── Public entry point ──────────────────────────────────────────────────
 
-async def openai_agent(conversation: ConversationSchema, model: str):
+async def openai_agent(conversation: ConversationSchema, model_config: dict):
     """
     Main entry point. Routes the conversation through the appropriate
     execution path based on the router's classification.
@@ -311,22 +339,22 @@ async def openai_agent(conversation: ConversationSchema, model: str):
     """
     msg_preview = conversation.messages[-1].text[:120]
     _log(f"═══════════════════════════════════════════════")
-    _log(f"AGENT START — message='{msg_preview}' model={model}")
+    _log(f"AGENT START — model_config={model_config}")
     try:
         route = classify(conversation)
         _log(f"AGENT route={route}")
 
         if route == 'normal':
-            async for token in normal_path(conversation, model):
+            async for token in normal_path(conversation, model_config):
                 yield token
         elif route == 'query':
-            async for token in query_path(conversation, model):
+            async for token in query_path(conversation, model_config):
                 yield token
         elif route == 'execution':
-            async for token in execution_path(conversation, model):
+            async for token in execution_path(conversation, model_config):
                 yield token
         else:
-            async for token in unsure_path(conversation, model):
+            async for token in unsure_path(conversation, model_config):
                 yield token
 
         _log("AGENT END — OK")

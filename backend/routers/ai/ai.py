@@ -6,7 +6,7 @@ from ...models import Conversation, Message
 from sqlalchemy.orm import Session
 from ..conversations import edit_conversation_logic
 from .stt import stt_conversion_logic
-from .openai_agent import openai_agent
+from .openai_agent import openai_agent, get_model_config
 from .stream_manager import stream_manager
 from openai import OpenAI
 import asyncio
@@ -80,9 +80,10 @@ async def chat_persistence_wrapper(prompt: Prompt):
                 _generate_title(prompt.conversation_id, prompt.user_message)
             )
 
+        model_config = get_model_config()
         full_text = ""
         async for token in openai_agent(
-            ConversationSchema.model_validate(db_conversation), prompt.model
+            ConversationSchema.model_validate(db_conversation), model_config
         ):
             if token == "ERROR_TOKEN":
                 break
