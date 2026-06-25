@@ -69,7 +69,7 @@ def get_llm_predictions(query:str) -> dict:
         {"role": "user", "content": f"[LAST MESSAGE] {query}"}
     ]
     response = client.chat.completions.create(
-        model="deepseek/deepseek-v4-flash",
+        model="google/gemini-2.5-flash-lite",
         messages=msgs,
         temperature=0.0,
         response_format={"type": "json_object"}
