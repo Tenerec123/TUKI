@@ -25,6 +25,7 @@ GUIDING PRINCIPLE:
 - If the answer requires UP-TO-DATE or EXTERNAL information → "query" (the model can search the web)
 - "explícame qué es X" → "normal" (the model knows concepts)
 - "cómo se usa X en 2026" → "query" (may need current info)
+- **If the request has a CONDITIONAL that may lead to CREATE, UPDATE, or DELETE depending on data (e.g. "if it rains, create a task", "if there are emails, delete the spam", "check X and if Y then Z") → "execution"** because the execution path starts with a read phase and can handle the condition.
 - If in doubt → "unsure"
 
 CRITICAL RULE: False positives (classifying "execution" when unsure) are MUCH worse than returning "unsure".
@@ -43,6 +44,8 @@ Examples:
 "organizame el día" → {"route": "unsure"}
 "Qué opciones de compra ves en el mercado ahora mismo?" → {"route": "query"}
 "revisá si tengo emails nuevos" → {"route": "query"}
+"dime si va a llover hoy y si es así crea una tarea de llevar paraguas" → {"route": "execution"}
+"chequea el clima y si hace calor creame una tarea de ir a la playa" → {"route": "execution"}
 "chequeame el correo" → {"route": "query"}
 "hay algo importante en mi bandeja de entrada" → {"route": "query"}
 "buscame info sobre Python 3.13" → {"route": "query"}
