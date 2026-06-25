@@ -4,11 +4,12 @@ from semantic_router.encoders import HuggingFaceEncoder
 from semantic_router.routers import SemanticRouter
 from datetime import date
 import json
+import os
 from openai import OpenAI
 
 client = OpenAI(
-    base_url="http://localhost:11434/v1",
-    api_key="ollama" 
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.environ['OPENROUTER_API_KEY']
 )
 
 router_prompt = """You are a routing classifier for a productivity assistant. Your ONLY output is one of four classes.
@@ -65,7 +66,7 @@ def get_llm_predictions(query:str) -> dict:
         {"role": "user", "content": f"[LAST MESSAGE] {query}"}
     ]
     response = client.chat.completions.create(
-        model="granite4.1:3b",
+        model="deepseek/deepseek-v4-flash",
         messages=msgs,
         temperature=0.0,
         response_format={"type": "json_object"}
