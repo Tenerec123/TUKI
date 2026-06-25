@@ -226,7 +226,7 @@ def get_model_config() -> dict:
     defaults = {
         'get_data': 'deepseek/deepseek-v4-flash',
         'exec_tools': 'deepseek/deepseek-v4-flash',
-        'final_resp': 'deepseek/deepseek-v4-flash',
+        'final_resp': 'google/gemini-2.5-flash-lite',
         'general': 'deepseek/deepseek-v4-flash',
     }
 
@@ -272,6 +272,7 @@ async def query_path(conversation: ConversationSchema, model_config: dict):
     tool_hist = _get_tool_history(read_msgs, len(conversation.messages))
     respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_query'], conversation)
     respond_msgs.extend(tool_hist)
+    respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
     async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-query"):
         yield token
@@ -300,6 +301,7 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
     tool_hist = _get_tool_history(write_msgs, len(conversation.messages))
     respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_execution'], conversation)
     respond_msgs.extend(tool_hist)
+    respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
     async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-execution"):
         yield token
@@ -322,6 +324,7 @@ async def unsure_path(conversation: ConversationSchema, model_config: dict):
     tool_hist = _get_tool_history(msgs, len(conversation.messages))
     respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_query'], conversation)
     respond_msgs.extend(tool_hist)
+    respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
     async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-unsure"):
         yield token
