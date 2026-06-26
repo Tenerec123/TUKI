@@ -9,6 +9,7 @@ from .stt import stt_conversion_logic
 from .openai_agent import openai_agent, get_model_config
 from .stream_manager import stream_manager
 from openai import OpenAI
+import os
 import asyncio
 
 router = APIRouter(
@@ -18,40 +19,54 @@ router = APIRouter(
 
 
 async def _generate_title(conv_id: int, user_message: str):
-    """Generate a short conversation title from the first user message (Ollama)."""
-    try:
-        client = OpenAI(
-            base_url="http://localhost:11434/v1",
-            api_key="ollama"
-        )
-
-        def _call():
-            system_prompt = """
-Generate a short, descriptive title (max 6 words) for a conversation based on this first message. 
+    """Generate a short conversation title from the first user message.
+    Uses OpenRouter free models with fallback chain.
+    """
+    system_prompt = """Generate a short, descriptive title (max 6 words) for a conversation based on this first message. 
 Reply ONLY with the title, no quotes, no punctuation.
-Use the language of the query. If the query is in Spanish use Spanish, if it's in English, use English.
-"""
-            return client.chat.completions.create(
-                model="granite4.1:3b",
+Use the language of the query. If the query is in Spanish use Spanish, if it's in English, use English."""
+
+    free_models = [
+        "google/gemma-4-31b-it:free",
+        "nvidia/nemotron-nano-9b-v2:free",
+        "meta-llama/llama-3.2-3b-instruct:free",
+    ]
+
+    client = OpenAI(
+        api_key=os.environ['OPENROUTER_API_KEY'],
+        base_url="https://openrouter.ai/api/v1",
+    )
+
+    def _call(model: str) -> str | None:
+        try:
+            response = client.chat.completions.create(
+                model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message}
+                    {"role": "user", "content": user_message},
                 ],
                 temperature=0.3,
-                max_tokens=30
+                max_tokens=30,
+                timeout=30,
             )
+            title = response.choices[0].message.content.strip().strip('"\'')
+            return title if title else None
+        except Exception as e:
+            print(f"[TITLE GEN] {model} failed: {e}")
+            return None
 
-        response = await asyncio.to_thread(_call)
-        title = response.choices[0].message.content.strip().strip('"\'')
-
+    for model in free_models:
+        title = await asyncio.to_thread(_call, model)
         if title:
             db = SessionLocal()
             try:
                 edit_conversation_logic(conv_id, ConversationUpdate(title=title), db=db)
+                print(f"[TITLE GEN] Set title '{title}' via {model}")
+                return
             finally:
                 db.close()
-    except Exception as e:
-        print(f"[TITLE GEN ERROR] {e}")
+
+    print("[TITLE GEN] All free models failed — conversation remains untitled")
 
 
 async def chat_persistence_wrapper(prompt: Prompt):
