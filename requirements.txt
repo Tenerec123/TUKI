@@ -15,3 +15,4 @@ pgvector
 psycopg[binary]
 ddgs>=9.0.0
 yfinance
+sentence_transformers
