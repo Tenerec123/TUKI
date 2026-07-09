@@ -60,3 +60,6 @@ logs/
 # Gentle AI workspace (auto-generated, machine-specific paths)
 .atl/
 .gga
+
+# Machine-specific deploy skills (local SSH config, IPs, passwords)
+skills/server-access/
