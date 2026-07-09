@@ -14,7 +14,7 @@ def get_embedding_model():
     """Load and cache the embedding model on first use"""
     global _embedding_model
     if _embedding_model is None:
-        _embedding_model = SentenceTransformer('sentence-transformers/distiluse-base-multilingual-cased-v2')
+        _embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
     return _embedding_model
 # Create your models here.
 
