@@ -14,7 +14,7 @@ BASE = "http://localhost:8000"
 EXIT_CODE = 0
 
 
-def req(method: str, path: str, data: dict | None = None) -> dict:
+def req_json(method: str, path: str, data: dict | None = None) -> dict | list:
     body = json.dumps(data).encode() if data else None
     r = urllib.request.Request(
         f"{BASE}{path}",
@@ -29,6 +29,15 @@ def req(method: str, path: str, data: dict | None = None) -> dict:
         return {"error": e.code, "body": e.read().decode()}
 
 
+def req_status(path: str) -> int:
+    r = urllib.request.Request(f"{BASE}{path}", method="GET")
+    try:
+        resp = urllib.request.urlopen(r, timeout=10)
+        return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
 def check(label: str, ok: bool, detail: str = ""):
     global EXIT_CODE
     status = "PASS" if ok else "FAIL"
@@ -41,19 +50,19 @@ print("=== Health checks ===\n")
 
 # 1. API root
 print("1. API /docs ...")
-resp = req("GET", "/docs")
-check("Swagger UI reachable", "html" in str(resp.get("body", resp)))
+status = req_status("/docs")
+check("Swagger UI reachable", status == 200, f"HTTP {status}")
 
 # 2. Create conversation
 print("\n2. Creating conversation...")
-conv = req("POST", "/api/conversations/", {"title": "verify-deploy"})
+conv = req_json("POST", "/api/conversations/", {"title": "verify-deploy"})
 conv_id = conv.get("id")
 check("Conversation created", isinstance(conv_id, int), f"id={conv_id}")
 
 # 3. Send message (triggers title gen)
 if conv_id:
     print(f"\n3. Sending message to conversation {conv_id}...")
-    result = req(
+    result = req_json(
         "POST", "/api/ai/execute",
         {"conversation_id": conv_id, "user_message": "Hello, testing deploy!"},
     )
