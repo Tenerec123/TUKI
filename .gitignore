@@ -62,4 +62,4 @@ logs/
 .gga
 
 # Machine-specific deploy skills (local SSH config, IPs, passwords)
-skills/server-access/
+.opencode
