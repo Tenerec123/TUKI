@@ -20,16 +20,17 @@ router = APIRouter(
 
 async def _generate_title(conv_id: int, user_message: str):
     """Generate a short conversation title from the first user message.
-    Uses OpenRouter free models with fallback chain.
+    Uses mistralai/mistral-nemo (~$0.07/M tokens, absurdly cheap).
+    Falls back to the model list only if the primary fails.
     """
     system_prompt = """Generate a short, descriptive title (max 6 words) for a conversation based on this first message. 
 Reply ONLY with the title, no quotes, no punctuation.
 Use the language of the query. If the query is in Spanish use Spanish, if it's in English, use English."""
 
-    free_models = [
+    models = [
+        "mistralai/mistral-nemo",
         "google/gemma-4-31b-it:free",
         "nvidia/nemotron-nano-9b-v2:free",
-        "meta-llama/llama-3.2-3b-instruct:free",
     ]
 
     client = OpenAI(
@@ -55,7 +56,7 @@ Use the language of the query. If the query is in Spanish use Spanish, if it's i
             print(f"[TITLE GEN] {model} failed: {e}")
             return None
 
-    for model in free_models:
+    for model in models:
         title = await asyncio.to_thread(_call, model)
         if title:
             db = SessionLocal()
@@ -66,7 +67,7 @@ Use the language of the query. If the query is in Spanish use Spanish, if it's i
             finally:
                 db.close()
 
-    print("[TITLE GEN] All free models failed — conversation remains untitled")
+    print("[TITLE GEN] All models failed — conversation remains untitled")
 
 
 async def chat_persistence_wrapper(prompt: Prompt):
