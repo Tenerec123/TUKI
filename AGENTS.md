@@ -1,4 +1,4 @@
-# TODO_Project — AI Instructions
+# TUKI — AI Instructions
 
 ## Stack
 - Backend: FastAPI + SQLAlchemy 2.0 + PostgreSQL/pgvector
@@ -11,7 +11,7 @@
 - PEP 8, 4 spaces, type hints on all functions
 - Router/Logic separation (tasks.py → tasks_logic.py)
 - All code, comments, and documentation in English
-- Dates in dd/mm/yyyy format in strings
+- Dates in ISO format (yyyy-mm-dd)
 - RRULE syntax for routine frequencies
 
 ## AI Agent (T.U.K.I.)

@@ -79,7 +79,7 @@ def get_llm_predictions(query:str) -> dict:
 
 
 def get_base_rules():
-    today_str = date.today().strftime('%A, %d/%m/%Y')
+    today_str = date.today().isoformat()
     return f"""
 [IDENTITY & STYLE]
 Role: T.U.K.I. (Technical Utility & Knowledge Interface). You are the advanced AI assistant of a personal productivity system, operating as a background Jarvis-like interface.

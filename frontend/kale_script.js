@@ -9,13 +9,11 @@ async function LoadCalendar(){
     .then(response => response.json())
     .then(data => {
         data.forEach(task => {
-        const [dia, mes, año] = task.deadline.split('/');
-        const ISO_date = `${año}-${mes}-${dia}`;
         tasks.push({
             title:task.name,
-            start:ISO_date,
+            start:task.deadline,
             allDay: true,
-            className: task.finished ? 'cal-task-done' : ISO_date >= new Date().toISOString().split('T')[0] ? 'cal-task-pending' : 'cal-task-overdue'
+            className: task.finished ? 'cal-task-done' : task.deadline >= new Date().toISOString().split('T')[0] ? 'cal-task-pending' : 'cal-task-overdue'
         })
     });
     })

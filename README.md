@@ -1,4 +1,4 @@
-# T.U.K.I. - TODO Project
+# T.U.K.I.
 
 T.U.K.I. (T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR) is a comprehensive TODO management system built with FastAPI and SQLAlchemy.
 
@@ -29,7 +29,7 @@ T.U.K.I. (T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR) is a comprehensive TODO ma
 1. **Clone the repository**
 ```bash
 git clone <repository-url>
-cd TODO_Project
+cd TUKI
 ```
 
 2. **Create virtual environment**

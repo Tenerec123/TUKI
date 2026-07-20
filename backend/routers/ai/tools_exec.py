@@ -5,7 +5,7 @@ Each function has a standardized docstring:
     - Args: (optional, only for non-obvious parameters)
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate
 from ...database import SessionLocal
 from ..tasks_logic import create_task_logic, delete_task_logic, update_task_logic
@@ -16,10 +16,9 @@ from ._helpers import _icon_fallback, _resolve_project
 
 def CreateTask(name: str, description: str, priority: int, deadline: str, project_id: int = None, project_name: str = None):
     '''
-    Creates a task with the given characteristics. Format deadline as dd/mm/yyyy.
     Args:
-        project_id: Project ID (preferred if known). Leave empty if not sure.
-        project_name: Alternative to project_id — exact name lookup. Ignored if project_id is set.
+        project_id: Project ID (preferred). Leave empty if unsure.
+        project_name: Alternative to project_id — exact name lookup.
     '''
     with SessionLocal() as db:
         resolved, note = _resolve_project(db, project_id, project_name)
@@ -28,7 +27,7 @@ def CreateTask(name: str, description: str, priority: int, deadline: str, projec
                 name=name,
                 description=description,
                 priority=priority,
-                deadline=datetime.strptime(deadline, '%d/%m/%Y').date(),
+                deadline=date.fromisoformat(deadline),
                 project_id=resolved
             ),
             db=db)
@@ -37,7 +36,7 @@ def CreateTask(name: str, description: str, priority: int, deadline: str, projec
 
 def DeleteTask(task_id: int):
     '''
-    Deletes a specific task. Be careful — this is irreversible.
+    Irreversible.
 '''
     with SessionLocal() as db:
         deleted_task = delete_task_logic(id=task_id, db=db)
@@ -46,7 +45,7 @@ def DeleteTask(task_id: int):
 
 def UpdateTask(task_id: int, name: str = None, description: str = None, priority: int = None, deadline: str = None, finished: bool = None):
     '''
-    Updates selected parameters of a specific task. Only provided fields will be changed. Format deadline as dd/mm/yyyy.
+    Only provided fields are modified.
 '''
     with SessionLocal() as db:
         update_task_logic(
@@ -55,7 +54,7 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
                 name=name,
                 description=description,
                 priority=priority,
-                deadline=None if deadline is None else datetime.strptime(deadline, '%d/%m/%Y').date(),
+                deadline=None if deadline is None else date.fromisoformat(deadline),
                 finished=finished
             ),
             db=db)
@@ -64,12 +63,11 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
 
 def CreateRoutine(name: str, description: str, priority: int, frequency: str, init_date: str = None, project_id: int = None, project_name: str = None, icon: str = None):
     '''
-    Creates a routine with the given characteristics. Frequency in valid RRULE syntax (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR).
-    init_date in dd/mm/yyyy format.
+    Frequency in RRULE syntax (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR).
     Args:
-        project_id: Project ID (preferred if known). Leave empty if not sure.
-        project_name: Alternative to project_id — exact name lookup. Ignored if project_id is set.
-        icon: Bootstrap icon CSS class name, NOT an emoji or unicode (optional, e.g. bell-fill, clock, calendar-check).
+        project_id: Project ID (preferred). Leave empty if unsure.
+        project_name: Alternative to project_id — exact name lookup.
+        icon: Bootstrap icon CSS class (e.g. bell-fill, clock).
     '''
     if icon is None:
         icon = _icon_fallback(name, description)
@@ -83,7 +81,7 @@ def CreateRoutine(name: str, description: str, priority: int, frequency: str, in
                 frequency=frequency,
                 project_id=resolved,
                 icon=icon,
-                init_date=datetime.today().date() if init_date is None else datetime.strptime(init_date, '%d/%m/%Y').date()
+                init_date=datetime.today().date() if init_date is None else date.fromisoformat(init_date)
             ),
             db=db)
         return f"Routine {name} with id {new_routine.id} successfully created{note}"
@@ -91,7 +89,7 @@ def CreateRoutine(name: str, description: str, priority: int, frequency: str, in
 
 def DeleteRoutine(routine_id: int):
     '''
-    Deletes a specific routine. Be careful — this is irreversible.
+    Irreversible.
 '''
     with SessionLocal() as db:
         deleted_routine = delete_routine_logic(id=routine_id, db=db)
@@ -100,11 +98,10 @@ def DeleteRoutine(routine_id: int):
 
 def UpdateRoutine(routine_id: int, name: str = None, description: str = None, priority: int = None, frequency: str = None, init_date: str = None, project_id: int = None, icon: str = None):
     '''
-    Updates selected parameters of a specific routine. Only provided fields will be changed.
-    Frequency in valid RRULE syntax. init_date in dd/mm/yyyy format.
+    Only provided fields are modified. Frequency in RRULE syntax.
     Args:
         project_id: Project ID to reassign (optional).
-        icon: Bootstrap icon CSS class name, NOT an emoji or unicode (optional, e.g. bell-fill, clock, calendar-check).
+        icon: Bootstrap icon CSS class (e.g. bell-fill, clock).
     '''
     with SessionLocal() as db:
         routine = update_routine_logic(
@@ -116,7 +113,7 @@ def UpdateRoutine(routine_id: int, name: str = None, description: str = None, pr
                 frequency=frequency,
                 project_id=project_id,
                 icon=icon,
-                init_date=None if init_date is None else datetime.strptime(init_date, '%d/%m/%Y').date()
+                init_date=None if init_date is None else date.fromisoformat(init_date)
             ),
             db=db)
         return f"Routine {routine.name} with id:{routine_id} successfully updated."
@@ -124,11 +121,10 @@ def UpdateRoutine(routine_id: int, name: str = None, description: str = None, pr
 
 def CreateProject(name: str, description: str = None, priority: int = None, parent_id: int = None, parent_name: str = None):
     '''
-    Creates a project with the given characteristics.
-    Be careful with parent_id — creating a parent loop will cause problems.
+    Avoid parent loops.
     Args:
-        parent_id: Parent project ID (preferred if known). Leave empty if no parent or if unsure.
-        parent_name: Alternative to parent_id — exact name lookup. Ignored if parent_id is set.
+        parent_id: Parent project ID (preferred). Leave empty if unsure.
+        parent_name: Alternative to parent_id — exact name lookup.
     '''
     if parent_id is not None and parent_id <= 0:
         parent_id = None
@@ -148,7 +144,7 @@ def CreateProject(name: str, description: str = None, priority: int = None, pare
 
 def DeleteProject(project_id: int):
     '''
-    Deletes a project and all its sub-projects/tasks (cascade). Be careful — this is irreversible.
+    Cascade: deletes all sub-projects and tasks. Irreversible.
 '''
     with SessionLocal() as db:
         deleted = delete_project_logic(id=project_id, db=db)
@@ -157,9 +153,9 @@ def DeleteProject(project_id: int):
 
 def UpdateProject(project_id: int, name: str = None, description: str = None, priority: int = None, parent_id: int = None):
     '''
-    Updates selected project parameters. Only provided fields will be changed.
+    Only provided fields are modified.
     Args:
-        parent_id: Optional parent project ID. Do not guess or invent if not known.
+        parent_id: Parent project ID (optional).
     '''
     if project_id == parent_id:
         return "ERROR: The id of the project cannot be the same as the parent id."

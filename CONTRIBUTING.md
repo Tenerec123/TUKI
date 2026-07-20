@@ -1,4 +1,4 @@
-# Contributing to T.U.K.I. TODO Project
+# Contributing to T.U.K.I.
 
 Thank you for your interest in contributing! Here's how you can help.
 

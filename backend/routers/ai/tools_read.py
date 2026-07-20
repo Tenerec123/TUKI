@@ -16,7 +16,7 @@ import yfinance as yf
 
 def GetAllTasks():
     '''
-    Returns all tasks in the database.
+    Returns all tasks.
 '''
     with SessionLocal() as db:
         tasks = get_all_tasks_logic(first_n=None, db=db)
@@ -25,8 +25,7 @@ def GetAllTasks():
 
 def SearchTasks(text: str, limit: int = 5):
     '''
-    Searches tasks by semantic similarity to natural language.
-    Returns the most relevant tasks ranked by relevance (cosine distance).
+    Semantic search. Returns most relevant results.
 '''
     with SessionLocal() as db:
         tasks = search_tasks_logic(text=text, limit=limit, db=db)
@@ -35,7 +34,7 @@ def SearchTasks(text: str, limit: int = 5):
 
 def GetAllProjects():
     '''
-    Returns all projects in the database.
+    Returns all projects.
 '''
     with SessionLocal() as db:
         projects = get_all_project_logic(first_n=None, db=db)
@@ -44,8 +43,7 @@ def GetAllProjects():
 
 def SearchProjects(text: str, limit: int = 5):
     '''
-    Searches projects by semantic similarity to natural language.
-    Returns the most relevant projects ranked by relevance (cosine distance).
+    Semantic search. Returns most relevant results.
 '''
     with SessionLocal() as db:
         projects = search_projects_logic(text=text, limit=limit, db=db)
@@ -54,7 +52,7 @@ def SearchProjects(text: str, limit: int = 5):
 
 def GetAllRoutines():
     '''
-    Returns all routines in the database.
+    Returns all routines.
 '''
     with SessionLocal() as db:
         routines = get_all_routine_logic(db=db)
@@ -63,8 +61,7 @@ def GetAllRoutines():
 
 def SearchRoutines(text: str, limit: int = 5):
     '''
-    Searches routines by semantic similarity to natural language.
-    Returns the most relevant routines ranked by relevance (cosine distance).
+    Semantic search. Returns most relevant results.
 '''
     with SessionLocal() as db:
         routines = search_routines_logic(text=text, limit=limit, db=db)
@@ -73,11 +70,9 @@ def SearchRoutines(text: str, limit: int = 5):
 
 def Weather(city: str = None):
     '''
-    Gets current weather and forecast for a city.
-    If no city is provided, uses the default from WEATHER_DEFAULT_CITY in .env.
-    Returns current conditions, temperature, humidity, wind, visibility, UV, and short forecast for the next 3 days.
+    Current weather and 3-day forecast. Defaults to WEATHER_DEFAULT_CITY.
     Args:
-        city: City name. Optional — defaults to configured city if omitted.
+        city: City name (optional).
     '''
     import urllib.request
     import json
@@ -125,9 +120,7 @@ def Weather(city: str = None):
 
 def WebSearch(query: str, max_results: int = 5):
     '''
-    Searches the web using DuckDuckGo.
-    Returns title, snippet, and URL for each result.
-    Use for current events, recent technical info, or anything the model's training data might not cover.
+    DuckDuckGo search. Returns title, snippet, URL.
 '''
     import logging
     logging.getLogger('primp').setLevel(logging.WARNING)
@@ -142,11 +135,9 @@ def WebSearch(query: str, max_results: int = 5):
 
 def CheckEmail(max_unreads: int = 5):
     '''
-    Checks the configured email inbox for unread messages.
-    Returns sender, subject, and a snippet for each unread.
-    Supports any IMAP server (Gmail, Outlook, custom).
+    Unread emails from IMAP inbox.
     Args:
-        max_unreads: Maximum number of unread emails to fetch (default 5).
+        max_unreads: Max emails to fetch (default 5).
     '''
     import imaplib
     import email as email_lib
@@ -193,8 +184,7 @@ def CheckEmail(max_unreads: int = 5):
 
 def Stocks(stock: str):
     '''
-    Gets current stock data and recent price history for a ticker symbol.
-    Returns price, market cap, P/E ratio, 52-week range, volume, and 1-month history.
+    Stock quote and 1-month history for a ticker.
 '''
     try:
         dat = yf.Ticker(stock)

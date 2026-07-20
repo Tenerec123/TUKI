@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict, field_serializer
+from pydantic import BaseModel, Field, ConfigDict
 from datetime import date, datetime
 from typing import List, Optional
 
@@ -23,9 +23,6 @@ class TaskCreate(BaseItem):
 class TaskSchema(TaskCreate):
     project_id:Optional[int] = Field(None)
     id: int = Field(..., description="Unique identifier of the task")
-    @field_serializer('deadline')
-    def serialize_deadline(self, deadline: date) -> str:
-        return deadline.strftime("%d/%m/%Y")
     
 class TaskUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=512, description='Name of the task')
@@ -49,10 +46,6 @@ class RoutineToday(BaseModel):
 
 class RoutineSchema(RoutineCreate):
     id:int = Field(..., description="Unique identifier")
-    
-    @field_serializer('init_date')
-    def serialize_deadline(self, init_date: date) -> str:
-        return init_date.strftime("%d/%m/%Y")
 
 class RoutineUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=512)
@@ -66,9 +59,6 @@ class RoutineUpdate(BaseModel):
 class RoutineCheckSchema(BaseModel):
     routine_id:int = Field(...)
     check_date:date = Field(...)
-    @field_serializer('check_date')
-    def serialize_deadline(self, check_date: date) -> str:
-        return check_date.strftime("%d/%m/%Y")
 
 # Project Classes
 
@@ -119,9 +109,6 @@ class ConversationSchema(ConversationCreate):
     creation_date:date = Field(...)
     last_used:datetime = Field(...)
     model_config = ConfigDict(from_attributes=True)
-    @field_serializer('creation_date')
-    def serialize_creation_date(self, creation_date: date) -> str:
-        return creation_date.strftime("%d/%m/%Y")
     
 class ConversationUpdate(BaseModel):
     messages:Optional[List[MessageBase]] = Field(default=[])
