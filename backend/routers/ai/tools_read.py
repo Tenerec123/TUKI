@@ -14,13 +14,38 @@ from ..routines_logic import get_all_routine_logic, search_routines_logic
 import yfinance as yf
 
 
+# ── Compact serialization for tool results ──────────────────────────────
+# Short keys reduce token cost while staying native JSON for the model.
+# Key map: id→i, name→n, description→d, priority→p, deadline→dl,
+#          finished→done, project_id→proj, frequency→freq, init_date→ini,
+#          icon→ic, parent_id→par, sub_tasks→tasks, sub_routines→routines,
+#          sub_projects→children
+
+_TASK_K = {"id": "i", "name": "n", "description": "d", "priority": "p",
+           "deadline": "dl", "finished": "done", "project_id": "proj"}
+_ROUTINE_K = {"id": "i", "name": "n", "description": "d", "priority": "p",
+              "frequency": "freq", "init_date": "ini", "project_id": "proj", "icon": "ic"}
+_PROJECT_K = {"id": "i", "name": "n", "description": "d", "priority": "p",
+              "parent_id": "par", "sub_tasks": "tasks", "sub_routines": "routines",
+              "sub_projects": "children"}
+
+
+def _compact(d: dict, key_map: dict) -> dict:
+    """Rename keys using key_map. Drop keys not in key_map."""
+    return {key_map.get(k, k): v for k, v in d.items() if k in key_map}
+
+
+def _compact_list(items: list, key_map: dict) -> list:
+    return [_compact(item, key_map) for item in items]
+
+
 def GetAllTasks():
     '''
     Returns all tasks.
 '''
     with SessionLocal() as db:
         tasks = get_all_tasks_logic(first_n=None, db=db)
-        return [TaskSchema.model_validate(t).model_dump() for t in tasks]
+        return _compact_list([TaskSchema.model_validate(t).model_dump() for t in tasks], _TASK_K)
 
 
 def SearchTasks(text: str, limit: int = 5):
@@ -29,7 +54,7 @@ def SearchTasks(text: str, limit: int = 5):
 '''
     with SessionLocal() as db:
         tasks = search_tasks_logic(text=text, limit=limit, db=db)
-        return [TaskSchema.model_validate(t).model_dump() for t in tasks]
+        return _compact_list([TaskSchema.model_validate(t).model_dump() for t in tasks], _TASK_K)
 
 
 def GetAllProjects():
@@ -38,7 +63,7 @@ def GetAllProjects():
 '''
     with SessionLocal() as db:
         projects = get_all_project_logic(first_n=None, db=db)
-        return [ProjectSchema.model_validate(p).model_dump() for p in projects]
+        return _compact_list([ProjectSchema.model_validate(p).model_dump() for p in projects], _PROJECT_K)
 
 
 def SearchProjects(text: str, limit: int = 5):
@@ -47,7 +72,7 @@ def SearchProjects(text: str, limit: int = 5):
 '''
     with SessionLocal() as db:
         projects = search_projects_logic(text=text, limit=limit, db=db)
-        return [ProjectSchema.model_validate(p).model_dump() for p in projects]
+        return _compact_list([ProjectSchema.model_validate(p).model_dump() for p in projects], _PROJECT_K)
 
 
 def GetAllRoutines():
@@ -56,7 +81,7 @@ def GetAllRoutines():
 '''
     with SessionLocal() as db:
         routines = get_all_routine_logic(db=db)
-        return [RoutineSchema.model_validate(r).model_dump() for r in routines]
+        return _compact_list([RoutineSchema.model_validate(r).model_dump() for r in routines], _ROUTINE_K)
 
 
 def SearchRoutines(text: str, limit: int = 5):
@@ -65,7 +90,7 @@ def SearchRoutines(text: str, limit: int = 5):
 '''
     with SessionLocal() as db:
         routines = search_routines_logic(text=text, limit=limit, db=db)
-        return [RoutineSchema.model_validate(r).model_dump() for r in routines]
+        return _compact_list([RoutineSchema.model_validate(r).model_dump() for r in routines], _ROUTINE_K)
 
 
 def Weather(city: str = None):

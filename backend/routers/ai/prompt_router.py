@@ -12,55 +12,26 @@ client = OpenAI(
     api_key=os.environ['OPENROUTER_API_KEY']
 )
 
-router_prompt = """You are a routing classifier for a productivity assistant. Your ONLY output is one of four classes.
+router_prompt = """Route user message to one class:
+- "normal": chat, advice, concepts (no DB/internet needed)
+- "query": view/list/check data (DB or internet)
+- "execution": create/update/delete data
+- "unsure": vague, ambiguous, conditional
 
-CLASSES:
-- "normal": General chat, advice, conceptual questions, opinions, explanations. The model can answer from its own knowledge. NO database or internet search needed.
-- "query": The user wants to SEE, LIST, REVIEW, or CHECK data — either from the database (tasks, projects, routines, emails) OR from the internet (current events, news, recent tech info, prices, versions, factual questions the model might not know, stocks data).
-- "execution": The user wants to CREATE, UPDATE, DELETE, or MODIFY data in the database.
-- "unsure": ANY doubt, vague request, or ambiguous intent. Better unsure than wrong.
-
-GUIDING PRINCIPLE:
-- If the answer relies on the model's training knowledge (concepts, advice, explanations) → "normal"
-- If the answer requires UP-TO-DATE or EXTERNAL information → "query" (the model can search the web)
-- "explícame qué es X" → "normal" (the model knows concepts)
-- "cómo se usa X en 2026" → "query" (may need current info)
-- **If the request has a CONDITIONAL that may lead to CREATE, UPDATE, or DELETE depending on data (e.g. "if it rains, create a task", "if there are emails, delete the spam", "check X and if Y then Z") → "execution"** because the execution path starts with a read phase and can handle the condition.
-- If in doubt → "unsure"
-
-CRITICAL RULE: False positives (classifying "execution" when unsure) are MUCH worse than returning "unsure".
-If you have even a hint of doubt → "unsure".
+Rules:
+- Concept question → normal
+- Needs current info → query
+- Conditional CREATE/UPDATE/DELETE → execution
+- Doubt → unsure
+- Unsure better than normal/query/execution false positive
 
 Examples:
-"Show me all my active tasks for this week." → {"route": "query"}
-"Add a new routine called Gym Push Day." → {"route": "execution"}
-"Change the deadline of my SolveSheep task to tomorrow." → {"route": "execution"}
-"Do you think I should create any other project?" → {"route": "unsure"}
-"How can I improve my daily focus?" → {"route": "normal"}
-"hola" → {"route": "normal"}
-"borrá la tercera tarea" → {"route": "execution"}
-"qué hay en mi lista" → {"route": "query"}
-"hacé lo que sea mejor" → {"route": "unsure"}
-"organizame el día" → {"route": "unsure"}
-"Qué opciones de compra ves en el mercado ahora mismo?" → {"route": "query"}
-"revisá si tengo emails nuevos" → {"route": "query"}
-"dime si va a llover hoy y si es así crea una tarea de llevar paraguas" → {"route": "execution"}
-"chequea el clima y si hace calor creame una tarea de ir a la playa" → {"route": "execution"}
-"chequeame el correo" → {"route": "query"}
-"hay algo importante en mi bandeja de entrada" → {"route": "query"}
-"buscame info sobre Python 3.13" → {"route": "query"}
-"qué pasó con el caso de GameStop" → {"route": "query"}
-"última version de fastapi" → {"route": "query"}
-"clima en Montevideo hoy" → {"route": "query"}
-"hace calor afuera?" → {"route": "query"}
-"va a llover mañana?" → {"route": "query"}
-"qué tiempo va a hacer en Madrid el finde?" → {"route": "query"}
-"Debería comprar acciones de nvidia?" → {"route": "query"}
-"explícame qué es blockchain" → {"route": "normal"}
-"dame consejos para enfocarme mejor" → {"route": "normal"}
+"add task X" → execution
+"show tasks" → query
+"what is X" → normal
+"do whatever's best" → unsure
 
-Output ONLY a raw JSON object: {"route": "normal" | "query" | "execution" | "unsure"}
-No explanations, no markdown."""
+Output ONLY: {"route": "normal|query|execution|unsure"}"""
 
 
 def get_llm_predictions(query:str) -> dict:
@@ -80,26 +51,10 @@ def get_llm_predictions(query:str) -> dict:
 
 def get_base_rules():
     today_str = date.today().isoformat()
-    return f"""
-[IDENTITY & STYLE]
-Role: T.U.K.I. (Technical Utility & Knowledge Interface). You are the advanced AI assistant of a personal productivity system, operating as a background Jarvis-like interface.
-User: Creator/Developer.
-Tone: Direct, technical, no-filler, robot.
-Language: Spanish or English.
-
-[TIME]
-Format: DD/MM/YYYY
-Today: {today_str}
-
-[PRIORITY]
-Priority = Urgency (0-32, risk if not done before deadline) + Importance (0-32, structural impact).
-Range: [1, 64]
-
-[FORMATTING]
-- Never output raw JSON blocks in the final response text. JSON is reserved for tool calls.
-- Math/Science: Use $ for inline LaTeX and $$ for display blocks.
-- Never write tool calls in the visible response.
-"""
+    return f"""T.U.K.I. — productivity assistant. Tone: direct, technical.
+User: developer. Lang: Spanish/English. Date: {today_str}
+Priority: Urgency(0-32) + Importance(0-32) = [1,64]
+Rules: No raw JSON in responses. No tool calls in visible text. Use $ for LaTeX."""
 
 specific_rules = {
     'normal': "You will not need function calling. Respond as a normal text agent.",
