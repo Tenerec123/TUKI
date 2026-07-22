@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import datetime
-from ...schemas import ConversationSchema
+from ..schemas import ConversationSchema
 from .tools import ALL_TOOLS_SCHEMAS, READ_TOOLS_SCHEMAS, WRITE_TOOLS_SCHEMAS, execute_tool_call
 from .prompt_router import classify, get_base_rules
 from openai import AsyncOpenAI

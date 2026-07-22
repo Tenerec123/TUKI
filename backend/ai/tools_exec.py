@@ -6,11 +6,11 @@ Each function has a standardized docstring:
 """
 
 from datetime import date, datetime
-from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate
-from ...database import SessionLocal
-from ..tasks_logic import create_task_logic, delete_task_logic, update_task_logic
-from ..projects_logic import create_project_logic, delete_project_logic, update_project_logic
-from ..routines_logic import create_routine_logic, delete_routine_logic, update_routine_logic
+from ..schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate
+from ..database import SessionLocal
+from ..logic.tasks import create_task_logic, delete_task_logic, update_task_logic
+from ..logic.projects import create_project_logic, delete_project_logic, update_project_logic
+from ..logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic
 from ._helpers import _icon_fallback, _resolve_project
 
 

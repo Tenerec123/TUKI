@@ -1,5 +1,5 @@
 import asyncio
-from ...schemas import ConversationSchema
+from ..schemas import ConversationSchema
 
 async def fake_ai(conversation: ConversationSchema, model: str, max_inferences = 5):
     """

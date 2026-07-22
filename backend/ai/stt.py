@@ -1,5 +1,5 @@
 from fastapi import UploadFile, Form, Depends, File
-from ...database import get_db
+from ..database import get_db
 from sqlalchemy.orm import Session
 import io
 from faster_whisper import WhisperModel

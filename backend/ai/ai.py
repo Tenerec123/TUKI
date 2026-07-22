@@ -1,10 +1,10 @@
-from ...schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
+from ..schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
 from fastapi import APIRouter, UploadFile, Form, Depends, File, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
-from ...database import get_db, SessionLocal
-from ...models import Conversation, Message
+from ..database import get_db, SessionLocal
+from ..models import Conversation, Message
 from sqlalchemy.orm import Session
-from ..conversations import edit_conversation_logic
+from ..routers.conversations import edit_conversation_logic
 from .stt import stt_conversion_logic
 from .openai_agent import openai_agent, get_model_config
 from .stream_manager import stream_manager

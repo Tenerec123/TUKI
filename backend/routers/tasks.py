@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from ..schemas import TaskCreate, TaskSchema, TaskUpdate
 from ..database import get_db
-from .tasks_logic import get_task_logic, get_all_tasks_logic, create_task_logic, update_task_logic, delete_task_logic
+from ..logic.tasks import get_task_logic, get_all_tasks_logic, create_task_logic, update_task_logic, delete_task_logic
 
 router = APIRouter(
     prefix="/api/tasks", # Todos los endpoints empezarán con esto

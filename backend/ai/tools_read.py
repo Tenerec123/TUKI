@@ -6,11 +6,11 @@ Each function has a standardized docstring:
 """
 
 import os
-from ...schemas import TaskSchema, ProjectSchema, RoutineSchema
-from ...database import SessionLocal
-from ..tasks_logic import get_all_tasks_logic, search_tasks_logic
-from ..projects_logic import get_all_project_logic, search_projects_logic
-from ..routines_logic import get_all_routine_logic, search_routines_logic
+from ..schemas import TaskSchema, ProjectSchema, RoutineSchema
+from ..database import SessionLocal
+from ..logic.tasks import get_all_tasks_logic, search_tasks_logic
+from ..logic.projects import get_all_project_logic, search_projects_logic
+from ..logic.routines import get_all_routine_logic, search_routines_logic
 import yfinance as yf
 
 
