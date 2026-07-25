@@ -59,6 +59,7 @@ def _parse_docstring(doc: str):
     Returns:
         (description, arg_descriptions_dict)
     """
+    if doc == "": return "", {}
     desc_lines = []
     arg_descriptions = {}
     current_section = "desc"
@@ -103,13 +104,10 @@ def _discover_tools():
 
     for module, tool_type in modules:
         for name, func in inspect.getmembers(module, inspect.isfunction):
-            if name.startswith('_'):
+            if func.__module__ != module.__name__:
                 continue
 
-            doc = inspect.getdoc(func)
-            if not doc:
-                continue
-
+            doc = inspect.getdoc(func) or ""
             description, arg_descriptions = _parse_docstring(doc)
 
             sig = inspect.signature(func)
