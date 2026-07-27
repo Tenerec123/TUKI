@@ -220,8 +220,8 @@ async def _stream_response(messages: list, model: str, phase_label: str = ""):
 
 def get_model_config() -> dict:
     """Read per-phase model config from DB, falling back to defaults."""
-    from ...database import SessionLocal
-    from ...models import Config
+    from ..database import SessionLocal
+    from ..models import Config
 
     defaults = {
         'get_data': 'deepseek/deepseek-v4-flash',
