@@ -51,9 +51,9 @@ def delete_note(id: int, db: Session = Depends(get_db)):
     return delete_note_logic(id=id, db=db)
 
 @router.post("/ai/sync")
-def accept_sync(db:Session = Depends(get_db)):
+def sync_notes(db:Session = Depends(get_db)):
     return decide_ai_changes_logic(True, db)
 
 @router.post("/ai/discard")
-def accept_sync(db:Session = Depends(get_db)):
+def discard_notes(db:Session = Depends(get_db)):
     return decide_ai_changes_logic(False, db)
