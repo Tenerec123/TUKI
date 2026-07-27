@@ -170,8 +170,9 @@ def decide_ai_changes_logic(accepted:bool, db:Session):
                 )
                 db.add(noteM)
             else:
-                noteM = db.query(NoteMeta).where(NoteMeta.path == f"{dst_prefix}/{path}", NoteMeta.title == title)
-                db.delete(noteM)
+                noteM = db.query(NoteMeta).where(NoteMeta.path == f"{dst_prefix}/{path}", NoteMeta.title == title).first()
+                if noteM:
+                    db.delete(noteM)
             db.commit()
         changelog.unlink()
 
