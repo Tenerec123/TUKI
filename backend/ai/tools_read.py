@@ -232,9 +232,9 @@ def ReadNote(query: str, limit: int = 1):
             except Exception:
                 content = ""
             results.append({
-                "i": note.id,
-                "n": note.title,
-                "p": note.path or "",
+                "id": note.id,
+                "name": note.title,
+                "path": note.path or "",
                 "content": content,
             })
         return results
