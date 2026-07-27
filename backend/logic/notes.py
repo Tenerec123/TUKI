@@ -72,10 +72,12 @@ def delete_note_logic(id:int, db: Session):
     if changelog.exists():
         logs = changelog.read_text(encoding='utf-8').split("\n")
         first_len = len(logs)
+        # Strip vault/ or draft/ prefix to match how create_note_logic writes changelog
+        bare_path = noteM.path.split("/", 1)[1] if "/" in noteM.path else noteM.path
         # If note was created in this sync session, just remove the "c" entry
-        logs = [log for log in logs if log != f"{noteM.title} {noteM.path} c"]
+        logs = [log for log in logs if log != f"{noteM.title} {bare_path} c"]
         if len(logs) == first_len:
-            logs.append(f"{noteM.title} {noteM.path} d")
+            logs.append(f"{noteM.title} {bare_path} d")
         changelog.write_text("\n".join(logs), encoding='utf-8')
 
     _note_path(noteM).unlink()
