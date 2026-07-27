@@ -27,12 +27,12 @@ def list_notes(db: Session = Depends(get_db)):
 
 
 @router.post("/folder")
-def create_folder(req: FolderRequest):
-    return create_folder_logic(path=req.path)
+def create_folder(req: FolderRequest, permission: bool = Query(True)):
+    return create_folder_logic(path=req.path, permission=permission)
 
 @router.delete("/folder")
-def delete_folder(req: FolderRequest, db: Session = Depends(get_db)):
-    return delete_folder_logic(path=req.path, db=db)
+def delete_folder(req: FolderRequest, permission: bool = Query(True), db: Session = Depends(get_db)):
+    return delete_folder_logic(path=req.path, permission=permission, db=db)
 
 @router.get("/{id}")
 def get_note(id: int, db: Session = Depends(get_db)):

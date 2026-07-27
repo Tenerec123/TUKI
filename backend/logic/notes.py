@@ -127,11 +127,11 @@ def get_file_tree_logic(permission,db: Session) -> dict[str, Any]:
     return tree
 
 
-def delete_folder_logic(path: str, db: Session):
-    folder = VAULT / path
+def delete_folder_logic(path: str, permission: bool, db: Session):
+    base = VAULT if permission else DRAFT
+    folder = base / path
     if folder.exists() and folder.is_dir():
-        # Delete DB records for all notes inside this folder
-        prefix = "vault/" + path.rstrip("/")
+        prefix = ("vault" if permission else "draft") + "/" + path.rstrip("/")
         notes = db.query(NoteMeta).where(
             NoteMeta.path.like(f"{prefix}%") | (NoteMeta.path == prefix)
         ).all()
@@ -142,20 +142,21 @@ def delete_folder_logic(path: str, db: Session):
         shutil.rmtree(folder)
     return "Folder deleted"
 
-def create_folder_logic(path: str):
-    folder = VAULT / path
+def create_folder_logic(path: str, permission: bool):
+    base = VAULT if permission else DRAFT
+    folder = base / path
     folder.mkdir(parents=True, exist_ok=True)
     return "Folder created"
 
 def decide_ai_changes_logic(accepted:bool, db:Session):
     if accepted:
-        src, dst, dst_prefix = DRAFT, VAULT, "vault"
+        new_SOT, overwritten, overw_prefix = DRAFT, VAULT, "vault"
     else:
-        src, dst, dst_prefix = VAULT, DRAFT, "draft"
+        new_SOT, overwritten, overw_prefix = VAULT, DRAFT, "draft"
 
-    shutil.copytree(src, dst, dirs_exist_ok=True)
+    shutil.copytree(new_SOT, overwritten, dirs_exist_ok=True)
 
-    changelog = dst / 'changelog.txt'
+    changelog = new_SOT / 'changelog.txt'
     if changelog.exists():
         logs = changelog.read_text(encoding='utf-8')
         logs = logs.split('\n')[:-1]
@@ -168,17 +169,17 @@ def decide_ai_changes_logic(accepted:bool, db:Session):
             if action == "c":
                 noteM = NoteMeta(
                     title = title,
-                    path = f"{dst_prefix}/{path}"
+                    path = f"{overw_prefix}/{path}"
                 )
                 db.add(noteM)
             else:
-                noteM = db.query(NoteMeta).where(NoteMeta.path == f"{dst_prefix}/{path}", NoteMeta.title == title).first()
+                noteM = db.query(NoteMeta).where(NoteMeta.path == f"{overw_prefix}/{path}", NoteMeta.title == title).first()
                 if noteM:
                     db.delete(noteM)
             db.commit()
         changelog.unlink()
 
     # Clean up changelog from source
-    src_changelog = src / 'changelog.txt'
+    src_changelog = overwritten / 'changelog.txt'
     if src_changelog.exists():
         src_changelog.unlink()

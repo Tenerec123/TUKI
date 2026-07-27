@@ -187,7 +187,7 @@ function apiDeleteNote(id) {
 }
 
 function apiCreateFolder(path) {
-    return fetch("/api/notes/folder", {
+    return fetch(`/api/notes/folder?permission=${currentPermission}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path })
@@ -195,7 +195,7 @@ function apiCreateFolder(path) {
 }
 
 function apiDeleteFolder(path) {
-    return fetch("/api/notes/folder", {
+    return fetch(`/api/notes/folder?permission=${currentPermission}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path })
