@@ -159,9 +159,9 @@ def decide_ai_changes_logic(accepted:bool, db:Session):
         logs = logs.split('\n')[:-1]
         for log in logs:
             splited_log = log.split(" ")
-            title = splited_log[0]
-            path = splited_log[1]
-            action = splited_log[2]
+            action = splited_log[-1]
+            path = splited_log[-2]
+            title = " ".join(splited_log[:-2])
 
             if action == "c":
                 noteM = NoteMeta(
