@@ -174,7 +174,7 @@ document.addEventListener('contextmenu', (e) => {
 
 // ── API helpers ──
 function apiCreateNote(title, path) {
-    return fetch("/api/notes/", {
+    return fetch(`/api/notes/?permission=${currentPermission}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, path: path || "", content: "" })

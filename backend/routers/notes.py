@@ -39,8 +39,8 @@ def get_note(id: int, db: Session = Depends(get_db)):
     return {"content": get_note_logic(id=id, db=db)}
 
 @router.post("/", response_model=NoteMetaSchema)
-def create_note(note: NoteMetaCreate, db: Session = Depends(get_db)):
-    return create_note_logic(note=note, permission=True, db=db)
+def create_note(note: NoteMetaCreate, permission: bool = Query(True), db: Session = Depends(get_db)):
+    return create_note_logic(note=note, permission=permission, db=db)
 
 @router.patch("/{id}", response_model=NoteMetaSchema)
 def update_note(id: int, note_update: NoteMetaUpdate, db: Session = Depends(get_db)):
