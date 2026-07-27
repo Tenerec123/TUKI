@@ -127,5 +127,35 @@ def handle_project_embeddings(mapper, connection, target):
             
         target.embedding = list(model.encode(text_to_embed))
 
+class NoteMeta(Base):
+    __tablename__="notesMeta"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title:Mapped[str] = mapped_column()
+    path:Mapped[str] = mapped_column(nullable=True) # Vault root if null, if not null, folder1/folder2/..folder_n/
+    embedding = mapped_column(VECTOR(384))
+
+
+@event.listens_for(NoteMeta, 'before_insert')
+@event.listens_for(NoteMeta, 'before_update')
+def handle_note_embeddings(mapper, connection, target):
+    state = inspect(target)
+
+    is_insert = state.transient or state.pending
+
+    if is_insert:
+        should_update = target.embedding is None
+    else:
+        title_changed = state.get_history('title', passive=True).has_changes()
+        path_changed = state.get_history('path', passive=True).has_changes()
+        should_update = target.embedding is None or title_changed or path_changed
+
+    if should_update:
+        model = get_embedding_model()
+        text_to_embed = target.title or ""
+        if target.path:
+            text_to_embed += " " + target.path.replace("/", " ")
+        target.embedding = list(model.encode(text_to_embed))
+
+
 # Create all tables after all models are defined
 Base.metadata.create_all(engine)

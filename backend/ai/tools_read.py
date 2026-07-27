@@ -11,32 +11,9 @@ from ..database import SessionLocal
 from ..logic.tasks import get_all_tasks_logic, search_tasks_logic
 from ..logic.projects import get_all_project_logic, search_projects_logic
 from ..logic.routines import get_all_routine_logic, search_routines_logic
+from ..logic.notes import get_note_logic, search_notes_logic
+from pathlib import Path
 import yfinance as yf
-
-
-# ── Compact serialization for tool results ──────────────────────────────
-# Short keys reduce token cost while staying native JSON for the model.
-# Key map: id→i, name→n, description→d, priority→p, deadline→dl,
-#          finished→done, project_id→proj, frequency→freq, init_date→ini,
-#          icon→ic, parent_id→par, sub_tasks→tasks, sub_routines→routines,
-#          sub_projects→children
-
-_TASK_K = {"id": "i", "name": "n", "description": "d", "priority": "p",
-           "deadline": "dl", "finished": "done", "project_id": "proj"}
-_ROUTINE_K = {"id": "i", "name": "n", "description": "d", "priority": "p",
-              "frequency": "freq", "init_date": "ini", "project_id": "proj", "icon": "ic"}
-_PROJECT_K = {"id": "i", "name": "n", "description": "d", "priority": "p",
-              "parent_id": "par", "sub_tasks": "tasks", "sub_routines": "routines",
-              "sub_projects": "children"}
-
-
-def _compact(d: dict, key_map: dict) -> dict:
-    """Rename keys using key_map. Drop keys not in key_map."""
-    return {key_map.get(k, k): v for k, v in d.items() if k in key_map}
-
-
-def _compact_list(items: list, key_map: dict) -> list:
-    return [_compact(item, key_map) for item in items]
 
 
 def GetAllTasks():
@@ -45,7 +22,7 @@ def GetAllTasks():
 '''
     with SessionLocal() as db:
         tasks = get_all_tasks_logic(first_n=None, db=db)
-        return _compact_list([TaskSchema.model_validate(t).model_dump() for t in tasks], _TASK_K)
+        return [TaskSchema.model_validate(t).model_dump() for t in tasks]
 
 
 def SearchTasks(text: str, limit: int = 5):
@@ -54,7 +31,7 @@ def SearchTasks(text: str, limit: int = 5):
 '''
     with SessionLocal() as db:
         tasks = search_tasks_logic(text=text, limit=limit, db=db)
-        return _compact_list([TaskSchema.model_validate(t).model_dump() for t in tasks], _TASK_K)
+        return [TaskSchema.model_validate(t).model_dump() for t in tasks]
 
 
 def GetAllProjects():
@@ -63,7 +40,7 @@ def GetAllProjects():
 '''
     with SessionLocal() as db:
         projects = get_all_project_logic(first_n=None, db=db)
-        return _compact_list([ProjectSchema.model_validate(p).model_dump() for p in projects], _PROJECT_K)
+        return [ProjectSchema.model_validate(p).model_dump() for p in projects]
 
 
 def SearchProjects(text: str, limit: int = 5):
@@ -72,7 +49,7 @@ def SearchProjects(text: str, limit: int = 5):
 '''
     with SessionLocal() as db:
         projects = search_projects_logic(text=text, limit=limit, db=db)
-        return _compact_list([ProjectSchema.model_validate(p).model_dump() for p in projects], _PROJECT_K)
+        return [ProjectSchema.model_validate(p).model_dump() for p in projects]
 
 
 def GetAllRoutines():
@@ -81,7 +58,7 @@ def GetAllRoutines():
 '''
     with SessionLocal() as db:
         routines = get_all_routine_logic(db=db)
-        return _compact_list([RoutineSchema.model_validate(r).model_dump() for r in routines], _ROUTINE_K)
+        return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
 
 def SearchRoutines(text: str, limit: int = 5):
@@ -90,7 +67,7 @@ def SearchRoutines(text: str, limit: int = 5):
 '''
     with SessionLocal() as db:
         routines = search_routines_logic(text=text, limit=limit, db=db)
-        return _compact_list([RoutineSchema.model_validate(r).model_dump() for r in routines], _ROUTINE_K)
+        return [RoutineSchema.model_validate(r).model_dump() for r in routines]
 
 
 def Weather(city: str = None):
@@ -237,3 +214,50 @@ def Stocks(stock: str):
         }
     except Exception as e:
         return {'error': f'Failed to get stock data: {str(e)}'}
+
+
+def ReadNote(query: str, limit: int = 1):
+    '''
+    Semantic search through notes. Returns matching notes with their content.
+    Args:
+        query: Search query to find relevant notes.
+        limit: Max notes to return (default 1).
+    '''
+    with SessionLocal() as db:
+        notes = search_notes_logic(text=query, limit=limit, permission=True, db=db)
+        results = []
+        for note in notes:
+            try:
+                content = get_note_logic(id=note.id, db=db)
+            except Exception:
+                content = ""
+            results.append({
+                "i": note.id,
+                "n": note.title,
+                "p": note.path or "",
+                "content": content,
+            })
+        return results
+
+def DraftReadNote(query: str, limit: int = 1):
+    '''
+    Semantic search through notes. Returns matching notes with their content.
+    Args:
+        query: Search query to find relevant notes.
+        limit: Max notes to return (default 1).
+    '''
+    with SessionLocal() as db:
+        notes = search_notes_logic(text=query, permission=True, limit=limit, db=db)
+        results = []
+        for note in notes:
+            try:
+                content = get_note_logic(id=note.id, db=db)
+            except Exception:
+                content = ""
+            results.append({
+                "i": note.id,
+                "n": note.title,
+                "p": note.path or "",
+                "content": content,
+            })
+        return results

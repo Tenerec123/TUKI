@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T.U.K.I. NOTE</title>
+    <link rel="icon" type="image/svg" href="TUKI.svg">
+    <link rel="stylesheet" href="/frontend/style.css">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── NOTE TOOLBAR ── */
+        .note-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 16px;
+            background-color: var(--chacoal-grey);
+            border-bottom: 2px solid var(--neon-yellow);
+            min-height: 44px;
+        }
+
+        .note-toolbar .note-title {
+            flex: 1;
+            background: none;
+            border: none;
+            color: var(--neon-yellow);
+            font-family: monospace;
+            font-size: 1.1rem;
+            font-weight: bold;
+            padding: 6px 10px;
+            outline: none;
+        }
+
+        .note-toolbar .note-title::placeholder {
+            color: var(--off-yellow);
+        }
+
+        .note-toolbar .note-title:focus {
+            text-shadow: var(--glow-yellow-on);
+        }
+
+        .note-btn {
+            background: none;
+            border: 2px solid var(--neon-yellow);
+            color: var(--neon-yellow);
+            font-family: monospace;
+            font-size: 0.85rem;
+            font-weight: bold;
+            padding: 5px 14px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .note-btn:hover {
+            background-color: var(--neon-yellow);
+            color: var(--dark-bg);
+            box-shadow: var(--glow-yellow-on);
+        }
+
+        .note-btn.save-btn {
+            border-color: var(--neon-red);
+            color: var(--neon-red);
+        }
+
+        .note-btn.save-btn:hover {
+            background-color: var(--neon-red);
+            color: white;
+            box-shadow: var(--glow-red-on);
+        }
+
+        .note-btn.sync-btn {
+            border-color: #00cc66;
+            color: #00cc66;
+        }
+
+        .note-btn.sync-btn:hover {
+            background-color: #00cc66;
+            color: var(--dark-bg);
+            box-shadow: 0 0 8px rgba(0, 204, 102, 0.5);
+        }
+
+        .note-btn.discard-btn {
+            border-color: #ff6600;
+            color: #ff6600;
+        }
+
+        .note-btn.discard-btn:hover {
+            background-color: #ff6600;
+            color: var(--dark-bg);
+            box-shadow: 0 0 8px rgba(255, 102, 0, 0.5);
+        }
+
+        .note-btn.active {
+            background-color: var(--neon-yellow);
+            color: var(--dark-bg);
+        }
+
+        /* ── MAIN LAYOUT (sidebar + editor) ── */
+        .note-layout {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── FILE SIDEBAR ── */
+        .note-sidebar {
+            width: 220px;
+            min-width: 220px;
+            background-color: var(--chacoal-grey);
+            border-right: 2px solid var(--neon-yellow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .note-sidebar-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-bottom: 1px solid rgba(255, 255, 0, 0.15);
+        }
+
+        .note-sidebar-header span {
+            font-family: monospace;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: var(--neon-yellow);
+            text-transform: uppercase;
+        }
+
+        .vault-toggle {
+            background: none;
+            border: 2px solid var(--neon-yellow);
+            color: var(--neon-yellow);
+            font-family: monospace;
+            font-size: 0.75rem;
+            font-weight: bold;
+            padding: 3px 10px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s ease;
+        }
+
+        .vault-toggle.draft {
+            border-color: var(--neon-red);
+            color: var(--neon-red);
+        }
+
+        .vault-toggle:hover {
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        .note-sidebar-header button {
+            background: none;
+            border: none;
+            color: var(--neon-yellow);
+            font-size: 1.3rem;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .note-sidebar-header button:hover {
+            text-shadow: var(--glow-yellow-on);
+        }
+
+        .note-file-tree {
+            flex: 1;
+            overflow-y: auto;
+            padding: 6px 0;
+        }
+
+        /* Folder */
+        .folder-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--neon-yellow);
+            transition: background-color 0.15s;
+            user-select: none;
+        }
+
+        .folder-item:hover {
+            background-color: rgba(255, 255, 0, 0.08);
+        }
+
+        .folder-item .folder-chevron {
+            font-size: 0.65rem;
+            transition: transform 0.15s;
+            width: 12px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .folder-item.open .folder-chevron {
+            transform: rotate(90deg);
+        }
+
+        .folder-item .folder-icon {
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .folder-children {
+            display: none;
+            padding-left: 12px;
+        }
+
+        .folder-children.open {
+            display: block;
+        }
+
+        /* File */
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 8px;
+            padding-left: 26px;
+            cursor: pointer;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--neon-red);
+            transition: background-color 0.15s;
+            user-select: none;
+        }
+
+        .file-item:hover {
+            background-color: rgba(255, 0, 0, 0.08);
+            color: #ff6666;
+        }
+
+        .file-item.selected {
+            background-color: rgba(255, 0, 0, 0.15);
+            color: var(--neon-red);
+            border-left: 2px solid var(--neon-red);
+        }
+
+        .file-item .file-icon {
+            font-size: 0.85rem;
+            opacity: 0.7;
+        }
+
+        .file-item.selected .file-icon {
+            opacity: 1;
+        }
+
+        .folder-item.selected {
+            background-color: rgba(255, 255, 0, 0.1);
+            border-left: 2px solid var(--neon-yellow);
+        }
+
+        /* ── Delete badge (hover) ── */
+        .delete-badge {
+            display: none;
+            margin-left: auto;
+            background: none;
+            border: none;
+            color: var(--neon-red);
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+
+        .folder-item:hover .delete-badge,
+        .file-item:hover .delete-badge {
+            display: block;
+        }
+
+        .delete-badge:hover {
+            text-shadow: 0 0 6px var(--neon-red);
+        }
+
+        /* ── EDITOR AREA ── */
+        .editor-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .EasyMDEContainer {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .EasyMDEContainer .editor-toolbar {
+            background: var(--chacoal-grey);
+            border: none;
+            border-bottom: 1px solid rgba(255, 255, 0, 0.15);
+            padding: 4px 8px;
+        }
+
+        .EasyMDEContainer .editor-toolbar button {
+            color: #8b949e !important;
+        }
+
+        .EasyMDEContainer .editor-toolbar button:hover {
+            background-color: rgba(255, 255, 0, 0.1);
+            color: var(--neon-yellow) !important;
+        }
+
+        .EasyMDEContainer .editor-toolbar button.active {
+            color: var(--neon-yellow) !important;
+        }
+
+        .EasyMDEContainer .editor-toolbar i.separator {
+            border-left-color: rgba(255, 255, 0, 0.15);
+        }
+
+        .EasyMDEContainer .CodeMirror {
+            background: var(--dark-bg);
+            color: var(--neon-yellow);
+            border: none;
+            flex: 1;
+            font-family: monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .EasyMDEContainer .CodeMirror-scroll {
+            min-height: 100%;
+        }
+
+        .EasyMDEContainer .CodeMirror-focused {
+            outline: none;
+        }
+
+        /* ── Caret ── */
+        .EasyMDEContainer .CodeMirror-cursor {
+            border-left: 2.5px solid var(--neon-red);
+            box-shadow: 0 0 6px var(--neon-red), 0 0 14px rgba(255, 0, 0, 0.35);
+        }
+
+        .EasyMDEContainer .editor-preview,
+        .EasyMDEContainer .editor-preview-side {
+            background: var(--dark-bg);
+            color: #ccff00;
+            font-family: monospace;
+            padding: 24px 32px;
+        }
+
+        .EasyMDEContainer .editor-preview pre {
+            background: var(--chacoal-grey);
+            padding: 12px;
+            overflow-x: auto;
+        }
+
+        .EasyMDEContainer .editor-preview code {
+            background: var(--chacoal-grey);
+            padding: 2px 6px;
+            font-size: 13px;
+        }
+
+        .EasyMDEContainer .editor-preview pre code {
+            background: transparent;
+            padding: 0;
+        }
+
+        .EasyMDEContainer .editor-preview blockquote {
+            border-left: 4px solid var(--neon-yellow);
+            padding-left: 16px;
+            color: #8b949e;
+        }
+
+        .EasyMDEContainer .editor-preview h1,
+        .EasyMDEContainer .editor-preview h2,
+        .EasyMDEContainer .editor-preview h3 {
+            color: var(--neon-yellow);
+        }
+
+        .EasyMDEContainer .editor-preview a {
+            color: #53a8b6;
+        }
+
+        .EasyMDEContainer .editor-preview th,
+        .EasyMDEContainer .editor-preview td {
+            border: 1px solid rgba(255, 255, 0, 0.15);
+            padding: 8px 12px;
+        }
+
+        .EasyMDEContainer .editor-preview th {
+            background: var(--chacoal-grey);
+        }
+
+        .EasyMDEContainer .status-bar {
+            background: var(--chacoal-grey);
+            border-top: 1px solid rgba(255, 255, 0, 0.15);
+            color: #8b949e;
+            font-size: 12px;
+            padding: 4px 12px;
+        }
+
+        /* ── PREVIEW PANE (standalone) ── */
+        #previewPane {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px 32px;
+            background: var(--dark-bg);
+            color: #ccff00;
+            font-family: monospace;
+        }
+
+        #previewPane h1, #previewPane h2, #previewPane h3 {
+            color: var(--neon-yellow);
+            margin: 16px 0 8px;
+        }
+
+        #previewPane h1 {
+            font-size: 1.6rem;
+            border-bottom: 1px solid rgba(255, 255, 0, 0.15);
+            padding-bottom: 8px;
+        }
+
+        #previewPane h2 { font-size: 1.3rem; }
+        #previewPane h3 { font-size: 1.1rem; }
+        #previewPane p { margin: 8px 0; line-height: 1.7; }
+        #previewPane a { color: #53a8b6; }
+
+        #previewPane code {
+            background: var(--chacoal-grey);
+            padding: 2px 6px;
+            font-size: 13px;
+        }
+
+        #previewPane pre {
+            background: var(--chacoal-grey);
+            padding: 16px;
+            overflow-x: auto;
+            margin: 12px 0;
+        }
+
+        #previewPane pre code { background: transparent; padding: 0; }
+
+        #previewPane blockquote {
+            border-left: 4px solid var(--neon-yellow);
+            padding-left: 16px;
+            color: #8b949e;
+            margin: 12px 0;
+        }
+
+        #previewPane ul, #previewPane ol { padding-left: 24px; margin: 8px 0; }
+        #previewPane li { margin: 4px 0; line-height: 1.6; }
+        #previewPane table { border-collapse: collapse; margin: 12px 0; width: 100%; }
+        #previewPane th, #previewPane td { border: 1px solid rgba(255, 255, 0, 0.15); padding: 8px 12px; text-align: left; }
+        #previewPane th { background: var(--chacoal-grey); color: var(--neon-yellow); }
+        #previewPane hr { border: none; border-top: 1px solid rgba(255, 255, 0, 0.15); margin: 20px 0; }
+        #previewPane img { max-width: 100%; }
+
+        /* ── EMPTY STATE ── */
+        .note-empty {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #555;
+            font-family: monospace;
+            font-size: 1rem;
+        }
+
+        /* ── CONTEXT MENU ── */
+        .ctx-menu {
+            display: none;
+            position: fixed;
+            z-index: 999;
+            min-width: 180px;
+            background: var(--chacoal-grey);
+            border: 1px solid rgba(255, 255, 0, 0.25);
+            border-radius: 4px;
+            padding: 4px 0;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+            font-family: monospace;
+            font-size: 0.8rem;
+        }
+
+        .ctx-menu.open {
+            display: block;
+        }
+
+        .ctx-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 14px;
+            cursor: pointer;
+            color: #ccc;
+            transition: background 0.1s;
+        }
+
+        .ctx-menu-item:hover {
+            background: rgba(255, 255, 0, 0.1);
+            color: var(--neon-yellow);
+        }
+
+        .ctx-menu-item.danger:hover {
+            background: rgba(255, 0, 0, 0.15);
+            color: var(--neon-red);
+        }
+
+        /* File context menu: red theme */
+        .ctx-menu.file-ctx {
+            border-color: rgba(255, 0, 0, 0.3);
+        }
+
+        .ctx-menu.file-ctx .ctx-menu-item:hover {
+            background: rgba(255, 0, 0, 0.1);
+            color: var(--neon-red);
+        }
+
+        .ctx-menu-item i {
+            width: 16px;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        .ctx-menu-sep {
+            height: 1px;
+            background: rgba(255, 255, 0, 0.12);
+            margin: 4px 0;
+        }
+
+        .ctx-menu-input {
+            padding: 6px 12px;
+        }
+
+        .ctx-menu-input input {
+            width: 100%;
+            background: var(--dark-bg);
+            border: 1px solid rgba(255, 255, 0, 0.3);
+            color: var(--neon-yellow);
+            font-family: monospace;
+            font-size: 0.8rem;
+            padding: 5px 8px;
+            outline: none;
+        }
+
+        .ctx-menu-input input:focus {
+            border-color: var(--neon-yellow);
+            box-shadow: 0 0 4px rgba(255, 255, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1 id="title">T.U.K.I. NOTE</h1>
+        <h2 id="subtitle">T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR</h2>
+        <div id="navbar">
+            <a href="chat">CHAT</a>
+            <a href="todo">TODO</a>
+            <a href="kale">KALE</a>
+            <a class="unable" href="notes">NOTE</a>
+        </div>
+    </header>
+
+    <div class="note-toolbar">
+        <input type="text" class="note-title" placeholder="Note title..." id="noteTitle">
+        <button class="note-btn save-btn" id="saveBtn" title="Ctrl+S">
+            <i class="bi bi-floppy"></i> SAVE
+        </button>
+        <button class="note-btn sync-btn" id="syncBtn" title="Sync AI changes to vault">
+            <i class="bi bi-arrow-repeat"></i> SYNC
+        </button>
+        <button class="note-btn discard-btn" id="discardBtn" title="Discard AI changes">
+            <i class="bi bi-x-lg"></i> DISCARD
+        </button>
+        <button class="note-btn" id="previewToggle" title="Ctrl+P">
+            <i class="bi bi-eye"></i> PREVIEW
+        </button>
+    </div>
+
+    <div class="note-layout">
+        <aside class="note-sidebar">
+            <div class="note-sidebar-header">
+                <button class="vault-toggle" id="vaultToggle" title="Switch vault / draft">
+                    <i class="bi bi-database"></i> VAULT
+                </button>
+                <div>
+                    <button id="newFolderBtn" title="New folder"><i class="bi bi-folder-plus"></i></button>
+                    <button id="newFileBtn" title="New note"><i class="bi bi-file-earmark-plus"></i></button>
+                </div>
+            </div>
+            <div class="note-file-tree" id="fileTree"></div>
+        </aside>
+
+        <div class="editor-area" id="editorArea">
+            <textarea id="mdEditor"></textarea>
+            <div id="previewPane" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <div class="ctx-menu" id="ctxMenu"></div>
+    <script src="/frontend/notes.js"></script>
+</body>
+</html>

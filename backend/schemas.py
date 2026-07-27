@@ -125,4 +125,22 @@ class Prompt(BaseModel):
     conversation_id: int = Field(...)
     user_message: str = Field(...)
     model_config = ConfigDict(from_attributes=True)
-    
+
+
+class NoteMetaCreate(BaseModel):
+    title: str = Field(...)
+    path: str = Field(...)
+    content: str = Field(...)
+
+class NoteMetaUpdate(BaseModel):
+    title: Optional[str] = Field(None)
+    content: Optional[str] = Field(None)
+
+class NoteMetaSchema(BaseModel):
+    id: int = Field(...)
+    title: str = Field(...)
+    path: Optional[str] = Field(None)
+    model_config = ConfigDict(from_attributes=True)
+
+class FolderRequest(BaseModel):
+    path: str

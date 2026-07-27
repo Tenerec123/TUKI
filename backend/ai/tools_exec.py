@@ -4,13 +4,13 @@ Each function has a standardized docstring:
     - First line(s): description
     - Args: (optional, only for non-obvious parameters)
 """
-
 from datetime import date, datetime
-from ..schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate
+from ..schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate
 from ..database import SessionLocal
 from ..logic.tasks import create_task_logic, delete_task_logic, update_task_logic
 from ..logic.projects import create_project_logic, delete_project_logic, update_project_logic
 from ..logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic
+from ..logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
 from ._helpers import _icon_fallback, _resolve_project
 
 
@@ -169,3 +169,45 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         )
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully."
+
+def DraftCreateNote(title:str, path:str, content:str,):
+    '''
+        Args:
+            title: omit .md
+            path: folder1/folder2/folder3 format. empty str if note is in root
+            content: markdown
+    '''
+    with SessionLocal() as db:
+        create_note_logic(NoteMetaCreate(
+            title=title,
+            path=path,
+            content=content
+        ),
+        permission=False,
+        db=db)
+
+    return f"Note {title} created succesfully"
+
+def DraftDeleteNote(note_id):
+    '''
+    '''
+    with SessionLocal() as db:
+        noteM = delete_note_logic(
+            id=note_id,
+            db=db
+        )
+    return f"Note {noteM.title} (id:{note_id}) deleted successfully"
+
+def DraftUpdateNote(note_id:int, title:str, content:str):
+    '''
+    Only provided fields are modified.
+    '''
+    with SessionLocal() as db:
+        update_note_logic(
+            id= note_id,
+            note_update=NoteMetaUpdate(
+                title=title,
+                content=content
+            ),
+            db=db
+        )
