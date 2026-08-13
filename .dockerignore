@@ -14,3 +14,7 @@ __pycache__/
 
 .DS_Store
 Thumbs.db
+
+# Local note storage — bind-mounted on the server, never copied into the image
+vault/
+draft/
