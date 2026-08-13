@@ -816,6 +816,23 @@ SELECT CALENDAR
   box-shadow: 0 0 8px rgba(255, 255, 0, 0.3);
 }
 
+/* ISO date input: visible text always shows YYYY-MM-DD (native input value is
+   locale-independent); the invisible native input on top opens the picker. */
+.iso-date-text {
+    pointer-events: none;
+    cursor: default;
+}
+.iso-date-native {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 2;
+}
+
 .graph-domain {
     overflow: visible !important;
 }

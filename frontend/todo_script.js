@@ -22,11 +22,21 @@ function getIcon(iconName) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // ISO date inputs: keep the visible text in sync with the native picker value.
+    document.querySelectorAll('.iso-date-native').forEach(native => {
+        syncIsoDateText(native);
+        native.addEventListener('change', () => syncIsoDateText(native));
+    });
     LoadTasks();
     LoadProjects();
     LoadRoutines();
     LoadTodayRoutines();
 });
+
+function syncIsoDateText(nativeInput) {
+    const text = nativeInput.closest('.date-container').querySelector('.iso-date-text');
+    if (text) { text.value = nativeInput.value; }
+}
 
 async function LoadTasks() {
     await fetch(`${window.API_URL}/api/tasks/`)
