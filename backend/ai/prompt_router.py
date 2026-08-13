@@ -48,26 +48,12 @@ def get_llm_predictions(query:str) -> dict:
     raw_content = response.choices[0].message.content
     return json.loads(raw_content)
 
-
-def get_base_rules():
-    today_str = date.today().isoformat()
-    return f"""T.U.K.I. — productivity assistant. Tone: direct, technical.
-User: developer. Lang: Spanish/English. Date: {today_str}
+BASE_RULES = f"""T.U.K.I. — productivity assistant. Tone: direct, technical.
+User: developer. Lang: Spanish/English.
 Priority: Urgency(0-32) + Importance(0-32) = [1,64]
 Rules: No raw JSON in responses. No tool calls in visible text. Use $ for LaTeX."""
 
-specific_rules = {
-    'normal': "You will not need function calling. Respond as a normal text agent.",
-    'query': "You MUST use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch) to answer the user's request. Do NOT create, update, or delete anything. Use Weather for current conditions and forecasts. Use WebSearch when the user asks about current events, news, recent tech info, or factual questions that need up-to-date external information.",
-    'execution': """FOLLOW THESE STEPS:
-1. FIRST: use read-only tools (GetAllTasks, GetAllProjects, GetAllRoutines, CheckEmail, SearchTasks, SearchProjects, SearchRoutines, Weather, WebSearch) to verify existing data and find the correct IDs.
-2. THEN: use Create/Update/Delete tools to make the requested changes.
-3. Never guess IDs — always read first.""",
-    'unsure': "You have full freedom. Use tools if the user needs data or actions. Respond normally if it's general chat. Decide based on what makes sense.",
-}
-
 _sr = None
-
 
 def get_sr():
     global _sr
@@ -138,11 +124,6 @@ def classify(conversation: ConversationSchema) -> str:
     result = llm_router(conversation)
     print(f"[ROUTER] '{msg_preview}' → {result}")
     return result
-
-
-def get_routed_rules(conversation: ConversationSchema) -> str:
-    route = classify(conversation)
-    return get_base_rules() + "\n" + specific_rules[route]
 
 
 def llm_router(conversation: ConversationSchema) -> str:

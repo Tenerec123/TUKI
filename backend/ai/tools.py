@@ -1,6 +1,7 @@
 """Auto-discovery system for tool functions.
 Reads functions from read_tools and exec_tools modules,
-generates JSON schemas from function signatures + docstrings."""
+generates JSON schemas from function signatures + docstrings.
+"""
 
 import inspect
 import json
@@ -85,24 +86,20 @@ def _parse_docstring(doc: str):
 
 def _discover_tools():
     """Scan read_tools and exec_tools modules for tool functions.
-    
-    Tool type (read/write) is determined by which module the function
-    lives in. Function signature + docstring generate the JSON schema.
-    
+
+    Modules are scanned in order (read tools first, write tools second),
+    so the full tool list keeps that ordering. Function signature +
+    docstring generate the JSON schema.
+
     Returns:
-        (ToolDict, tool_schemas, TOOL_READ_NAMES, TOOL_WRITE_NAMES)
+        (ToolDict, tool_schemas)
     """
     ToolDict = {}
     tool_schemas = []
-    TOOL_READ_NAMES = set()
-    TOOL_WRITE_NAMES = set()
 
-    modules = [
-        (tools_read, 'read'),
-        (tools_exec, 'write'),
-    ]
+    modules = [tools_read, tools_exec]
 
-    for module, tool_type in modules:
+    for module in modules:
         for name, func in inspect.getmembers(module, inspect.isfunction):
             if func.__module__ != module.__name__:
                 continue
@@ -146,22 +143,17 @@ def _discover_tools():
             ToolDict[name] = func
             tool_schemas.append(schema)
 
-            if tool_type == 'read':
-                TOOL_READ_NAMES.add(name)
-            else:
-                TOOL_WRITE_NAMES.add(name)
-
-    return ToolDict, tool_schemas, TOOL_READ_NAMES, TOOL_WRITE_NAMES
+    return ToolDict, tool_schemas
 
 
 # ── Run discovery once at import time ──────────────────────────────────
 
-ToolDict, tool_schemas, TOOL_READ_NAMES, TOOL_WRITE_NAMES = _discover_tools()
+ToolDict, tool_schemas = _discover_tools()
 
-# Derived lists
+# Single, constant tool set sent on EVERY request. Keeping it stable is
+# what makes the [system + tools] block reusable in the KV cache.
+# TOOL_SKIP_NAMES can exclude a tool without breaking the set.
 TOOL_SKIP_NAMES = set()
-READ_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] in TOOL_READ_NAMES]
-WRITE_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] in TOOL_WRITE_NAMES]
 ALL_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] not in TOOL_SKIP_NAMES]
 
 

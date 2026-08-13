@@ -2,13 +2,33 @@ import os
 import json
 from datetime import datetime
 from ..schemas import ConversationSchema
-from .tools import ALL_TOOLS_SCHEMAS, READ_TOOLS_SCHEMAS, WRITE_TOOLS_SCHEMAS, execute_tool_call
-from .prompt_router import classify, get_base_rules
+from .tools import ALL_TOOLS_SCHEMAS, execute_tool_call
+from .prompt_router import classify, BASE_RULES
 from openai import AsyncOpenAI
-
 
 def _log(msg: str):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
+
+
+def _log_cache_usage(usage, label: str = ""):
+    """Log prompt-cache metrics from a usage object.
+
+    OpenRouter reports cache activity via prompt_tokens_details.cached_tokens:
+    > 0 means the provider reused a cached prefix (cheaper and faster).
+    """
+    if usage is None:
+        return
+    try:
+        details = getattr(usage, "prompt_tokens_details", None)
+        cached = getattr(details, "cached_tokens", 0) or 0
+        prompt = getattr(usage, "prompt_tokens", 0) or 0
+        if cached:
+            pct = 100.0 * cached / prompt if prompt else 0.0
+            _log(f"→ [CACHE:{label}] hit {cached}/{prompt} tokens ({pct:.0f}%)")
+        else:
+            _log(f"→ [CACHE:{label}] miss (cached=0, prompt={prompt})")
+    except Exception:
+        pass
 
 client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
@@ -18,20 +38,22 @@ client = AsyncOpenAI(
 MAX_TOOL_ROUNDS = 3
 
 # ── Phase-specific prompts ──────────────────────────────────────────────
-# Each phase gets appended to get_base_rules() (identity, tone, priority, formatting)
+# Each phase gets appended to BASE_RULES (identity, tone, priority, formatting)
 
 PHASE_PROMPTS = {
     'read': """
 [CURRENT PHASE: DATA GATHERING]
 Your ONLY job right now is to gather data from the database using read-only tools.
 Call the tools you need (GetAllTasks, GetAllProjects, GetAllRoutines) to get the information required.
+WRITE TOOLS (Create/Update/Delete) ARE OFF-LIMITS IN THIS PHASE — do NOT call them.
 Do NOT write any response text to the user yet.
 When you have all the data you need, stop calling tools and briefly summarize what you found.
 """,
     'write': """
 [CURRENT PHASE: EXECUTION]
 You already have data context from the previous phase.
-Use the tools to create, update, or delete records as the user requested.
+Use the Create/Update/Delete tools to make the changes the user requested.
+Do NOT call read-only tools unless strictly necessary.
 
 IMPORTANT — You can call MULTIPLE tools in a single response.
 For example, to create 10 tasks call CreateTask 10 times in parallel here.
@@ -62,34 +84,40 @@ Respond naturally if it's general conversation. Decide based on context.
 """
 }
 
-
 # ── Helpers ─────────────────────────────────────────────────────────────
 
-def _build_messages(base_prompt: str, conversation: ConversationSchema) -> list:
+def _build_messages(conversation: ConversationSchema, guided_prompt:str, base_prompt: str = BASE_RULES) -> list:
     """Build message list from base prompt + conversation history."""
     msgs = [{'role': 'developer', 'content': base_prompt}]
     for msg in conversation.messages:
         msgs.append({'role': 'user' if msg.is_user else 'assistant', 'content': msg.text})
+    msgs.append({'role':'developer', 'content':guided_prompt})
+    msgs.append({'role':'developer', 'content':f'[TIME] {datetime.now().isoformat()}'})
     return msgs
 
 
-def _get_tool_history(full_msgs: list, conv_msg_count: int) -> list:
+def _get_tool_history(full_msgs: list, base_len: int) -> list:
     """Extract tool call/result messages added during a phase.
 
     full_msgs layout:
-      [0] = developer prompt
-      [1..conv_msg_count] = conversation messages
-      [conv_msg_count+1..] = tool calls / results added during the phase
+      [0..base_len-1] = developer prompt + conversation + guided prompt + time (pre-phase)
+      [base_len..] = tool calls / results added during the phase
+
+    base_len must be captured BEFORE the phase runs (the list is mutated in place).
     """
-    return full_msgs[conv_msg_count + 1:]
+    return full_msgs[base_len:]
 
 
-async def _tool_round(messages: list, model: str, tool_schemas: list) -> bool:
+async def _tool_round(messages: list, model: str, tool_schemas: list, session_id: str = "") -> bool:
     """Execute ONE round of model inference with tools.
 
     - If the model calls tools → executes them, appends results to `messages`.
     - If the model responds with text → appends the text message.
     Returns True if tools were called (caller should loop), False otherwise.
+
+    session_id enables OpenRouter provider sticky routing from the first
+    request: all calls of a conversation stick to one provider, keeping its
+    KV cache warm (DeepSeek cache reads cost 0.1x).
     """
     response = await client.chat.completions.create(
         model=model,
@@ -98,7 +126,9 @@ async def _tool_round(messages: list, model: str, tool_schemas: list) -> bool:
         tool_choice="auto",
         parallel_tool_calls=True,
         stream=False,
+        extra_body={"session_id": session_id},
     )
+    _log_cache_usage(response.usage, model)
 
     # OpenRouter may return choices=None on internal errors
     if not response.choices:
@@ -146,7 +176,7 @@ async def _tool_round(messages: list, model: str, tool_schemas: list) -> bool:
     return True
 
 
-async def _tool_phase(messages: list, model: str, tool_schemas: list, phase_name: str = "", max_rounds: int = None, error_retry: bool = False) -> tuple:
+async def _tool_phase(messages: list, model: str, tool_schemas: list, phase_name: str = "", max_rounds: int = None, error_retry: bool = False, session_id: str = "") -> tuple:
     """Run tool rounds until done.
 
     - If the model responds with text → phase done, that text IS the response.
@@ -161,7 +191,7 @@ async def _tool_phase(messages: list, model: str, tool_schemas: list, phase_name
     for i in range(limit):
         prev_len = len(messages)
         _log(f"── Round {i+1}/{limit}")
-        tools_called = await _tool_round(messages, model, tool_schemas)
+        tools_called = await _tool_round(messages, model, tool_schemas, session_id)
 
         if not tools_called:
             _log(f"═══ TOOL PHASE [{phase_name}] done (text response)")
@@ -197,16 +227,27 @@ async def _tool_phase(messages: list, model: str, tool_schemas: list, phase_name
     return messages, final_text
 
 
-async def _stream_response(messages: list, model: str, phase_label: str = ""):
-    """Stream a pure-text response (no tools)."""
+async def _stream_response(messages: list, model: str, phase_label: str = "", tools: list = None, tool_choice: str = "auto", session_id: str = ""):
+    """Stream a text response.
+
+    tools are sent on every stream (with tool_choice="none" when the phase
+    must not call tools) so the [system + tools] prefix stays byte-identical
+    across all requests and remains KV-cacheable.
+    """
     _log(f"═══ STREAM [{phase_label}] starting")
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
+        tools=tools,
+        tool_choice=tool_choice,
         stream=True,
+        extra_body={"session_id": session_id},
     )
     token_count = 0
     async for chunk in stream:
+        # OpenRouter sends usage on the final chunk (may arrive without choices)
+        if chunk.usage:
+            _log_cache_usage(chunk.usage, phase_label)
         if not chunk.choices:
             continue
         delta = chunk.choices[0].delta
@@ -249,84 +290,90 @@ def get_model_config() -> dict:
 async def normal_path(conversation: ConversationSchema, model_config: dict):
     """Pure chat — one streaming phase, no tools."""
     _log("═══ PATH: normal")
-    base = get_base_rules() + "\n" + PHASE_PROMPTS['chat']
-    msgs = _build_messages(base, conversation)
-    async for token in _stream_response(msgs, model_config['general'], "chat"):
+    msgs = _build_messages(conversation, PHASE_PROMPTS['chat'])
+    async for token in _stream_response(msgs, model_config['general'], "chat", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
 async def query_path(conversation: ConversationSchema, model_config: dict):
     """Phase 1: Read data (no stream)  →  Phase 2: Stream response."""
     _log("═══ PATH: query")
-    base = get_base_rules()
 
+    read_base = _build_messages(conversation, PHASE_PROMPTS['read'])
+    read_base_len = len(read_base)
     read_msgs, final_text = await _tool_phase(
-        _build_messages(base + "\n" + PHASE_PROMPTS['read'], conversation),
-        model_config['get_data'], READ_TOOLS_SCHEMAS, "read", max_rounds=1,
+        read_base,
+        model_config['get_data'], ALL_TOOLS_SCHEMAS, "read", max_rounds=1,
+        session_id=str(conversation.id),
     )
 
     if final_text:
         yield final_text
         return
 
-    tool_hist = _get_tool_history(read_msgs, len(conversation.messages))
-    respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_query'], conversation)
+    tool_hist = _get_tool_history(read_msgs, read_base_len)
+    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_query'])
     respond_msgs.extend(tool_hist)
     respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
-    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-query"):
+    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-query", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
 async def execution_path(conversation: ConversationSchema, model_config: dict):
     """Phase 1: Read  →  Phase 2: Write  →  Phase 3: Stream response (optional)."""
     _log("═══ PATH: execution")
-    base = get_base_rules()
 
+    read_base = _build_messages(conversation, PHASE_PROMPTS['read'])
+    read_base_len = len(read_base)
     read_msgs, _ = await _tool_phase(
-        _build_messages(base + "\n" + PHASE_PROMPTS['read'], conversation),
-        model_config['get_data'], READ_TOOLS_SCHEMAS, "read", max_rounds=1,
+        read_base,
+        model_config['get_data'], ALL_TOOLS_SCHEMAS, "read", max_rounds=1,
+        session_id=str(conversation.id),
     )
 
-    tool_hist = _get_tool_history(read_msgs, len(conversation.messages))
-    write_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['write'], conversation)
-    write_msgs.extend(tool_hist)
-    write_msgs, final_text = await _tool_phase(write_msgs, model_config['exec_tools'], WRITE_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True)
+    tool_hist = _get_tool_history(read_msgs, read_base_len)
+    write_base = _build_messages(conversation, PHASE_PROMPTS['write'])
+    write_base.extend(tool_hist)
+    write_base_len = len(write_base)
+    write_msgs, final_text = await _tool_phase(write_base, model_config['exec_tools'], ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True, session_id=str(conversation.id))
 
     # If the model already responded with text, that IS the response — no extra inference
     if final_text:
         yield final_text
         return
 
-    tool_hist = _get_tool_history(write_msgs, len(conversation.messages))
-    respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_execution'], conversation)
+    tool_hist = _get_tool_history(write_msgs, write_base_len)
+    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_execution'])
     respond_msgs.extend(tool_hist)
     respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
-    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-execution"):
+    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-execution", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
 async def unsure_path(conversation: ConversationSchema, model_config: dict):
     """Full freedom — model decides everything."""
     _log("═══ PATH: unsure")
-    base = get_base_rules()
 
+    base = _build_messages(conversation, PHASE_PROMPTS['unsure'])
+    base_len = len(base)
     msgs, final_text = await _tool_phase(
-        _build_messages(base + "\n" + PHASE_PROMPTS['unsure'], conversation),
+        base,
         model_config['general'], ALL_TOOLS_SCHEMAS, "unsure",
+        session_id=str(conversation.id),
     )
 
     if final_text:
         yield final_text
         return
 
-    tool_hist = _get_tool_history(msgs, len(conversation.messages))
-    respond_msgs = _build_messages(base + "\n" + PHASE_PROMPTS['respond_query'], conversation)
+    tool_hist = _get_tool_history(msgs, base_len)
+    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_query'])
     respond_msgs.extend(tool_hist)
     respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
-    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-unsure"):
+    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-unsure", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
