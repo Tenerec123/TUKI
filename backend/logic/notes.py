@@ -5,9 +5,9 @@ from ..schemas import NoteMetaCreate, NoteMetaUpdate
 from pathlib import Path
 from typing import Any
 import shutil
-ROOT = Path(__file__).parent.parent
-VAULT = Path(__file__).parent.parent / "vault"
-DRAFT = Path(__file__).parent.parent / "draft"
+ROOT = Path(__file__).parent.parent.parent
+VAULT = ROOT / "vault"
+DRAFT = ROOT / "draft"
 def _note_path(noteM: NoteMeta) -> Path:
     return ROOT / noteM.path / f"{noteM.title}.md"
 
