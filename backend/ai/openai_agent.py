@@ -260,23 +260,32 @@ async def _stream_response(messages: list, model: str, phase_label: str = "", to
 # ── Model Config ────────────────────────────────────────────────────────
 
 def get_model_config() -> dict:
-    """Read per-phase model config from DB, falling back to defaults."""
+    """Read the orchestrator model from DB, falling back to defaults.
+
+    The whole conversation runs on ONE model (`orchestrator`) so the shared
+    [system + history] prefix stays KV-cacheable across phases. `searcher`
+    is stored for future clean-context subagents (not used yet).
+    Legacy per-phase keys (get_data/exec_tools/final_resp/general) are
+    collapsed into `orchestrator`.
+    """
     from ..database import SessionLocal
     from ..models import Config
 
     defaults = {
-        'get_data': 'deepseek/deepseek-v4-flash',
-        'exec_tools': 'deepseek/deepseek-v4-flash',
-        'final_resp': 'google/gemini-2.5-flash-lite',
-        'general': 'deepseek/deepseek-v4-flash',
+        'orchestrator': 'deepseek/deepseek-v4-flash',
+        'searcher': 'google/gemini-2.5-flash-lite',
     }
 
     try:
         db = SessionLocal()
         rows = db.query(Config).all()
-        for row in rows:
-            if row.key in defaults:
-                defaults[row.key] = row.value
+        values = {row.key: row.value for row in rows}
+        # Legacy migration: use the old 'general' (chat) value as orchestrator.
+        if 'orchestrator' not in values and 'general' in values:
+            values['orchestrator'] = values['general']
+        for key in defaults:
+            if key in values:
+                defaults[key] = values[key]
     except Exception as e:
         _log(f"[CONFIG] Error reading model config: {e}")
     finally:
@@ -291,7 +300,7 @@ async def normal_path(conversation: ConversationSchema, model_config: dict):
     """Pure chat — one streaming phase, no tools."""
     _log("═══ PATH: normal")
     msgs = _build_messages(conversation, PHASE_PROMPTS['chat'])
-    async for token in _stream_response(msgs, model_config['general'], "chat", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
+    async for token in _stream_response(msgs, model_config['orchestrator'], "chat", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
@@ -303,7 +312,7 @@ async def query_path(conversation: ConversationSchema, model_config: dict):
     read_base_len = len(read_base)
     read_msgs, final_text = await _tool_phase(
         read_base,
-        model_config['get_data'], ALL_TOOLS_SCHEMAS, "read", max_rounds=1,
+        model_config['orchestrator'], ALL_TOOLS_SCHEMAS, "read", max_rounds=1,
         session_id=str(conversation.id),
     )
 
@@ -316,7 +325,7 @@ async def query_path(conversation: ConversationSchema, model_config: dict):
     respond_msgs.extend(tool_hist)
     respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
-    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-query", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
+    async for token in _stream_response(respond_msgs, model_config['orchestrator'], "respond-query", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
@@ -328,7 +337,7 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
     read_base_len = len(read_base)
     read_msgs, _ = await _tool_phase(
         read_base,
-        model_config['get_data'], ALL_TOOLS_SCHEMAS, "read", max_rounds=1,
+        model_config['orchestrator'], ALL_TOOLS_SCHEMAS, "read", max_rounds=1,
         session_id=str(conversation.id),
     )
 
@@ -336,7 +345,7 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
     write_base = _build_messages(conversation, PHASE_PROMPTS['write'])
     write_base.extend(tool_hist)
     write_base_len = len(write_base)
-    write_msgs, final_text = await _tool_phase(write_base, model_config['exec_tools'], ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True, session_id=str(conversation.id))
+    write_msgs, final_text = await _tool_phase(write_base, model_config['orchestrator'], ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True, session_id=str(conversation.id))
 
     # If the model already responded with text, that IS the response — no extra inference
     if final_text:
@@ -348,7 +357,7 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
     respond_msgs.extend(tool_hist)
     respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
-    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-execution", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
+    async for token in _stream_response(respond_msgs, model_config['orchestrator'], "respond-execution", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 
@@ -360,7 +369,7 @@ async def unsure_path(conversation: ConversationSchema, model_config: dict):
     base_len = len(base)
     msgs, final_text = await _tool_phase(
         base,
-        model_config['general'], ALL_TOOLS_SCHEMAS, "unsure",
+        model_config['orchestrator'], ALL_TOOLS_SCHEMAS, "unsure",
         session_id=str(conversation.id),
     )
 
@@ -373,7 +382,7 @@ async def unsure_path(conversation: ConversationSchema, model_config: dict):
     respond_msgs.extend(tool_hist)
     respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
 
-    async for token in _stream_response(respond_msgs, model_config['final_resp'], "respond-unsure", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
+    async for token in _stream_response(respond_msgs, model_config['orchestrator'], "respond-unsure", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
 
 

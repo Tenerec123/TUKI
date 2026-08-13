@@ -374,30 +374,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     toggleBtn.addEventListener('click', () => {
         container.classList.toggle('sidebar-collapsed');
     });
-    await getConversations();
-    if (conversationList.children){
-        conversationList.children[0].children[0].click();
-    }
-    Render();
-    SetupAudio();
 
+    // Attach model selector handlers FIRST so they work even if async init fails.
     const agentSelectors = document.querySelectorAll('.sub-details');
     agentSelectors.forEach(agentS => {
 
-        possibleModels = agentS.querySelectorAll('.model-item');
+        const possibleModels = agentS.querySelectorAll('.model-item');
 
         possibleModels.forEach(model => {
             model.addEventListener('click', () => {
                 const selectedBefore = agentS.querySelector('.selected-model');
                 if (selectedBefore == model) {return}
-                selectedBefore.classList.remove('selected-model')
+                if (selectedBefore) { selectedBefore.classList.remove('selected-model') }
                 model.classList.add('selected-model');
                 agentS.querySelector('.model-current-name').textContent = model.textContent;
                 agentS.open = false;
-
+                SendModelConfig();
             })
         })
     })
+
+    await getConversations();
+    if (conversationList.children){
+        conversationList.children[0].children[0].click();
+    }
+    await LoadModelConfig();
+    Render();
 })
 
 function OpenMenu(button, id, position){
@@ -434,24 +436,52 @@ function OpenMenu(button, id, position){
     }
 }
 
+async function LoadModelConfig(){
+    try {
+        const res = await fetch(`${window.API_URL}/api/config/models`);
+        if (!res.ok) { return }
+        const config = await res.json();
+        const targets = [
+            ['orchestrator-name', config.orchestrator],
+            ['searcher-name', config.searcher],
+        ];
+        for (const [spanId, model] of targets) {
+            if (!model) { continue }
+            const sub = document.getElementById(spanId).closest('.sub-details');
+            sub.querySelectorAll('.model-item').forEach(item => {
+                if (item.getAttribute('data-model') === model) {
+                    sub.querySelectorAll('.selected-model').forEach(s => s.classList.remove('selected-model'));
+                    item.classList.add('selected-model');
+                    sub.querySelector('.model-current-name').textContent = item.textContent;
+                }
+            });
+        }
+    } catch (e) {
+        console.error('[CONFIG] Failed to load model config:', e);
+    }
+}
+
 function SendModelConfig(){
     function getSelectedModel(spanId) {
         const sub = document.getElementById(spanId).closest('.sub-details');
         const sel = sub.querySelector('.selected-model');
-        return sel ? sel.getAttribute('data-model') : 'deepseek/deepseek-v4-flash';
+        return sel ? sel.getAttribute('data-model') : null;
+    }
+    const config = {
+        "orchestrator": getSelectedModel('orchestrator-name'),
+        "searcher": getSelectedModel('searcher-name'),
+    };
+    if (!config.orchestrator || !config.searcher) {
+        console.warn('[CONFIG] Missing model selection, skipping save');
+        return;
     }
     fetch(`${window.API_URL}/api/config/models`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            "get_data": getSelectedModel('get-data-name'),
-            "exec_tools": getSelectedModel('exec-tools-name'),
-            "final_resp": getSelectedModel('final-resp-name'),
-            "general": getSelectedModel('general-name')
-        })
-    });
+        body: JSON.stringify(config)
+    }).catch(e => console.error('[CONFIG] Failed to save model config:', e));
 }
 
 document.addEventListener('click', (e) => {
@@ -461,9 +491,7 @@ document.addEventListener('click', (e) => {
         id_of_menu_disp = null;
     }
     const modelSelector = document.querySelector('.model-selector-details');
-    console.log(modelSelector, modelSelector.open)
     if (!e.target.closest('.model-selector-details') && modelSelector && modelSelector.open){
-        SendModelConfig();
         modelSelector.open = false;
     }
 })

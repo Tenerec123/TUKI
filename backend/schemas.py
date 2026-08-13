@@ -3,10 +3,8 @@ from datetime import date, datetime
 from typing import List, Optional
 
 class ModelConfig(BaseModel):
-    get_data:str = Field(max_length=128)
-    exec_tools:str = Field(max_length=128)
-    final_resp:str = Field(max_length=128)
-    general:str = Field(max_length=128)
+    orchestrator: str = Field(max_length=128)
+    searcher: Optional[str] = Field(default=None, max_length=128)
 
 class BaseItem(BaseModel):
     name: str = Field(..., max_length=512, description='Name of the todo')
