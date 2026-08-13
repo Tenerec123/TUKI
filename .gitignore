@@ -63,3 +63,7 @@ logs/
 
 # Machine-specific deploy skills (local SSH config, IPs, passwords)
 .opencode
+
+# .md notes system (private)
+vault/
+draft/
