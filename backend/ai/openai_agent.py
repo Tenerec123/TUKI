@@ -86,13 +86,18 @@ Respond naturally if it's general conversation. Decide based on context.
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 
-def _build_messages(conversation: ConversationSchema, guided_prompt:str, base_prompt: str = BASE_RULES) -> list:
-    """Build message list from base prompt + conversation history."""
+def _build_messages(conversation: ConversationSchema, guided_prompt: str, tool_history: list | None = None, base_prompt: str = BASE_RULES) -> list:
+    """Build the full message list in one place.
+
+    Order: system prompt, conversation history, tool history, phase prompt, time.
+    """
     msgs = [{'role': 'developer', 'content': base_prompt}]
     for msg in conversation.messages:
         msgs.append({'role': 'user' if msg.is_user else 'assistant', 'content': msg.text})
-    msgs.append({'role':'developer', 'content':guided_prompt})
-    msgs.append({'role':'developer', 'content':f'[TIME] {datetime.now().isoformat()}'})
+    if tool_history:
+        msgs.extend(tool_history)
+    msgs.append({'role': 'developer', 'content': guided_prompt})
+    msgs.append({'role': 'developer', 'content': f'[TIME] {datetime.now().isoformat()}'})
     return msgs
 
 
@@ -321,9 +326,7 @@ async def query_path(conversation: ConversationSchema, model_config: dict):
         return
 
     tool_hist = _get_tool_history(read_msgs, read_base_len)
-    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_query'])
-    respond_msgs.extend(tool_hist)
-    respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
+    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_query'], tool_history=tool_hist)
 
     async for token in _stream_response(respond_msgs, model_config['orchestrator'], "respond-query", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
@@ -341,9 +344,8 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
         session_id=str(conversation.id),
     )
 
-    tool_hist = _get_tool_history(read_msgs, read_base_len)
-    write_base = _build_messages(conversation, PHASE_PROMPTS['write'])
-    write_base.extend(tool_hist)
+    read_hist = _get_tool_history(read_msgs, read_base_len)
+    write_base = _build_messages(conversation, PHASE_PROMPTS['write'], tool_history=read_hist)
     write_base_len = len(write_base)
     write_msgs, final_text = await _tool_phase(write_base, model_config['orchestrator'], ALL_TOOLS_SCHEMAS, "write", max_rounds=1, error_retry=True, session_id=str(conversation.id))
 
@@ -352,10 +354,8 @@ async def execution_path(conversation: ConversationSchema, model_config: dict):
         yield final_text
         return
 
-    tool_hist = _get_tool_history(write_msgs, write_base_len)
-    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_execution'])
-    respond_msgs.extend(tool_hist)
-    respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
+    write_hist = _get_tool_history(write_msgs, write_base_len)
+    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_execution'], tool_history=read_hist + write_hist)
 
     async for token in _stream_response(respond_msgs, model_config['orchestrator'], "respond-execution", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
@@ -378,9 +378,7 @@ async def unsure_path(conversation: ConversationSchema, model_config: dict):
         return
 
     tool_hist = _get_tool_history(msgs, base_len)
-    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_query'])
-    respond_msgs.extend(tool_hist)
-    respond_msgs.append({"role": "user", "content": "[RESPOND] Based on the data above, write your response to the user now. No more tools available."})
+    respond_msgs = _build_messages(conversation, PHASE_PROMPTS['respond_query'], tool_history=tool_hist)
 
     async for token in _stream_response(respond_msgs, model_config['orchestrator'], "respond-unsure", tools=ALL_TOOLS_SCHEMAS, tool_choice="none", session_id=str(conversation.id)):
         yield token
