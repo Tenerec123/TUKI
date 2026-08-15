@@ -6,6 +6,8 @@ Each function has a standardized docstring:
 """
 
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from ..schemas import TaskSchema, ProjectSchema, RoutineSchema
 from ..database import SessionLocal
 from ..logic.tasks import get_all_tasks_logic, search_tasks_logic
@@ -14,6 +16,19 @@ from ..logic.routines import get_all_routine_logic, search_routines_logic
 from ..logic.notes import get_note_logic, search_notes_logic
 from pathlib import Path
 import yfinance as yf
+
+
+def GetCurrentTime():
+    '''
+    Current date and time in the user's timezone (Europe/Madrid by default).
+    Call this when the task involves dates, deadlines, or scheduling.
+    Returns day of week, date, time, and UTC offset.
+'''
+    tz = ZoneInfo(os.environ.get('TIMEZONE', 'Europe/Madrid'))
+    now = datetime.now(tz)
+    offset = now.strftime('%z')
+    return (f"{now.strftime('%A, %B %d, %Y, %H:%M')} "
+            f"{now.tzname()} (UTC{offset[:3]}:{offset[3:]})")
 
 
 def GetAllTasks():

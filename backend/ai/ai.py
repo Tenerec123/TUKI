@@ -106,11 +106,12 @@ async def chat_persistence_wrapper(prompt: Prompt):
             full_text += token
             stream_manager.push(prompt.conversation_id, token)
 
-        edit_conversation_logic(
-            prompt.conversation_id,
-            ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]),
-            db=db,
-        )
+        if full_text.strip():
+            edit_conversation_logic(
+                prompt.conversation_id,
+                ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]),
+                db=db,
+            )
 
         if title_task:
             await title_task
