@@ -171,7 +171,7 @@ async function allowRenameConv(conv_id, conv_position) {
 }
 const TOOL_STYLES = {
     WebSearch:        { icon: '🔍', label: 'Web Search',        color: '#4f8ef7', collapsible: true },
-    Weather:          { icon: '🌤️', label: 'Weather',          color: '#00bcd4', collapsible: false },
+    Weather:          { icon: '🌤️', label: 'Weather',          color: '#00bcd4', collapsible: true },
     Stocks:           { icon: '📈', label: 'Stocks',            color: '#2e7d32', collapsible: true },
     CheckEmail:       { icon: '✉️', label: 'Check Email',       color: '#e91e63', collapsible: true },
     GetAllTasks:      { icon: '📋', label: 'Get All Tasks',     color: '#4caf50', collapsible: true },
