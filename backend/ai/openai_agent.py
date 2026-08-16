@@ -187,7 +187,7 @@ def get_model_config() -> dict:
     from ..models import Config
 
     defaults = {
-        'orchestrator': 'openai/gpt-5.6-luna-pro',
+        'orchestrator': 'openai/gpt-5.6-luna',
         'searcher': 'google/gemini-2.5-flash-lite',
     }
 
