@@ -3,6 +3,18 @@ const API_PORT = window.location.port || "8000";
 const Rselector = document.getElementById('routine-selector');
 window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 let obj_selected = null;
+
+function getIcon(iconName) {
+    if (!iconName) return 'person-walking';
+    const el = document.createElement('i');
+    el.className = `bi bi-${iconName}`;
+    el.style.cssText = 'position:absolute;visibility:hidden';
+    document.body.appendChild(el);
+    const content = getComputedStyle(el, '::before').getPropertyValue('content');
+    document.body.removeChild(el);
+    return (content && content !== 'none') ? iconName : 'person-walking';
+}
+
 async function LoadCalendar(){
     tasks = []
     await fetch(`${window.API_URL}/api/tasks/`)
@@ -57,7 +69,7 @@ async function LoadRoutineSelector(){
             console.log(accuracy == 'NaN')
             rout_obj.innerHTML = `
                 <div class="card-icon">
-                    <i class="bi bi-code-slash"></i>
+                    <i class="bi bi-${getIcon(routine.icon)}"></i>
                 </div>
                 <div class="card-content">
                     <span class="routine-title">${routine.name} Acc: ${Number.isNaN(accuracy)?'Unstarted':(accuracy*100).toFixed(2)}</span>
