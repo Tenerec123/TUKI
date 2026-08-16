@@ -6,12 +6,12 @@ from ..models import Conversation, Message
 from sqlalchemy.orm import Session
 from ..routers.conversations import edit_conversation_logic
 from .stt import stt_conversion_logic
-from .openai_agent import openai_agent, get_model_config
+from .openai_agent import openai_agent, get_model_config, _build_messages
 from .stream_manager import stream_manager
 from openai import OpenAI
 import os
 import asyncio
-
+import json
 router = APIRouter(
     prefix="/api/ai",
     tags=["ai"]
@@ -85,11 +85,10 @@ async def chat_persistence_wrapper(prompt: Prompt):
 
         edit_conversation_logic(
             prompt.conversation_id,
-            ConversationUpdate(messages=[MessageBase(is_user=True, text=prompt.user_message)]),
+            ConversationUpdate(messages=[MessageBase(type='prompt', text=prompt.user_message)]),
             db=db,
         )
 
-        # Launch title generation in parallel if first message
         title_task = None
         if is_first_message:
             title_task = asyncio.create_task(
@@ -97,22 +96,39 @@ async def chat_persistence_wrapper(prompt: Prompt):
             )
 
         model_config = get_model_config()
-        full_text = ""
-        async for token in openai_agent(
-            ConversationSchema.model_validate(db_conversation), model_config
-        ):
+        messages = _build_messages(ConversationSchema.model_validate(db_conversation))
+        base_len = len(messages)
+        async for token in openai_agent(messages, model_config, conv_id=db_conversation.id):
             if token == "ERROR_TOKEN":
                 break
-            full_text += token
             stream_manager.push(prompt.conversation_id, token)
 
-        if full_text.strip():
+        db_format_messages = []
+        call_list = []
+        for new_msg in messages[base_len:]:
+            if new_msg['role'] == "assistant":
+                calls = new_msg.get("tool_calls","")
+                content = new_msg.get('content', '')
+                if calls == "" and content.strip():
+                    db_format_messages.append(MessageBase(type="agent", text=content))
+                else:
+                    call_list.extend([{'id':tc['id'], 'args':tc['function']['arguments']} for tc in calls])
+            elif new_msg['role'] == "tool":
+                call = next(filter(lambda obj: obj['id'] == new_msg['tool_call_id'], call_list), None)
+                if call is not None:
+                    tc_for_db = {
+                        'id':call['id'],
+                        'name':new_msg['name'],
+                        'args':call['args'],
+                        'result':new_msg['content']
+                    }
+                    db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
+        if db_format_messages:
             edit_conversation_logic(
                 prompt.conversation_id,
-                ConversationUpdate(messages=[MessageBase(is_user=False, text=full_text)]),
+                ConversationUpdate(messages=db_format_messages),
                 db=db,
             )
-
         if title_task:
             await title_task
     finally:
@@ -135,7 +151,7 @@ async def connect_streaming(conv_id: int):
         raise HTTPException(
             status_code=400, detail="AI not running for this conversation"
         )
-    return StreamingResponse(stream_manager.stream(conv_id), media_type="text/plain")
+    return StreamingResponse(stream_manager.stream(conv_id), media_type="application/x-ndjson")
 
 
 @router.post('/stt')

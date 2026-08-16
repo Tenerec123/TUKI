@@ -88,7 +88,7 @@ class Message(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     conversation_id: Mapped[int] = mapped_column(ForeignKey('conversations.id', ondelete="CASCADE"))
     position: Mapped[int] = mapped_column(nullable=False)
-    is_user: Mapped[bool] = mapped_column(nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)
     text: Mapped[str] = mapped_column(nullable=False)
     conversation: Mapped["Conversation"] = relationship("Conversation", back_populates="messages")
 

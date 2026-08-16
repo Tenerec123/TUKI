@@ -1,4 +1,5 @@
 import asyncio
+import json
 from dataclasses import dataclass, field
 
 
@@ -15,6 +16,10 @@ class StreamManager:
     Each conversation gets its own queue and active flag,
     allowing multiple conversations to stream simultaneously.
     Only one stream per conversation at a time.
+
+    Events are serialized to NDJSON (one JSON object per line,
+    each line terminated by \\n) so the frontend can buffer and
+    split on newlines regardless of chunk boundaries.
     """
 
     def __init__(self):
@@ -32,11 +37,15 @@ class StreamManager:
         self._streams[conv_id] = _StreamState(active=True)
         return True
 
-    def push(self, conv_id: int, token: str):
-        """Push a token to the conversation's stream queue."""
+    def push(self, conv_id: int, event: dict):
+        """Serialize an event to NDJSON and push it to the stream queue.
+
+        Each event becomes one line (json.dumps + newline), so the frontend
+        can split the byte stream on '\\n' and parse each line independently.
+        """
         state = self._streams.get(conv_id)
         if state and state.active:
-            state.queue.put_nowait(token)
+            state.queue.put_nowait(json.dumps(event) + "\n")
 
     def finish(self, conv_id: int):
         """Mark the conversation's stream as finished."""
@@ -50,16 +59,20 @@ class StreamManager:
         return state is not None and state.active
 
     async def stream(self, conv_id: int):
-        """Async generator that yields tokens for this conversation.
+        """Async generator that yields NDJSON lines for this conversation.
 
         1. Drains everything already queued as a single burst.
-        2. Streams tokens as they arrive until the stream finishes.
+        2. Streams events as they arrive until the stream finishes.
+
+        Each yielded chunk is a string of one or more complete NDJSON
+        lines (each terminated by \\n), so the frontend can split on
+        newlines without special handling for burst vs live events.
         """
         state = self._streams.get(conv_id)
         if not state:
             return
 
-        # Step 1 — drain accumulated tokens as initial burst
+        # Step 1 — drain accumulated events as initial burst
         initial = []
         while not state.queue.empty():
             try:

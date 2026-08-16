@@ -365,6 +365,77 @@ PROMPT
     width: 90%;
     
 }
+
+/* --- TOOL BLOCKS --- */
+.tool-block {
+    margin: 20px;
+    margin-left: 20px;
+    border: 1px solid var(--accent, var(--neon-yellow));
+    border-left: 4px solid var(--accent, var(--neon-yellow));
+    background-color: hsl(0, 0%, 10%, .9);
+    border-radius: 8px;
+    width: 90%;
+    overflow: hidden;
+    font-size: 0.95rem;
+    color: #d0d0d0;
+}
+.tool-block-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background-color: rgba(255, 255, 0, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 0, 0.15);
+    color: var(--accent, var(--neon-yellow));
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+.tool-block-icon {
+    font-size: 1rem;
+}
+.tool-block-name {
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+.tool-block-args {
+    padding: 8px 12px;
+    border-bottom: 1px dashed rgba(255, 255, 0, 0.1);
+}
+.tool-block-args details summary {
+    cursor: pointer;
+    color: var(--accent, var(--neon-yellow));
+    font-weight: bold;
+    margin-bottom: 6px;
+    user-select: none;
+}
+.tool-block-args pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 0.85rem;
+    font-family: monospace;
+    color: #b0b0b0;
+}
+.tool-block-result {
+    padding: 8px 12px;
+}
+.tool-block-result pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 0.85rem;
+    font-family: monospace;
+    color: var(--accent, var(--neon-yellow));
+}
+.tool-block-result details {
+    cursor: pointer;
+}
+.tool-block-result details summary {
+    color: var(--accent, var(--neon-yellow));
+    font-weight: bold;
+    margin-bottom: 6px;
+    user-select: none;
+}
 /* Definir el ancho total del scrollbar */
 ::-webkit-scrollbar {
     width: 6px; /* Muy fino */

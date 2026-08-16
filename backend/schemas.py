@@ -87,7 +87,7 @@ class ProjectUpdate(BaseModel):
 
 
 class MessageBase(BaseModel):
-    is_user:bool = Field(...)
+    type:str = Field(...)
     text:str = Field(...)
     model_config = ConfigDict(from_attributes=True)
 

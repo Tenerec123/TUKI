@@ -169,6 +169,213 @@ async function allowRenameConv(conv_id, conv_position) {
     });
     
 }
+const TOOL_STYLES = {
+    WebSearch:        { icon: '🔍', label: 'Web Search',        color: '#4f8ef7', collapsible: true },
+    Weather:          { icon: '🌤️', label: 'Weather',          color: '#00bcd4', collapsible: false },
+    Stocks:           { icon: '📈', label: 'Stocks',            color: '#2e7d32', collapsible: true },
+    CheckEmail:       { icon: '✉️', label: 'Check Email',       color: '#e91e63', collapsible: true },
+    GetAllTasks:      { icon: '📋', label: 'Get All Tasks',     color: '#4caf50', collapsible: true },
+    SearchTasks:      { icon: '🔎', label: 'Search Tasks',      color: '#4caf50', collapsible: true },
+    GetAllProjects:   { icon: '📁', label: 'Get All Projects',  color: '#4caf50', collapsible: true },
+    SearchProjects:   { icon: '🔎', label: 'Search Projects',   color: '#4caf50', collapsible: true },
+    GetAllRoutines:   { icon: '🔁', label: 'Get All Routines',  color: '#4caf50', collapsible: true },
+    SearchRoutines:   { icon: '🔎', label: 'Search Routines',   color: '#4caf50', collapsible: true },
+    ReadNote:         { icon: '📝', label: 'Read Note',         color: '#ff9800', collapsible: true },
+    DraftReadNote:    { icon: '📝', label: 'Draft Read Note',   color: '#ff9800', collapsible: true },
+    GetCurrentTime:   { icon: '🕐', label: 'Current Time',      color: '#9e9e9e', collapsible: false },
+    CreateTask:       { icon: '➕', label: 'Create Task',       color: '#4caf50', collapsible: false },
+    DeleteTask:       { icon: '🗑️', label: 'Delete Task',       color: '#e53935', collapsible: false },
+    UpdateTask:       { icon: '✏️', label: 'Update Task',       color: '#ffb300', collapsible: false },
+    CreateRoutine:    { icon: '➕', label: 'Create Routine',    color: '#4caf50', collapsible: false },
+    DeleteRoutine:    { icon: '🗑️', label: 'Delete Routine',    color: '#e53935', collapsible: false },
+    UpdateRoutine:    { icon: '✏️', label: 'Update Routine',    color: '#ffb300', collapsible: false },
+    CreateProject:    { icon: '➕', label: 'Create Project',    color: '#4caf50', collapsible: false },
+    DeleteProject:    { icon: '🗑️', label: 'Delete Project',    color: '#e53935', collapsible: false },
+    UpdateProject:    { icon: '✏️', label: 'Update Project',    color: '#ffb300', collapsible: false },
+    DraftCreateNote:  { icon: '➕', label: 'Create Note',       color: '#4caf50', collapsible: false },
+    DraftDeleteNote:  { icon: '🗑️', label: 'Delete Note',       color: '#e53935', collapsible: false },
+    DraftUpdateNote:  { icon: '✏️', label: 'Update Note',       color: '#ffb300', collapsible: false },
+    default:          { icon: '🔧', label: 'Tool',              color: '#9e9e9e', collapsible: false }
+};
+
+function getToolStyle(name) {
+    const known = TOOL_STYLES[name];
+    if (known) return known;
+    return { ...TOOL_STYLES.default, label: name };
+}
+
+function formatToolArg(arg) {
+    if (arg == null) return "";
+    if (typeof arg === 'string') {
+        try { arg = JSON.parse(arg); } catch (e) { return arg; }
+    }
+    return JSON.stringify(arg, null, 2);
+}
+
+function formatArgsKV(arg) {
+    if (arg == null) return "";
+    let obj = arg;
+    if (typeof obj === 'string') {
+        try { obj = JSON.parse(obj); } catch (e) { return arg; }
+    }
+    if (obj === null || typeof obj !== 'object' || Array.isArray(obj)) {
+        return typeof obj === 'string' ? obj : JSON.stringify(obj);
+    }
+    const lines = [];
+    for (const [k, v] of Object.entries(obj)) {
+        const val = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v);
+        lines.push(`${k}: ${val}`);
+    }
+    return lines.join("\n");
+}
+
+function argsNeedToggle(text) {
+    if (!text || !text.trim()) return false;
+    return text.length > 40 || text.includes("\n");
+}
+
+function renderToolBlock(div, tool) {
+    const style = getToolStyle(tool.name);
+    div.classList.add('tool-block');
+    div.style.setProperty('--accent', style.color);
+    const header = document.createElement('div');
+    header.classList.add('tool-block-header');
+    header.innerHTML = `<span class="tool-block-icon">${style.icon}</span><span class="tool-block-name">${style.label}</span>`;
+    div.appendChild(header);
+
+    const argsText = formatArgsKV(tool.args);
+    if (argsText.trim()) {
+        const argsEl = document.createElement('div');
+        argsEl.classList.add('tool-block-args');
+        if (argsNeedToggle(argsText)) {
+            const details = document.createElement('details');
+            const summary = document.createElement('summary');
+            summary.textContent = "Args";
+            const argsPre = document.createElement('pre');
+            argsPre.textContent = argsText;
+            details.appendChild(summary);
+            details.appendChild(argsPre);
+            argsEl.appendChild(details);
+        } else {
+            const argsPre = document.createElement('pre');
+            argsPre.textContent = argsText;
+            argsEl.appendChild(argsPre);
+        }
+        div.appendChild(argsEl);
+    }
+
+    if (!div.isConnected) {
+        chatContainer.appendChild(div);
+    }
+    return div;
+}
+
+function appendToolResult(div, tool) {
+    const style = getToolStyle(tool.name);
+    const resultEl = document.createElement('div');
+    resultEl.classList.add('tool-block-result');
+    const content = formatToolArg(tool.result);
+    if (style.collapsible && content.length > 150) {
+        const details = document.createElement('details');
+        const summary = document.createElement('summary');
+        summary.textContent = "Result";
+        const pre = document.createElement('pre');
+        pre.textContent = content;
+        details.appendChild(summary);
+        details.appendChild(pre);
+        resultEl.appendChild(details);
+    } else {
+        const pre = document.createElement('pre');
+        pre.textContent = content;
+        resultEl.appendChild(pre);
+    }
+    div.appendChild(resultEl);
+}
+
+function createTukiMsg() {
+    const div = document.createElement('div');
+    div.classList.add('tuki-msg');
+    chatContainer.appendChild(div);
+    return div;
+}
+
+function finalizeStream(tukiMsg) {
+    const scroll_dif = chatContainer.clientHeight - (tukiMsg ? tukiMsg.scrollHeight : 0);
+    console.log(scroll_dif);
+    if (scroll_dif > 0) {
+        chatContainer.style.paddingBottom = `${scroll_dif-100}px`;
+    } else {
+        chatContainer.style.paddingBottom = "100px";
+    }
+}
+
+function handleStreamLine(line, state) {
+    if (!line.trim()) return;
+    let chunkObj;
+    try {
+        chunkObj = JSON.parse(line);
+    } catch (e) {
+        return;
+    }
+    if (chunkObj.type == "agent" && chunkObj.content.trim() != "") {
+        if (!state.tukiMsg || state.lastEvent == "tool") {
+            state.tukiMsg = createTukiMsg();
+        }
+        state.tukiMsg.textContent += chunkObj.content;
+        state.lastEvent = "agent";
+        Render();
+    }
+    else if (chunkObj.type == "tool_call") {
+        const tool = chunkObj.content;
+        const div = document.createElement('div');
+        renderToolBlock(div, tool);
+        state.callBuffer.push({ id: tool.id, div, tool });
+        state.lastEvent = "tool";
+    }
+    else if (chunkObj.type == "tool_result") {
+        const entry = state.callBuffer.find(c => c.id == chunkObj.content.id);
+        if (entry) {
+            entry.tool.result = chunkObj.content.result;
+            appendToolResult(entry.div, entry.tool);
+            state.lastEvent = "tool";
+        }
+    }
+    scrollToBottom();
+}
+
+async function streamConversation(convId) {
+    const response = await fetch(`${window.API_URL}/api/ai/connect/${convId}`, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+    if (!response.ok) return;
+
+    const state = { tukiMsg: null, lastEvent: "init", callBuffer: [] };
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const { done, value } = await reader.read();
+        if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop();
+            for (const line of lines) {
+                handleStreamLine(line, state);
+            }
+        }
+        if (done) {
+            decoder.decode();
+            if (buffer.trim()) handleStreamLine(buffer, state);
+            finalizeStream(state.tukiMsg);
+            break;
+        }
+    }
+}
+
 async function loadConversation(conv_id, conv_position){
     conversationList.children[conv_position].classList.add('selected-conversation');
     if (conv_position != posOfSelectedConv){
@@ -181,15 +388,30 @@ async function loadConversation(conv_id, conv_position){
         .then(data => {
             data.messages.forEach((message)=>{
                 msg_div = document.createElement('div')
-                if (message.is_user){
+                if (message.type === 'prompt'){
                     msg_div.classList.add('user-msg')
-                    msg_div.innerHTML = message.text;
+                    msg_div.textContent = message.text;
+                    chatContainer.appendChild(msg_div)
                 }
-                else{
+                else if (message.type == 'agent' && message.text.trim()){
                     msg_div.classList.add('tuki-msg');
-                    msg_div.innerHTML = marked.parse(message.text);
+                    msg_div.innerHTML = marked.parse(message.text)
+                    chatContainer.appendChild(msg_div)
                 }
-                chatContainer.appendChild(msg_div)
+                else if (message.type == 'tool'){
+                    try {
+                        toolObj = JSON.parse(message.text)
+                        renderToolBlock(msg_div, toolObj);
+                        if (toolObj.result != null) appendToolResult(msg_div, toolObj);
+                    } catch (e) {
+                        msg_div.classList.add('tuki-msg');
+                        msg_div.textContent = message.text;
+                        chatContainer.appendChild(msg_div);
+                    }
+                }
+                else {
+                    chatContainer.appendChild(msg_div)
+                }
                 scrollToBottom();
                 
             })
@@ -201,47 +423,7 @@ async function loadConversation(conv_id, conv_position){
         toggleBtn.click();
     }
     Render();
-    
-    const response = await fetch(`${window.API_URL}/api/ai/connect/${conv_id}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    });
-    if (!response.ok){return}
-    console.log("TUKI_MSG_CREATED")
-    const tukiMsg = document.createElement('div');
-    tukiMsg.classList.add('tuki-msg');
-    chatContainer.appendChild(tukiMsg);
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = "";
-
-    while (true) {
-        const { done, value } = await reader.read();
-        
-        if (value) {
-            // Decodificar y acumular
-            const chunk = decoder.decode(value, { stream: true });
-            fullText += chunk;
-            
-            // Renderizado progresivo
-            tukiMsg.innerHTML = marked.parse(fullText);
-            Render();
-        }
-        if (done) {
-            decoder.decode(); // Limpiar buffer del decoder
-            const scroll_dif = chatContainer.clientHeight - tukiMsg.scrollHeight;
-            console.log(scroll_dif);
-            if (scroll_dif > 0) {
-                chatContainer.style.paddingBottom = `${scroll_dif-100}px`;
-            } else {
-                chatContainer.style.paddingBottom = "100px";
-            }
-            break;
-        }
-    }
+    await streamConversation(conv_id);
 }
 async function getConversations(){
     const response = await fetch(`${window.API_URL}/api/conversations/`)
@@ -288,7 +470,7 @@ async function sendPrompt(text){
     if (idOfSelectedConv == -1){return}
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
-    userMsg.innerHTML = text;
+    userMsg.textContent = text;
     chatContainer.appendChild(userMsg);
     chatContainer.style.paddingBottom = `${400}px`;
     scrollToBottom();
@@ -305,45 +487,7 @@ async function sendPrompt(text){
         })
     });
     console.log("DONE")
-    const response = await fetch(`${window.API_URL}/api/ai/connect/${idOfSelectedConv}`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    });
-
-    const tukiMsg = document.createElement('div');
-    tukiMsg.classList.add('tuki-msg');
-    chatContainer.appendChild(tukiMsg);
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let fullText = "";
-
-    while (true) {
-        const { done, value } = await reader.read();
-        
-        if (value) {
-            // Decodificar y acumular
-            const chunk = decoder.decode(value, { stream: true });
-            fullText += chunk;
-            
-            // Renderizado progresivo
-            tukiMsg.innerHTML = marked.parse(fullText);
-            Render();
-        }
-        if (done) {
-            decoder.decode(); // Limpiar buffer del decoder
-            const scroll_dif = chatContainer.clientHeight - tukiMsg.scrollHeight;
-            console.log(scroll_dif);
-            if (scroll_dif > 0) {
-                chatContainer.style.paddingBottom = `${scroll_dif-100}px`;
-            } else {
-                chatContainer.style.paddingBottom = "100px";
-            }
-            break;
-        }
-    }
+    await streamConversation(idOfSelectedConv);
 }
 
 function scrollToBottom(){

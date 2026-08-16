@@ -1,4 +1,5 @@
 import os
+import json
 from datetime import datetime
 from ..schemas import ConversationSchema
 from .tools import ALL_TOOLS_SCHEMAS, execute_tool_call
@@ -49,16 +50,34 @@ Tool Calls:
 MAX_TOOL_ROUNDS = 10
 
 def _build_messages(conversation: ConversationSchema, base_prompt: str = BASE_RULES) -> list:
-    """Build the full message list in one place.
-
-    Order: system prompt, conversation history. Current time is available
-    via the GetCurrentTime tool so the prompt stays KV-cacheable.
-    """
     msgs = [{'role': 'developer', 'content': base_prompt}]
     for msg in conversation.messages:
         if not (msg.text or '').strip():
             continue
-        msgs.append({'role': 'user' if msg.is_user else 'assistant', 'content': msg.text})
+        if msg.type == 'prompt':
+            msgs.append({'role': 'user', 'content': msg.text})
+        elif msg.type == 'tool':
+            try:
+                tc = json.loads(msg.text)
+                msgs.append({
+                    'role': 'assistant',
+                    'tool_calls': [{
+                        'id': tc['id'],
+                        'type': 'function',
+                        'function': {'name': tc['name'], 'arguments': tc['args']},
+                    }],
+                    'content': None,
+                })
+                msgs.append({
+                    'role': 'tool',
+                    'tool_call_id': tc['id'],
+                    'name': tc['name'],
+                    'content': tc['result'],
+                })
+            except (json.JSONDecodeError, KeyError):
+                msgs.append({'role': 'assistant', 'content': msg.text})
+        else:
+            msgs.append({'role': 'assistant', 'content': msg.text})
     return msgs
 
 
@@ -83,9 +102,9 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
             continue
         choice = chunk.choices[0]
         delta = choice.delta
-        if delta.content:
+        if delta.content and delta.content.strip():
             text+=delta.content
-            yield delta.content
+            yield {"type":"agent","content":delta.content}
         if delta.tool_calls:
             for tc in delta.tool_calls:
                 calls.setdefault(tc.index, {"id": "", "name": "", "arguments": ""})
@@ -98,12 +117,11 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
         if choice.finish_reason:
             finish = choice.finish_reason
     messages.append({"role": "assistant", "content": text})
-    
-    tool_names = [tc['name'] for tc in calls.values()]
-    _log(f"→ Tools called: {tool_names[:5]}")
-    assistant = {"role": "assistant", "tool_calls": []}
 
     if calls:
+        tool_names = [tc['name'] for tc in calls.values()]
+        _log(f"→ Tools called: {tool_names[:5]}")
+        assistant = {"role": "assistant", "tool_calls": []}
         for tc in calls.values():
             id = tc['id']
             name = tc['name']
@@ -115,6 +133,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
                 "type": "function",
                 "function": {"name": name, "arguments": args},
             }
+            yield {"type":"tool_call","content":{'id':id, 'name':name, 'args':args}}
             assistant["tool_calls"].append(tc_data)
 
         messages.append(assistant)
@@ -133,19 +152,27 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
                 "name": name,
                 "content": result,
             })
+            yield {"type":"tool_result","content":{'id':id, 'name':name, 'result':result}}
  
-    if finish == "stop" or len(calls) == 0: yield "STOP_TOKEN_TO_EXIT_THE_LOOP"
+    if finish == "stop" or len(calls) == 0: yield {"type":"finish", "content":""}
     
-async def _main_agentic_loop(conversation: ConversationSchema, model: str, max_rounds: int = None, tool_schemas: list = ALL_TOOLS_SCHEMAS):
-    messages = _build_messages(conversation)
-    limit = max_rounds if max_rounds is not None else MAX_TOOL_ROUNDS
-    for i in range(limit):
-        _log(f"── Round {i+1}/{limit}")
-        async for token in _agentic_round(messages, model, tool_schemas, str(conversation.id), f"round-{i+1}/{limit}"):
-            if token == "STOP_TOKEN_TO_EXIT_THE_LOOP": break
-            yield token
-        else: continue
-        break
+async def openai_agent(messages, model_config: dict, conv_id:int, max_rounds: int = None, tool_schemas: list = ALL_TOOLS_SCHEMAS):
+    _log(f"═══════════════════════════════════════════════")
+    _log(f"AGENT START — model_config={model_config}")
+    try:
+        limit = max_rounds if max_rounds is not None else MAX_TOOL_ROUNDS
+        for i in range(limit):
+            _log(f"── Round {i+1}/{limit}")
+            async for token in _agentic_round(messages, model_config['orchestrator'], tool_schemas, str(conv_id), f"round-{i+1}/{limit}"):
+                yield token
+                if token['type'] == "finish": break
+            else: continue
+            break
+        _log("AGENT END — OK")
+    except Exception as e:
+        _log(f"AGENT ERROR: {e}")
+        traceback.print_exc()
+        yield 'ERROR_TOKEN'
 
 def get_model_config() -> dict:
     """Read the orchestrator model from DB, falling back to defaults.
@@ -179,27 +206,4 @@ def get_model_config() -> dict:
     finally:
         db.close()
 
-    return defaults
-
-async def openai_agent(conversation: ConversationSchema, model_config: dict):
-    """
-    Main entry point. Routes the conversation through the appropriate
-    execution path based on the router's classification.
-    
-    Yields tokens (text chunks) for the final response phase.
-    Tool phases are silent — no tokens yielded.
-    """
-    _log(f"═══════════════════════════════════════════════")
-    _log(f"AGENT START — model_config={model_config}")
-    try:
-        async for token in _main_agentic_loop(
-            conversation=conversation,
-            model = model_config['orchestrator'],
-        ):
-            yield token
-        _log("AGENT END — OK")
-
-    except Exception as e:
-        _log(f"AGENT ERROR: {e}")
-        traceback.print_exc()
-        yield 'ERROR_TOKEN'
+    return defaults 
