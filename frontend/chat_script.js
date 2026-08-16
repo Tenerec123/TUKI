@@ -300,6 +300,8 @@ function createTukiMsg() {
 }
 
 function finalizeStream(tukiMsg) {
+    // Streaming is complete: render the last message's markdown once.
+    renderTukiMarkdown(tukiMsg);
     // #form-container is absolutely positioned over the bottom of the chat
     // area. On desktop its 80px input box is vertically centered, so its top
     // edge sits 100px above the container bottom; 130px clears it with a
@@ -327,6 +329,12 @@ function handleStreamLine(line, state) {
         Render();
     }
     else if (chunkObj.type == "tool_call") {
+        // The streamed text phase is complete; render its markdown before the
+        // tool block so a later agent phase starts a fresh message.
+        if (state.tukiMsg && state.tukiMsg.textContent.trim()) {
+            renderTukiMarkdown(state.tukiMsg);
+            state.tukiMsg = null;
+        }
         const tool = chunkObj.content;
         const div = document.createElement('div');
         renderToolBlock(div, tool);
@@ -396,7 +404,7 @@ async function loadConversation(conv_id, conv_position){
                 }
                 else if (message.type == 'agent' && message.text.trim()){
                     msg_div.classList.add('tuki-msg');
-                    msg_div.innerHTML = marked.parse(message.text)
+                    msg_div.innerHTML = DOMPurify.sanitize(marked.parse(message.text))
                     chatContainer.appendChild(msg_div)
                 }
                 else if (message.type == 'tool'){
@@ -500,16 +508,32 @@ function scrollToBottom(){
     }, 10); // 10ms es suficiente para que el DOM se actualice
 }
 
+const KATEX_OPTIONS = {
+    delimiters: [
+        {left: '$$', right: '$$', display: true},  // Ecuaciones centradas
+        {left: '$', right: '$', display: false},  // Ecuaciones inline
+        {left: '\\(', right: '\\)', display: true},
+        {left: '\\[', right: '\\]', display: false}
+    ],
+    throwOnError: true
+};
+
+// Render a completed streamed message: sanitize markdown, then math scoped to
+// the message element (avoids re-scanning the whole document on every chunk).
+function renderTukiMarkdown(msg) {
+    if (!msg || !msg.textContent.trim()) return;
+    try {
+        msg.innerHTML = DOMPurify.sanitize(marked.parse(msg.textContent));
+        renderMathInElement(msg, KATEX_OPTIONS);
+    } catch (e) {
+        // Rendering is a nice-to-have: on failure keep the raw text so stream
+        // finalization (padding/scroll) is never blocked.
+        console.error('[RENDER] Markdown render failed:', e);
+    }
+}
+
 function Render(){
-    renderMathInElement(document.body, {
-      delimiters: [
-          {left: '$$', right: '$$', display: true},  // Ecuaciones centradas
-          {left: '$', right: '$', display: false},  // Ecuaciones inline
-          {left: '\\(', right: '\\)', display: true},
-          {left: '\\[', right: '\\]', display: false}
-      ],
-      throwOnError : true
-    });
+    renderMathInElement(document.body, KATEX_OPTIONS);
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
