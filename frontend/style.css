@@ -334,7 +334,7 @@ PROMPT
     overflow-y: auto;  /* Habilita el scroll interno */
     scroll-behavior: smooth; /* Esto ralentiza el movimiento */
     /* padding-bottom: 100px; */
-    padding-bottom: 100px;
+    padding-bottom: 130px; /* Must clear the 120px form overlay */
 }
 
 .user-msg, .tuki-msg{
@@ -555,7 +555,7 @@ PROMPT
     }
 
     #chat-container {
-        padding-bottom: 120px;
+        padding-bottom: 140px; /* Must clear the mobile form overlay */
     }
 
     .sidebar-controls {

@@ -300,13 +300,14 @@ function createTukiMsg() {
 }
 
 function finalizeStream(tukiMsg) {
-    const scroll_dif = chatContainer.clientHeight - (tukiMsg ? tukiMsg.scrollHeight : 0);
-    console.log(scroll_dif);
-    if (scroll_dif > 0) {
-        chatContainer.style.paddingBottom = `${scroll_dif-100}px`;
-    } else {
-        chatContainer.style.paddingBottom = "100px";
-    }
+    // #form-container is absolutely positioned over the bottom of the chat
+    // area. On desktop its 80px input box is vertically centered, so its top
+    // edge sits 100px above the container bottom; 130px clears it with a
+    // 30px margin. Keeping this constant (instead of deriving it from the
+    // last message height) prevents both the hidden-tail bug and huge empty
+    // gaps below short answers.
+    chatContainer.style.paddingBottom = "130px";
+    scrollToBottom();
 }
 
 function handleStreamLine(line, state) {
