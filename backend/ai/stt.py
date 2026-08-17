@@ -1,6 +1,4 @@
-from fastapi import UploadFile, Form, Depends, File
-from ..database import get_db
-from sqlalchemy.orm import Session
+from fastapi import UploadFile
 import io
 from faster_whisper import WhisperModel
 
@@ -12,7 +10,7 @@ def get_whisper_model():
         _model = WhisperModel("tiny", device="cpu", compute_type="int8")
     return _model
 
-async def stt_conversion_logic(file: UploadFile, conv_id, db:Session):
+async def stt_conversion_logic(file: UploadFile):
     model = get_whisper_model()
     audio_data = await file.read()
     audio_file = io.BytesIO(audio_data)

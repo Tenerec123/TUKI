@@ -30,7 +30,6 @@ function SetupStream(stream) {
         chunks = [];
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
-        formData.append('conv_id', idOfSelectedConv)
         const response = await fetch(`${window.API_URL}/api/ai/stt`, {
             method: 'POST',
             body: formData,

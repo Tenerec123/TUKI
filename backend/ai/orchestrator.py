@@ -1,19 +1,16 @@
 from ..schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
-from fastapi import APIRouter, UploadFile, Form, Depends, File, BackgroundTasks, HTTPException
-from fastapi.responses import StreamingResponse
-from ..database import get_db, SessionLocal
+from fastapi import APIRouter
+from ..database import SessionLocal
 from ..models import Conversation, Message
-from sqlalchemy.orm import Session
 from ..routers.conversations import edit_conversation_logic
-from .stt import stt_conversion_logic
 from .agent import openai_agent
 from .stream_manager import stream_manager
 from openai import OpenAI
+from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
+from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 import os
 import asyncio
 import json
-from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
-from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 router = APIRouter(
     prefix="/api/ai",
     tags=["ai"]
@@ -169,26 +166,3 @@ async def chat_persistence_wrapper(prompt: Prompt):
         stream_manager.finish(prompt.conversation_id)
         print("AI_FINISH")
         db.close()
-
-
-@router.post("/execute")
-def ai_response(prompt: Prompt, background_tasks: BackgroundTasks):
-    if not stream_manager.start(prompt.conversation_id):
-        return {}
-    background_tasks.add_task(chat_persistence_wrapper, prompt)
-    return {"no response for now"}
-
-
-@router.get("/connect/{conv_id}")
-async def connect_streaming(conv_id: int):
-    if not stream_manager.is_active(conv_id):
-        raise HTTPException(
-            status_code=400, detail="AI not running for this conversation"
-        )
-    return StreamingResponse(stream_manager.stream(conv_id), media_type="application/x-ndjson")
-
-
-@router.post('/stt')
-async def stt_conversion(file: UploadFile = File(...), conv_id = Form(...), db:Session = Depends(get_db)):
-    result_text = await stt_conversion_logic(file, conv_id, db)
-    return result_text

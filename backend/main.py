@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from backend.ai import ai
+from backend.ai import orchestrator
 from backend.routers import config, tasks, routines, projects, conversations, notes
 from pathlib import Path
 import anyio
@@ -67,6 +67,6 @@ api.include_router(config.router)
 api.include_router(tasks.router)
 api.include_router(routines.router)
 api.include_router(projects.router)
-api.include_router(ai.router)
+api.include_router(orchestrator.router)
 api.include_router(conversations.router)
 api.include_router(notes.router)
