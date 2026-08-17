@@ -6,23 +6,51 @@ from ..models import Conversation, Message
 from sqlalchemy.orm import Session
 from ..routers.conversations import edit_conversation_logic
 from .stt import stt_conversion_logic
-from .openai_agent import openai_agent, get_model_config, _build_messages
+from .agent import openai_agent
 from .stream_manager import stream_manager
 from openai import OpenAI
 import os
 import asyncio
 import json
+from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
 router = APIRouter(
     prefix="/api/ai",
     tags=["ai"]
 )
 
+def _build_messages(conversation: ConversationSchema, base_prompt) -> list:
+    msgs = [{'role': 'developer', 'content': base_prompt}]
+    for msg in conversation.messages:
+        if not (msg.text or '').strip():
+            continue
+        if msg.type == 'prompt':
+            msgs.append({'role': 'user', 'content': msg.text})
+        elif msg.type == 'tool':
+            try:
+                tc = json.loads(msg.text)
+                msgs.append({
+                    'role': 'assistant',
+                    'tool_calls': [{
+                        'id': tc['id'],
+                        'type': 'function',
+                        'function': {'name': tc['name'], 'arguments': tc['args']},
+                    }],
+                    'content': None,
+                })
+                msgs.append({
+                    'role': 'tool',
+                    'tool_call_id': tc['id'],
+                    'name': tc['name'],
+                    'content': tc['result'],
+                })
+            except (json.JSONDecodeError, KeyError):
+                msgs.append({'role': 'assistant', 'content': msg.text})
+        else:
+            msgs.append({'role': 'assistant', 'content': msg.text})
+    return msgs
+
 
 async def _generate_title(conv_id: int, user_message: str):
-    """Generate a short conversation title from the first user message.
-    Uses mistralai/mistral-nemo (~$0.07/M tokens, absurdly cheap).
-    Falls back to the model list only if the primary fails.
-    """
     system_prompt = """Generate a short, descriptive title (max 6 words) for a conversation based on this first message. 
 Reply ONLY with the title, no quotes, no punctuation.
 Use the language of the query. If the query is in Spanish use Spanish, if it's in English, use English."""
@@ -96,9 +124,9 @@ async def chat_persistence_wrapper(prompt: Prompt):
             )
 
         model_config = get_model_config()
-        messages = _build_messages(ConversationSchema.model_validate(db_conversation))
+        messages = _build_messages(ConversationSchema.model_validate(db_conversation), SYSTEM_PROMPT)
         base_len = len(messages)
-        async for token in openai_agent(messages, model_config, conv_id=db_conversation.id):
+        async for token in openai_agent(messages, model_config['orchestrator'], conv_id=db_conversation.id, max_rounds=MAX_AGENTIC_ROUNDS):
             if token == "ERROR_TOKEN":
                 break
             stream_manager.push(prompt.conversation_id, token)

@@ -1,7 +1,5 @@
 import os
-import json
 from datetime import datetime
-from ..schemas import ConversationSchema
 from .tools import ALL_TOOLS_SCHEMAS, execute_tool_call
 from openai import AsyncOpenAI
 import traceback
@@ -33,55 +31,9 @@ client = AsyncOpenAI(
     api_key=os.environ['OPENROUTER_API_KEY']
 )
 
-BASE_RULES = '''
-T.U.K.I. — productivity assistant. Tone: direct, technical.
-User: developer. Lang: Spanish/English.
-Rules: No raw JSON in responses. No tool calls in visible text. Use $ for LaTeX.
-Tool Calls:
--- OpenAI SDK tool calling format.
--- Don't invent id's, get them with the get tools.
--- Use parallel tool calling as much as you can.
--- Don't use it if tool B call depends on tool A result.
--- If you have all the info to respond or you've executed the order, don't use any tool and respond with text
--- You can return text in the tool calling inferences if necessary
--- If the task involves dates, deadlines, or time, call GetCurrentTime first.
-'''
-
-MAX_TOOL_ROUNDS = 10
-
-def _build_messages(conversation: ConversationSchema, base_prompt: str = BASE_RULES) -> list:
-    msgs = [{'role': 'developer', 'content': base_prompt}]
-    for msg in conversation.messages:
-        if not (msg.text or '').strip():
-            continue
-        if msg.type == 'prompt':
-            msgs.append({'role': 'user', 'content': msg.text})
-        elif msg.type == 'tool':
-            try:
-                tc = json.loads(msg.text)
-                msgs.append({
-                    'role': 'assistant',
-                    'tool_calls': [{
-                        'id': tc['id'],
-                        'type': 'function',
-                        'function': {'name': tc['name'], 'arguments': tc['args']},
-                    }],
-                    'content': None,
-                })
-                msgs.append({
-                    'role': 'tool',
-                    'tool_call_id': tc['id'],
-                    'name': tc['name'],
-                    'content': tc['result'],
-                })
-            except (json.JSONDecodeError, KeyError):
-                msgs.append({'role': 'assistant', 'content': msg.text})
-        else:
-            msgs.append({'role': 'assistant', 'content': msg.text})
-    return msgs
-
-
-async def _agentic_round(messages: list, model: str, tool_schemas: list, session_id: str = "", label: str = ""):
+async def _agentic_round(messages: list, model: str, tool_schemas: list, session_id: str = "-1", label: str = ""):
+    extra_body = {"reasoning": {"effort": "none"}}
+    if session_id != "-1": extra_body['session_id'] = session_id
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
@@ -89,7 +41,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
         tool_choice="auto",
         parallel_tool_calls=True,
         stream=True,
-        extra_body={"session_id": session_id, "reasoning": {"effort": "none"}},
+        extra_body=extra_body,
     )
     calls: dict[int, dict] = {}
     text: str = ""
@@ -156,14 +108,13 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
  
     if finish == "stop" or len(calls) == 0: yield {"type":"finish", "content":""}
     
-async def openai_agent(messages, model_config: dict, conv_id:int, max_rounds: int = None, tool_schemas: list = ALL_TOOLS_SCHEMAS):
+async def openai_agent(messages:list, model, conv_id:int = -1, max_rounds: int = None, tool_schemas: list = ALL_TOOLS_SCHEMAS):
     _log(f"═══════════════════════════════════════════════")
-    _log(f"AGENT START — model_config={model_config}")
+    _log(f"AGENT START — model={model}")
     try:
-        limit = max_rounds if max_rounds is not None else MAX_TOOL_ROUNDS
-        for i in range(limit):
-            _log(f"── Round {i+1}/{limit}")
-            async for token in _agentic_round(messages, model_config['orchestrator'], tool_schemas, str(conv_id), f"round-{i+1}/{limit}"):
+        for i in range(max_rounds):
+            _log(f"── Round {i+1}/{max_rounds}")
+            async for token in _agentic_round(messages, model, tool_schemas, str(conv_id), f"round-{i+1}/{max_rounds}"):
                 yield token
                 if token['type'] == "finish": break
             else: continue
@@ -173,37 +124,3 @@ async def openai_agent(messages, model_config: dict, conv_id:int, max_rounds: in
         _log(f"AGENT ERROR: {e}")
         traceback.print_exc()
         yield 'ERROR_TOKEN'
-
-def get_model_config() -> dict:
-    """Read the orchestrator model from DB, falling back to defaults.
-
-    The whole conversation runs on ONE model (`orchestrator`) so the shared
-    [system + history] prefix stays KV-cacheable across phases. `searcher`
-    is stored for future clean-context subagents (not used yet).
-    Legacy per-phase keys (get_data/exec_tools/final_resp/general) are
-    collapsed into `orchestrator`.
-    """
-    from ..database import SessionLocal
-    from ..models import Config
-
-    defaults = {
-        'orchestrator': 'openai/gpt-5.6-luna',
-        'searcher': 'google/gemini-2.5-flash-lite',
-    }
-
-    try: 
-        db = SessionLocal()
-        rows = db.query(Config).all()
-        values = {row.key: row.value for row in rows}
-        # Legacy migration: use the old 'general' (chat) value as orchestrator.
-        if 'orchestrator' not in values and 'general' in values:
-            values['orchestrator'] = values['general']
-        for key in defaults:
-            if key in values:
-                defaults[key] = values[key]
-    except Exception as e:
-        _log(f"[CONFIG] Error reading model config: {e}")
-    finally:
-        db.close()
-
-    return defaults 

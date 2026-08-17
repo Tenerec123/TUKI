@@ -12,7 +12,7 @@ router = APIRouter(
 @router.get("/models")
 def get_model_config():
     """Read current model config (orchestrator + searcher), falling back to defaults."""
-    from ..ai.openai_agent import get_model_config as read_model_config
+    from ..ai.agent import get_model_config as read_model_config
     return read_model_config()
 
 
