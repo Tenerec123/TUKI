@@ -1,17 +1,11 @@
-"""Write/execution tool functions for the AI agent.
-
-Each function has a standardized docstring:
-    - First line(s): description
-    - Args: (optional, only for non-obvious parameters)
-"""
 from datetime import date, datetime
-from ..schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate
-from ..database import SessionLocal
-from ..logic.tasks import create_task_logic, delete_task_logic, update_task_logic
-from ..logic.projects import create_project_logic, delete_project_logic, update_project_logic
-from ..logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic
-from ..logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
-from ._helpers import _icon_fallback, _resolve_project
+from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate
+from ...database import SessionLocal
+from ...logic.tasks import create_task_logic, delete_task_logic, update_task_logic
+from ...logic.projects import create_project_logic, delete_project_logic, update_project_logic
+from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic
+from ...logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
+from .._helpers import _icon_fallback, _resolve_project
 
 
 def CreateTask(name: str, description: str, priority: int, deadline: str, project_id: int = None, project_name: str = None):

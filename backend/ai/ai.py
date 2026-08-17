@@ -13,6 +13,7 @@ import os
 import asyncio
 import json
 from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
+from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 router = APIRouter(
     prefix="/api/ai",
     tags=["ai"]
@@ -126,7 +127,12 @@ async def chat_persistence_wrapper(prompt: Prompt):
         model_config = get_model_config()
         messages = _build_messages(ConversationSchema.model_validate(db_conversation), SYSTEM_PROMPT)
         base_len = len(messages)
-        async for token in openai_agent(messages, model_config['orchestrator'], conv_id=db_conversation.id, max_rounds=MAX_AGENTIC_ROUNDS):
+        async for token in openai_agent(
+            messages=messages,
+            model_config = model_config['orchestrator'],
+            max_rounds=MAX_AGENTIC_ROUNDS,
+            tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
+            conv_id=db_conversation.id):
             if token == "ERROR_TOKEN":
                 break
             stream_manager.push(prompt.conversation_id, token)

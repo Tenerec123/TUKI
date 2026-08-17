@@ -9,8 +9,9 @@ import re
 import typing
 from typing import Callable, Union, get_origin, get_args
 
-from . import tools_read
-from . import tools_exec
+from . import read
+from . import exec
+from . import subagents
 
 # ── Type mapping for JSON schema generation ────────────────────────────
 
@@ -97,7 +98,7 @@ def _discover_tools():
     ToolDict = {}
     tool_schemas = []
 
-    modules = [tools_read, tools_exec]
+    modules = [read, exec, subagents]
 
     for module in modules:
         for name, func in inspect.getmembers(module, inspect.isfunction):
@@ -154,7 +155,7 @@ ToolDict, tool_schemas = _discover_tools()
 # what makes the [system + tools] block reusable in the KV cache.
 # TOOL_SKIP_NAMES can exclude a tool without breaking the set.
 TOOL_SKIP_NAMES = set()
-ALL_TOOLS_SCHEMAS = [s for s in tool_schemas if s['function']['name'] not in TOOL_SKIP_NAMES]
+ORCHESTRATOR_TOOL_SCHEMAS = [s for s in tool_schemas if s['function']['name'] not in TOOL_SKIP_NAMES]
 
 
 # ── Dispatch ───────────────────────────────────────────────────────────

@@ -1,19 +1,12 @@
-"""Read-only tool functions for the AI agent.
-
-Each function has a standardized docstring:
-    - First line(s): description
-    - Args: (optional, only for non-obvious parameters)
-"""
-
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from ..schemas import TaskSchema, ProjectSchema, RoutineSchema
-from ..database import SessionLocal
-from ..logic.tasks import get_all_tasks_logic, search_tasks_logic
-from ..logic.projects import get_all_project_logic, search_projects_logic
-from ..logic.routines import get_all_routine_logic, search_routines_logic
-from ..logic.notes import get_note_logic, search_notes_logic
+from ...schemas import TaskSchema, ProjectSchema, RoutineSchema
+from ...database import SessionLocal
+from ...logic.tasks import get_all_tasks_logic, search_tasks_logic
+from ...logic.projects import get_all_project_logic, search_projects_logic
+from ...logic.routines import get_all_routine_logic, search_routines_logic
+from ...logic.notes import get_note_logic, search_notes_logic
 from pathlib import Path
 import yfinance as yf
 
@@ -135,21 +128,6 @@ def Weather(city: str = None):
         return {'error': f'Failed to get weather: {str(e)}'}
 
 
-def WebSearch(query: str, max_results: int = 5):
-    '''
-    DuckDuckGo search. Returns title, snippet, URL.
-'''
-    import logging
-    logging.getLogger('primp').setLevel(logging.WARNING)
-    from ddgs import DDGS
-    with DDGS() as ddgs:
-        results = list(ddgs.text(query, max_results=max_results))
-        return [
-            {'title': r['title'], 'url': r['href'], 'snippet': r['body']}
-            for r in results
-        ]
-
-
 def CheckEmail(max_unreads: int = 5):
     '''
     Unread emails from IMAP inbox.
@@ -197,6 +175,19 @@ def CheckEmail(max_unreads: int = 5):
         return {'unread_count': len(ids), 'emails': results}
     except Exception as e:
         return {'error': f'Failed to check email: {str(e)}'}
+
+def WebSearch(query: str, max_results: int = 5):
+    '''
+    Asks for data which a subagent will return summarized from the Internet. 
+'''
+
+    from ddgs import DDGS
+    with DDGS() as ddgs:
+        results = list(ddgs.text(query, max_results=max_results))
+        return [
+            {'title': r['title'], 'url': r['href'], 'snippet': r['body']}
+            for r in results
+        ]
 
 
 def Stocks(stock: str):

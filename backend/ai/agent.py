@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from .tools import ALL_TOOLS_SCHEMAS, execute_tool_call
+from .tools import execute_tool_call
 from openai import AsyncOpenAI
 import traceback
 def _log(msg: str):
@@ -108,7 +108,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
  
     if finish == "stop" or len(calls) == 0: yield {"type":"finish", "content":""}
     
-async def openai_agent(messages:list, model, conv_id:int = -1, max_rounds: int = None, tool_schemas: list = ALL_TOOLS_SCHEMAS):
+async def openai_agent(messages:list, model, max_rounds, tool_schemas: list, conv_id:int=-1):
     _log(f"═══════════════════════════════════════════════")
     _log(f"AGENT START — model={model}")
     try:
