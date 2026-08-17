@@ -1,5 +1,4 @@
 from ..schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
-from fastapi import APIRouter
 from ..database import SessionLocal
 from ..models import Conversation, Message
 from ..routers.conversations import edit_conversation_logic
@@ -11,10 +10,6 @@ from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 import os
 import asyncio
 import json
-router = APIRouter(
-    prefix="/api/ai",
-    tags=["ai"]
-)
 
 def _build_messages(conversation: ConversationSchema, base_prompt) -> list:
     msgs = [{'role': 'developer', 'content': base_prompt}]

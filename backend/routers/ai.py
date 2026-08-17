@@ -3,7 +3,7 @@ from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from ..ai.stt import stt_conversion_logic
 from ..ai.stream_manager import stream_manager
-from ..ai.orchestrator import chat_persistence_wrapper
+from ..ai.chat import chat_persistence_wrapper
 router = APIRouter(
     prefix="/api/ai",
     tags=["ai"]
