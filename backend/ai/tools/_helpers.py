@@ -53,7 +53,7 @@ def _resolve_project(db, project_id: int = None, project_name: str = None):
     searches by exact name. Returns (resolved_id, log_suffix) where log_suffix
     is a short note appended to the tool result so the AI understands.
     """
-    from ..models import Project
+    from ...models import Project
     if project_id is not None:
         proj = db.query(Project).filter(Project.id == project_id).first()
         if proj:
