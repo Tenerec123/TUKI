@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from .tools import execute_tool_call
+from .tools.discovery import execute_tool_call
 from openai import AsyncOpenAI
 import traceback
 def _log(msg: str):

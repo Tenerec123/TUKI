@@ -6,8 +6,7 @@ generates JSON schemas from function signatures + docstrings.
 import inspect
 import json
 import re
-import typing
-from typing import Callable, Union, get_origin, get_args
+from typing import Union, get_origin, get_args
 
 from . import read
 from . import exec
@@ -149,13 +148,22 @@ def _discover_tools():
 
 # ── Run discovery once at import time ──────────────────────────────────
 
-ToolDict, tool_schemas = _discover_tools()
+ToolDict, ALL_TOOL_SCHEMAS = _discover_tools()
 
-# Single, constant tool set sent on EVERY request. Keeping it stable is
-# what makes the [system + tools] block reusable in the KV cache.
-# TOOL_SKIP_NAMES can exclude a tool without breaking the set.
-TOOL_SKIP_NAMES = set()
-ORCHESTRATOR_TOOL_SCHEMAS = [s for s in tool_schemas if s['function']['name'] not in TOOL_SKIP_NAMES]
+ORCHESTRATOR_BLACKLIST = []
+
+ORCHESTRATOR_TOOL_SCHEMAS = [
+    s for s in ALL_TOOL_SCHEMAS
+    if s['function']['name'] not in ORCHESTRATOR_BLACKLIST
+]
+
+
+def get_tool_schemas(*names: str) -> list[dict]:
+    """Look up tool schemas by name from the full set.
+    Use this to give subagents exactly the tools they need.
+    """
+    by_name = {s['function']['name']: s for s in ALL_TOOL_SCHEMAS}
+    return [by_name[n] for n in names if n in by_name]
 
 
 # ── Dispatch ───────────────────────────────────────────────────────────
