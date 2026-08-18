@@ -14,5 +14,6 @@ python-multipart>=0.0.9
 pgvector
 psycopg[binary]
 ddgs>=9.0.0
+curl_cffi>=0.15.0
 yfinance
 sentence_transformers

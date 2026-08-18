@@ -150,7 +150,9 @@ def _discover_tools():
 
 ToolDict, ALL_TOOL_SCHEMAS = _discover_tools()
 
-ORCHESTRATOR_BLACKLIST = []
+ORCHESTRATOR_BLACKLIST = {
+    "WebFetch",
+}
 
 ORCHESTRATOR_TOOL_SCHEMAS = [
     s for s in ALL_TOOL_SCHEMAS

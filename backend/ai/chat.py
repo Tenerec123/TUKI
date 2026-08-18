@@ -121,7 +121,7 @@ async def chat_persistence_wrapper(prompt: Prompt):
         base_len = len(messages)
         async for token in openai_agent(
             messages=messages,
-            model_config = model_config['orchestrator'],
+            model = model_config['orchestrator'],
             max_rounds=MAX_AGENTIC_ROUNDS,
             tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
             conv_id=db_conversation.id):

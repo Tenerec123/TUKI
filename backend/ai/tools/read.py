@@ -176,19 +176,6 @@ def CheckEmail(max_unreads: int = 5):
     except Exception as e:
         return {'error': f'Failed to check email: {str(e)}'}
 
-def WebSearch(query: str, max_results: int = 5):
-    '''
-    Asks for data which a subagent will return summarized from the Internet. 
-'''
-
-    from ddgs import DDGS
-    with DDGS() as ddgs:
-        results = list(ddgs.text(query, max_results=max_results))
-        return [
-            {'title': r['title'], 'url': r['href'], 'snippet': r['body']}
-            for r in results
-        ]
-
 
 def Stocks(stock: str):
     '''
@@ -245,6 +232,7 @@ def ReadNote(query: str, limit: int = 1):
             })
         return results
 
+
 def DraftReadNote(query: str, limit: int = 1):
     '''
     Semantic search through notes. Returns matching notes with their content.
@@ -267,3 +255,28 @@ def DraftReadNote(query: str, limit: int = 1):
                 "content": content,
             })
         return results
+
+async def WebFetch(url: str):
+    '''
+    Fetch a web page and return its main text content, clean of HTML.
+    '''
+    from trafilatura import fetch_url, extract
+
+    # Fast path: trafilatura fetch + extract
+    html = fetch_url(url)
+    if html:
+        text = extract(html)
+        if text and len(text) > 200:
+            return text
+
+    # Fallback: curl_cffi impersonates Chrome's TLS fingerprint to bypass bot detection
+    try:
+        from curl_cffi.requests import AsyncSession
+        async with AsyncSession(impersonate="chrome") as session:
+            resp = await session.get(url, timeout=15.0)
+            html = resp.text if resp.status_code < 400 else None
+    except Exception:
+        html = None
+
+    text = extract(html) if html else ""
+    return text or f"Error: Could not extract content from {url}"
