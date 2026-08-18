@@ -184,8 +184,11 @@ def _sanitize_args(args: dict) -> dict:
     return cleaned
 
 
-def execute_tool_call(name: str, arguments: str) -> str:
-    """Execute a tool by name with JSON arguments string. Returns result JSON string."""
+async def execute_tool_call(name: str, arguments: str) -> str:
+    """Execute a tool by name with JSON arguments string. Returns result JSON string.
+    Supports both sync and async tool functions.
+    """
+    import asyncio
     func = ToolDict.get(name)
     if not func:
         print(f"[TOOL] {name} NOT FOUND in ToolDict")
@@ -195,6 +198,8 @@ def execute_tool_call(name: str, arguments: str) -> str:
         args = _sanitize_args(args)
         print(f"[TOOL] {name}(args={args})")
         result = func(**args)
+        if asyncio.iscoroutine(result):
+            result = await result
         result_str = result if isinstance(result, str) else json.dumps(result, default=str)
         print(f"[TOOL] {name} → OK ({len(result_str)} chars)")
         return result_str

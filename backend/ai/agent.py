@@ -31,14 +31,14 @@ client = AsyncOpenAI(
     api_key=os.environ['OPENROUTER_API_KEY']
 )
 
-async def _agentic_round(messages: list, model: str, tool_schemas: list, session_id: str = "-1", label: str = ""):
+async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last:bool = False, session_id: str = "-1", label: str = ""):
     extra_body = {"reasoning": {"effort": "none"}}
     if session_id != "-1": extra_body['session_id'] = session_id
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
         tools=tool_schemas,
-        tool_choice="auto",
+        tool_choice="none" if is_last else "auto",
         parallel_tool_calls=True,
         stream=True,
         extra_body=extra_body,
@@ -95,7 +95,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
             id = tc['id']
             name = tc['name']
             args = tc['arguments']
-            result = execute_tool_call(name, args)
+            result = await execute_tool_call(name, args)
             result_preview = result[:100]
             _log(f"   └─ {name} → {result_preview}")
             messages.append({
@@ -108,13 +108,14 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, session
  
     if finish == "stop" or len(calls) == 0: yield {"type":"finish", "content":""}
     
-async def openai_agent(messages:list, model, max_rounds, tool_schemas: list, conv_id:int=-1):
+async def openai_agent(messages:list, model:str, max_rounds:int, tool_schemas: list, conv_id:int=-1):
     _log(f"═══════════════════════════════════════════════")
     _log(f"AGENT START — model={model}")
     try:
         for i in range(max_rounds):
             _log(f"── Round {i+1}/{max_rounds}")
-            async for token in _agentic_round(messages, model, tool_schemas, str(conv_id), f"round-{i+1}/{max_rounds}"):
+            is_last = i == max_rounds - 1
+            async for token in _agentic_round(messages, model, tool_schemas, is_last=is_last,session_id= str(conv_id), label= f"round-{i+1}/{max_rounds}"):
                 yield token
                 if token['type'] == "finish": break
             else: continue
