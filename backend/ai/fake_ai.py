@@ -1,13 +1,11 @@
 import asyncio
 from ..schemas import ConversationSchema
 
-async def fake_ai(conversation: ConversationSchema, model: str, max_inferences = 5):
+async def fake_ai():
     """
     Simulador puro de openai_agent para pruebas de streaming.
     Entrega una lista de tokens de forma progresiva durando exactamente 12 segundos.
-    """
-    print(f"[FAKE_AI] Iniciando simulación de streaming de 12s con modelo: {model}")
-    
+    """    
     texto_base = (
         "Iniciando secuencia de verificación de doce segundos. "
         "Este es un flujo controlado de tokens transmitidos a través de la cola de memoria RAM. "
@@ -28,7 +26,7 @@ async def fake_ai(conversation: ConversationSchema, model: str, max_inferences =
     
     try:
         for i, token in enumerate(tokens):
-            yield token
+            yield {'type':'agent','content':token}
             await asyncio.sleep(delay_per_token)
             
     except Exception as e:

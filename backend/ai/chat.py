@@ -10,6 +10,7 @@ from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 import os
 import asyncio
 import json
+from .fake_ai import fake_ai
 
 def _build_messages(conversation: ConversationSchema, base_prompt) -> list:
     msgs = [{'role': 'developer', 'content': base_prompt}]
