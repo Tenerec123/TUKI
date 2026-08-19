@@ -294,13 +294,17 @@ function appendToolResult(div, tool) {
 function createTukiMsg() {
     const div = document.createElement('div');
     div.classList.add('tuki-msg');
+    div._mdId = _msgIdCounter++;
+    _rawMdStore.set(div._mdId, '');
     chatContainer.appendChild(div);
     return div;
 }
 
 function finalizeStream(tukiMsg) {
-    // Streaming is complete: render the last message's markdown once.
-    renderTukiMarkdown(tukiMsg);
+    // Streaming is complete: flush any pending debounced render, then do a
+    // final full render of markdown + LaTeX for the last message.
+    flushRender();
+    if (tukiMsg) renderTukiMarkdown(tukiMsg);
     // #form-container is absolutely positioned over the bottom of the chat
     // area. On desktop its 80px input box is vertically centered, so its top
     // edge sits 100px above the container bottom; 130px clears it with a
@@ -308,7 +312,6 @@ function finalizeStream(tukiMsg) {
     // last message height) prevents both the hidden-tail bug and huge empty
     // gaps below short answers.
     chatContainer.style.paddingBottom = "130px";
-    scrollToBottom();
 }
 
 function handleStreamLine(line, state) {
@@ -322,15 +325,19 @@ function handleStreamLine(line, state) {
     if (chunkObj.type == "agent" && chunkObj.content.trim() != "") {
         if (!state.tukiMsg || state.lastEvent == "tool") {
             state.tukiMsg = createTukiMsg();
+            state.tukiMsg.scrollIntoView({ block: "start", behavior: "smooth" });
         }
         state.tukiMsg.textContent += chunkObj.content;
+        _rawMdStore.set(state.tukiMsg._mdId, state.tukiMsg.textContent);
         state.lastEvent = "agent";
-        Render();
+        scheduleRender(state.tukiMsg);
     }
     else if (chunkObj.type == "tool_call") {
+        // Flush any pending debounced render before inserting the tool block.
+        flushRender();
         // The streamed text phase is complete; render its markdown before the
         // tool block so a later agent phase starts a fresh message.
-        if (state.tukiMsg && state.tukiMsg.textContent.trim()) {
+        if (state.tukiMsg && (_rawMdStore.get(state.tukiMsg._mdId) || '').trim()) {
             renderTukiMarkdown(state.tukiMsg);
             state.tukiMsg = null;
         }
@@ -348,7 +355,6 @@ function handleStreamLine(line, state) {
             state.lastEvent = "tool";
         }
     }
-    scrollToBottom();
 }
 
 async function streamConversation(convId) {
@@ -403,8 +409,11 @@ async function loadConversation(conv_id, conv_position){
                 }
                 else if (message.type == 'agent' && message.text.trim()){
                     msg_div.classList.add('tuki-msg');
-                    msg_div.innerHTML = DOMPurify.sanitize(marked.parse(message.text))
+                    msg_div._mdId = _msgIdCounter++;
+                    _rawMdStore.set(msg_div._mdId, message.text);
+                    msg_div.textContent = message.text;
                     chatContainer.appendChild(msg_div)
+                    renderTukiMarkdown(msg_div);
                 }
                 else if (message.type == 'tool'){
                     try {
@@ -420,9 +429,9 @@ async function loadConversation(conv_id, conv_position){
                 else {
                     chatContainer.appendChild(msg_div)
                 }
-                scrollToBottom();
-                
             })
+            // After all messages are loaded, scroll to the bottom of the conversation
+            scrollToBottom();
         });        
     }
     posOfSelectedConv = conv_position
@@ -474,15 +483,30 @@ textarea.addEventListener('keydown', (e) => {
     }
 });
 
+// Early-render flag: set when user sends a message so the first tukiMsg
+// gets rendered promptly even if chunks arrive very fast.
+let _pendingSendRender = false;
+
 async function sendPrompt(text){
     if (idOfSelectedConv == -1){return}
     userMsg = document.createElement('div')
     userMsg.classList.add('user-msg')
     userMsg.textContent = text;
     chatContainer.appendChild(userMsg);
-    chatContainer.style.paddingBottom = `${400}px`;
+    chatContainer.style.paddingBottom = "200px";
     scrollToBottom();
     document.getElementById('prompt-writer').value = "";
+    // Schedule an early render200ms from now so formatting appears promptly
+    // even if the AI responds very fast. Renders whatever tukiMsg exists
+    // when the timer fires.
+    _pendingSendRender = true;
+    setTimeout(() => {
+        if (!_pendingSendRender) return;
+        _pendingSendRender = false;
+        // Find the last tuki-msg in the chat and render it
+        const msgs = chatContainer.querySelectorAll('.tuki-msg');
+        if (msgs.length > 0) renderTukiMarkdown(msgs[msgs.length - 1]);
+    }, 200);
     
     await fetch(`${window.API_URL}/api/ai/execute`, {
         method: 'POST',
@@ -509,25 +533,108 @@ function scrollToBottom(){
 
 const KATEX_OPTIONS = {
     delimiters: [
-        {left: '$$', right: '$$', display: true},  // Ecuaciones centradas
-        {left: '$', right: '$', display: false},  // Ecuaciones inline
-        {left: '\\(', right: '\\)', display: true},
-        {left: '\\[', right: '\\]', display: false}
+        {left: '$$', right: '$$', display: true},  // Display math
+        {left: '$', right: '$', display: false},    // Inline math
+        {left: '\\(', right: '\\)', display: false}, // Inline LaTeX
+        {left: '\\[', right: '\\]', display: true}  // Display LaTeX
     ],
-    throwOnError: true
+    throwOnError: false
 };
 
-// Render a completed streamed message: sanitize markdown, then math scoped to
-// the message element (avoids re-scanning the whole document on every chunk).
+// ── Markdown rendering pipeline ──
+// Raw markdown lives in _rawMdStore (JS Map), NOT in the DOM. The DOM only
+// receives rendered HTML, and only when the output actually changes — no flicker.
+
+const _rawMdStore = new Map();  // elementId → raw markdown string
+let _msgIdCounter = 0;
+
+// Ensure GFM (tables, strikethrough, etc.) is enabled
+marked.use({ gfm: true });
+
+// Extract LaTeX blocks from raw markdown BEFORE marked parses them, so marked
+// cannot break the $ delimiters. Returns { clean, blocks } where clean has
+// placeholders like §§0§§ and blocks is an array of original LaTeX strings.
+// Handles all common LaTeX delimiters: $$, $, \[, \(.
+function extractMath(raw) {
+    const blocks = [];
+    let clean = raw;
+    // Display math — $$ and \[ (multiline, must come before inline)
+    clean = clean.replace(/\$\$([\s\S]+?)\$\$/g, (_, tex) => {
+        blocks.push({ tex, display: true });
+        return `§§${blocks.length - 1}§§`;
+    });
+    clean = clean.replace(/\\\[([\s\S]+?)\\\]/g, (_, tex) => {
+        blocks.push({ tex, display: true });
+        return `§§${blocks.length - 1}§§`;
+    });
+    // Inline math — $ and \( (single line, no newlines)
+    clean = clean.replace(/\$([^\$\n]+?)\$/g, (_, tex) => {
+        blocks.push({ tex, display: false });
+        return `§§${blocks.length - 1}§§`;
+    });
+    clean = clean.replace(/\\\(([^\n]+?)\\\)/g, (_, tex) => {
+        blocks.push({ tex, display: false });
+        return `§§${blocks.length - 1}§§`;
+    });
+    return { clean, blocks };
+}
+
+// Parse raw markdown → final HTML string (marked + KaTeX restore).
+function parseMarkdown(raw) {
+    const { clean, blocks } = extractMath(raw);
+    let html = DOMPurify.sanitize(marked.parse(clean));
+    blocks.forEach((b, i) => {
+        const tag = b.display
+            ? `<div class="math-block">$$${b.tex}$$</div>`
+            : `<span class="math-inline">$${b.tex}$</span>`;
+        html = html.replace(new RegExp(`<p>§§${i}§§</p>|§§${i}§§`), tag);
+    });
+    return html;
+}
+
+// Render a streamed message. Only touches the DOM if the parsed HTML
+// actually changed — eliminates flicker from re-renders with same content.
 function renderTukiMarkdown(msg) {
-    if (!msg || !msg.textContent.trim()) return;
+    if (!msg) return;
+    const raw = _rawMdStore.get(msg._mdId);
+    if (!raw || !raw.trim()) return;
     try {
-        msg.innerHTML = DOMPurify.sanitize(marked.parse(msg.textContent));
-        renderMathInElement(msg, KATEX_OPTIONS);
+        const html = parseMarkdown(raw);
+        if (html !== msg.dataset.lastHtml) {
+            msg.innerHTML = html;
+            msg.dataset.lastHtml = html;
+            renderMathInElement(msg, KATEX_OPTIONS);
+        }
     } catch (e) {
-        // Rendering is a nice-to-have: on failure keep the raw text so stream
-        // finalization (padding/scroll) is never blocked.
         console.error('[RENDER] Markdown render failed:', e);
+    }
+}
+
+// Debounced rendering: batch markdown + LaTeX every 200ms during streaming
+// so the user sees formatted text almost immediately instead of only at the end.
+let _renderTimer = null;
+let _pendingRenderMsg = null;
+
+function scheduleRender(msg) {
+    _pendingRenderMsg = msg;
+    if (_renderTimer) return;
+    _renderTimer = setTimeout(() => {
+        _renderTimer = null;
+        if (_pendingRenderMsg) {
+            renderTukiMarkdown(_pendingRenderMsg);
+            _pendingRenderMsg = null;
+        }
+    }, 200);
+}
+
+function flushRender() {
+    if (_renderTimer) {
+        clearTimeout(_renderTimer);
+        _renderTimer = null;
+    }
+    if (_pendingRenderMsg) {
+        renderTukiMarkdown(_pendingRenderMsg);
+        _pendingRenderMsg = null;
     }
 }
 
@@ -583,17 +690,24 @@ function OpenMenu(button, id, position){
     const b = !a || id_of_menu_disp != id;
     if (b){
         menu = document.createElement('div');
-        Object.assign(menu.style, {
-            top: `${y}px`,
-            left: `${x}px`
-        });
         menu.classList.add('context-menu');
+        menu.style.opacity = '0';
         menu.innerHTML = `
         <button class="menu-item conv-rename" onClick="allowRenameConv(${id}, ${position})">Rename</button>
         <button class="menu-item" onClick="deleteConversation(${id})">Delete</button>
         `;
-        
+
         document.body.appendChild(menu);
+
+        // Flip upward if the menu would overflow the viewport bottom
+        const menuRect = menu.getBoundingClientRect();
+        if (y + menuRect.height > window.innerHeight) {
+            menu.style.top = `${rect.top - menuRect.height - 5}px`;
+        } else {
+            menu.style.top = `${y}px`;
+        }
+        menu.style.left = `${x}px`;
+
         menu_displayed = menu;
     }
     if (a && !b){

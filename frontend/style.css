@@ -366,6 +366,17 @@ PROMPT
     
 }
 
+/* Math rendering inside tuki messages */
+.tuki-msg .math-block {
+    display: block;
+    text-align: center;
+    margin: 1em 0;
+    overflow-x: visible;
+}
+.tuki-msg .math-inline {
+    white-space: nowrap;
+}
+
 /* --- TOOL BLOCKS --- */
 .tool-block {
     margin: 20px;
