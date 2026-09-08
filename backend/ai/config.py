@@ -15,6 +15,7 @@ Tool Calls:
 -- If you have all the info to respond or you've executed the order, don't use any tool and respond with text
 -- You can return text in the tool calling inferences if necessary
 -- If the task involves dates, deadlines, or time, call GetCurrentTime first. NEVER INVENT DATES
+-- Update tools only change the fields you send. null or absent = leave unchanged. There is NO way to unassign a project from a task/routine.
 '''
 
 WEB_SEARCH_SYSTEM_PROMPT = '''
