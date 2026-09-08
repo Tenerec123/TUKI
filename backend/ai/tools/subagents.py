@@ -13,6 +13,8 @@ async def WebSearch(query: str):
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=5))
 
+    results_text = '\n\n'.join([await WebFetch(r['href']) for r in results])
+
     messages = [
         {
             'role':'developer',
@@ -24,7 +26,7 @@ async def WebSearch(query: str):
         },
         {
             'role':'developer',
-            'content':f"Websites:\n{'\n\n'.join([await WebFetch(r['href']) for r in results])}"
+            'content':f'Websites:\n{results_text}'
         },
     ]
     result = ""
