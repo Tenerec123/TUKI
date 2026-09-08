@@ -364,7 +364,7 @@ async function streamConversation(convId) {
             'Content-Type': 'application/json'
         }
     });
-    if (!response.ok) return;
+    if (!response.ok || !response.body) return;
 
     const state = { tukiMsg: null, lastEvent: "init", callBuffer: [] };
     const reader = response.body.getReader();
@@ -447,8 +447,7 @@ async function getConversations(){
     .then(response => response.json())
     .then(data => {
         conversationList.innerHTML = ""
-        let i = 0;
-        data.forEach(conversation => {
+        data.forEach((conversation, i) => {
             const li = document.createElement('li');
 
             const selectBtn = document.createElement('button');
@@ -468,7 +467,6 @@ async function getConversations(){
             li.appendChild(selectBtn);
             li.appendChild(optionsBtn);
             conversationList.appendChild(li);
-            i++;
         });
     });
 }

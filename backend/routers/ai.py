@@ -1,5 +1,5 @@
 from ..schemas import Prompt
-from fastapi import APIRouter, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import APIRouter, UploadFile, File, BackgroundTasks, Response
 from fastapi.responses import StreamingResponse
 from ..ai.stt import stt_conversion_logic
 from ..ai.stream_manager import stream_manager
@@ -20,9 +20,10 @@ def ai_response(prompt: Prompt, background_tasks: BackgroundTasks):
 @router.get("/connect/{conv_id}")
 async def connect_streaming(conv_id: int):
     if not stream_manager.is_active(conv_id):
-        raise HTTPException(
-            status_code=400, detail="AI not running for this conversation"
-        )
+        # No active stream for this conversation — return 204 (success, no body)
+        # instead of an error. This is a normal state when reconnecting after a
+        # generation finished, not a client fault.
+        return Response(status_code=204)
     return StreamingResponse(stream_manager.stream(conv_id), media_type="application/x-ndjson")
 
 
