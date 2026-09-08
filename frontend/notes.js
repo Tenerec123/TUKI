@@ -217,20 +217,26 @@ const expandedIds = new Set();
 let selectedId = null;
 let selectedFolderPath = null; // null = root
 
-function fileIcon(name) {
-    if (name.endsWith("-api") || name.endsWith("-setup") || name.endsWith("-tuki")) return "bi-file-earmark-code";
-    if (name.endsWith("-stt")) return "bi-file-earmark-music";
-    return "bi-file-earmark-text";
-}
-
 function renderTree(node, container, parentPath = "") {
     for (const file of node.files) {
-        const el = document.createElement("div");
-        el.className = "file-item" + (file.id === selectedId ? " selected" : "");
-        el.dataset.id = file.id;
-        el.dataset.name = file.name;
-        el.innerHTML = `<i class="bi ${fileIcon(file.name)} file-icon"></i> ${file.name}<button class="delete-badge" title="Delete"><i class="bi bi-x"></i></button>`;
-        container.appendChild(el);
+        const fileEl = document.createElement("div");
+        fileEl.className = "file-item" + (file.id === selectedId ? " selected" : "");
+        fileEl.dataset.id = file.id;
+        fileEl.dataset.name = file.name;
+
+        const icon = document.createElement("i");
+        icon.className = "bi bi-file-earmark-text file-icon";
+        fileEl.appendChild(icon);
+
+        fileEl.appendChild(document.createTextNode(file.name));
+
+        const badge = document.createElement("button");
+        badge.className = "delete-badge";
+        badge.title = "Delete";
+        badge.innerHTML = `<i class="bi bi-x"></i>`;
+        fileEl.appendChild(badge);
+
+        container.appendChild(fileEl);
     }
 
     for (const folder of node.folders) {
@@ -241,7 +247,23 @@ function renderTree(node, container, parentPath = "") {
         folderEl.className = "folder-item" + (isOpen ? " open" : "");
         folderEl.dataset.id = `folder:${folder.name}`;
         folderEl.dataset.path = fullPath;
-        folderEl.innerHTML = `<i class="bi bi-chevron-right folder-chevron"></i><i class="bi bi-folder-fill folder-icon"></i> ${folder.name}<button class="delete-badge" title="Delete folder"><i class="bi bi-x"></i></button>`;
+
+        const chevron = document.createElement("i");
+        chevron.className = "bi bi-chevron-right folder-chevron";
+        folderEl.appendChild(chevron);
+
+        const folderIcon = document.createElement("i");
+        folderIcon.className = "bi bi-folder-fill folder-icon";
+        folderEl.appendChild(folderIcon);
+
+        folderEl.appendChild(document.createTextNode(folder.name));
+
+        const badge = document.createElement("button");
+        badge.className = "delete-badge";
+        badge.title = "Delete folder";
+        badge.innerHTML = `<i class="bi bi-x"></i>`;
+        folderEl.appendChild(badge);
+
         container.appendChild(folderEl);
 
         const childrenEl = document.createElement("div");

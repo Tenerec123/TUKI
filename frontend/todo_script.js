@@ -63,14 +63,47 @@ async function LoadTasks() {
         if (!task.finished || SHOW_FINISHED){
             const divTask = document.createElement('tr');
 
-            divTask.innerHTML = `
-                <td class="check"><button onclick="CheckClick(this, ${task.id})">${Char}</button></td>
-                <td class="name">${task.name}</td>
-                <td class="description">${task.description}</td>
-                <td class="priority">${task.priority}</td>
-                <td class="deadline">${task.deadline || 'No date'}</td>
-                <td class="delete"><button onclick="Delete('tasks', this, ${task.id})">🗑️</button></td>
-            `;
+            const checkTd = document.createElement('td');
+            checkTd.className = 'check';
+            const checkBtn = document.createElement('button');
+            checkBtn.textContent = Char;
+            checkBtn.addEventListener('click', () => {
+                CheckClick(checkBtn, task.id);
+            });
+            checkTd.appendChild(checkBtn);
+
+            const nameTd = document.createElement('td');
+            nameTd.className = 'name';
+            nameTd.textContent = task.name;
+
+            const descTd = document.createElement('td');
+            descTd.className = 'description';
+            descTd.textContent = task.description;
+
+            const priorityTd = document.createElement('td');
+            priorityTd.className = 'priority';
+            priorityTd.textContent = task.priority;
+
+            const deadlineTd = document.createElement('td');
+            deadlineTd.className = 'deadline';
+            deadlineTd.textContent = task.deadline || 'No date';
+
+            const deleteTd = document.createElement('td');
+            deleteTd.className = 'delete';
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.addEventListener('click', () => {
+                Delete('tasks', deleteBtn, task.id);
+            });
+            deleteTd.appendChild(deleteBtn);
+
+            divTask.appendChild(checkTd);
+            divTask.appendChild(nameTd);
+            divTask.appendChild(descTd);
+            divTask.appendChild(priorityTd);
+            divTask.appendChild(deadlineTd);
+            divTask.appendChild(deleteTd);
+
             TaskContainer.appendChild(divTask);
         }
         });
@@ -85,12 +118,32 @@ async function LoadProjects() {
     ProjectContainer.innerHTML = '';
     data.forEach(project => {
         const divProject = document.createElement('tr');
-        divProject.innerHTML = `
-            <td class="name">${project.name}</td>
-            <td class="description">${project.description}</td>
-            <td class="priority">${project.priority}</td>
-            <td class="delete"><button onclick="Delete('projects', this, ${project.id})">🗑️</button></td>
-        `;
+
+        const nameTd = document.createElement('td');
+        nameTd.className = 'name';
+        nameTd.textContent = project.name;
+
+        const descTd = document.createElement('td');
+        descTd.className = 'description';
+        descTd.textContent = project.description;
+
+        const priorityTd = document.createElement('td');
+        priorityTd.className = 'priority';
+        priorityTd.textContent = project.priority;
+
+        const deleteTd = document.createElement('td');
+        deleteTd.className = 'delete';
+        const deleteBtn = document.createElement('button');
+        deleteBtn.textContent = '🗑️';
+        deleteBtn.addEventListener('click', () => {
+            Delete('projects', deleteBtn, project.id);
+        });
+        deleteTd.appendChild(deleteBtn);
+
+        divProject.appendChild(nameTd);
+        divProject.appendChild(descTd);
+        divProject.appendChild(priorityTd);
+        divProject.appendChild(deleteTd);
 
         ProjectContainer.appendChild(divProject);
     });
@@ -109,15 +162,48 @@ async function LoadRoutines() {
       if (routine.finished){
         Char = "☑";
       }
-      divRoutine.innerHTML = `
-        <td class="icon"><i class="bi bi-${getIcon(routine.icon)}"></i></td>
-        <td class="name">${routine.name}</td>
-        <td class="description">${routine.description}</td>
-        <td class="priority">${routine.priority}</td>
-        <td class="description">${routine.frequency}</td>
-        <td class="deadline">${routine.init_date}</td>
-        <td class="delete"><button onclick="Delete('routines', this, ${routine.id})">🗑️</button></td>
-      `;
+
+      const iconTd = document.createElement('td');
+      iconTd.className = 'icon';
+      iconTd.innerHTML = `<i class="bi bi-${getIcon(routine.icon)}"></i>`;
+
+      const nameTd = document.createElement('td');
+      nameTd.className = 'name';
+      nameTd.textContent = routine.name;
+
+      const descTd = document.createElement('td');
+      descTd.className = 'description';
+      descTd.textContent = routine.description;
+
+      const priorityTd = document.createElement('td');
+      priorityTd.className = 'priority';
+      priorityTd.textContent = routine.priority;
+
+      const frequencyTd = document.createElement('td');
+      frequencyTd.className = 'description';
+      frequencyTd.textContent = routine.frequency;
+
+      const initDateTd = document.createElement('td');
+      initDateTd.className = 'deadline';
+      initDateTd.textContent = routine.init_date;
+
+      const deleteTd = document.createElement('td');
+      deleteTd.className = 'delete';
+      const deleteBtn = document.createElement('button');
+      deleteBtn.textContent = '🗑️';
+      deleteBtn.addEventListener('click', () => {
+        Delete('routines', deleteBtn, routine.id);
+      });
+      deleteTd.appendChild(deleteBtn);
+
+      divRoutine.appendChild(iconTd);
+      divRoutine.appendChild(nameTd);
+      divRoutine.appendChild(descTd);
+      divRoutine.appendChild(priorityTd);
+      divRoutine.appendChild(frequencyTd);
+      divRoutine.appendChild(initDateTd);
+      divRoutine.appendChild(deleteTd);
+
       RoutinesContainer.appendChild(divRoutine);
     });
   })

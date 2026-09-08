@@ -114,7 +114,12 @@ async function allowRenameConv(conv_id, conv_position) {
     renameForm = document.createElement('form');
     titleButton = conversationList.children[conv_position].children[0];
     renameForm.classList.add('rename-form');
-    renameForm.innerHTML = `<input name="newname" type="text" class="conv-select active-rename" placeholder="${titleButton.textContent}">`;
+    const renameInput = document.createElement('input');
+    renameInput.name = 'newname';
+    renameInput.type = 'text';
+    renameInput.className = 'conv-select active-rename';
+    renameInput.placeholder = titleButton.textContent;
+    renameForm.appendChild(renameInput);
     titleButton.replaceWith(renameForm);
     renameForm.children[0].focus();
     function detectClicksForRename(e){
@@ -126,7 +131,7 @@ async function allowRenameConv(conv_id, conv_position) {
             selectBtn.addEventListener('click', (e) => {
                 loadConversation(conv_id, conv_position);
             });
-            selectBtn.innerHTML = `${renameForm.children[0].placeholder}`
+            selectBtn.textContent = renameForm.children[0].placeholder;
             renameForm.children[0].blur();
             renameForm.replaceWith(selectBtn);
             document.removeEventListener('click', detectClicksForRename)
@@ -154,7 +159,7 @@ async function allowRenameConv(conv_id, conv_position) {
             selectBtn.addEventListener('click', (e) => {
                 loadConversation(conv_id, conv_position);
             });
-            selectBtn.innerHTML = `${newName}`
+            selectBtn.textContent = newName;
             renameForm.children[0].blur();
             renameForm.replaceWith(selectBtn);
             document.removeEventListener('click', detectClicksForRename);
@@ -166,7 +171,7 @@ async function allowRenameConv(conv_id, conv_position) {
             selectBtn.addEventListener('click', (e) => {
                 loadConversation(conv_id, conv_position);
             });
-            selectBtn.innerHTML = `${renameForm.children[0].placeholder}`
+            selectBtn.textContent = renameForm.children[0].placeholder;
             renameForm.children[0].blur();
             renameForm.replaceWith(selectBtn);
             document.removeEventListener('click', detectClicksForRename);
@@ -444,15 +449,25 @@ async function getConversations(){
         conversationList.innerHTML = ""
         let i = 0;
         data.forEach(conversation => {
-            const divConv = document.createElement('li');
-            divConv.innerHTML = `
-                <button class="conv-select" onclick="loadConversation(${conversation.id}, ${i})">${conversation.title}</button>
-                <button class="conv-options" onclick="OpenMenu(this, ${conversation.id}, ${i})">
-                    <i class="bi bi-three-dots"></i>
-                </button>
-            `;
-            // Añadimos este nuevo div al contenedor principal
-            conversationList.appendChild(divConv);
+            const li = document.createElement('li');
+
+            const selectBtn = document.createElement('button');
+            selectBtn.className = 'conv-select';
+            selectBtn.textContent = conversation.title;
+            selectBtn.addEventListener('click', () => {
+                loadConversation(conversation.id, i);
+            });
+
+            const optionsBtn = document.createElement('button');
+            optionsBtn.className = 'conv-options';
+            optionsBtn.innerHTML = '<i class="bi bi-three-dots"></i>';
+            optionsBtn.addEventListener('click', (e) => {
+                OpenMenu(optionsBtn, conversation.id, i);
+            });
+
+            li.appendChild(selectBtn);
+            li.appendChild(optionsBtn);
+            conversationList.appendChild(li);
             i++;
         });
     });
