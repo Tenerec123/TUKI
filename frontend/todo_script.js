@@ -22,6 +22,14 @@ function getIcon(iconName) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Default date inputs to today instead of a hardcoded (stale) date.
+    const today = new Date().toISOString().split('T')[0];
+    document.querySelectorAll('.date-container').forEach(container => {
+        const text = container.querySelector('.iso-date-text');
+        const native = container.querySelector('.iso-date-native');
+        if (text) { text.value = today; }
+        if (native) { native.value = today; }
+    });
     // ISO date inputs: keep the visible text in sync with the native picker value.
     document.querySelectorAll('.iso-date-native').forEach(native => {
         syncIsoDateText(native);
