@@ -30,7 +30,8 @@
   <form id="project-creator"></form>
   <form id="routine-creator"></form>
 
-  <table>
+  <div class="table-scroll">
+  <table class="todo-table">
     <thead>
       <tr id="table-headers">
         <th>Project</th>
@@ -57,9 +58,11 @@
     <tbody id="project-container">
     </tbody>
   </table>
+  </div>
 
   <br><br><br>
-	<table>
+  <div class="table-scroll">
+	<table class="task-table">
     <thead>
       <tr id="table-headers">
         <th>Check</th>
@@ -96,10 +99,12 @@
     <tbody id="task-container">
     </tbody>
   </table>
+  </div>
 
   <br><br><br>
 
-  <table>
+  <div class="table-scroll">
+  <table class="routine-table">
     <thead>
       <tr id="table-headers">
         <th>Icon</th>
@@ -140,6 +145,7 @@
     <tbody id="routine-container">
     </tbody>
   </table>
+  </div>
 <script src="/frontend/todo_script.js"></script>
 </body>
 </html>

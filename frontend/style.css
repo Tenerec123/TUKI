@@ -410,164 +410,10 @@ PROMPT
     box-shadow: var(--glow-yellow-on); /* Añade tu neón glow */
 }
 
-@media (max-width: 768px) {
-    #title {
-        font-size: 2.2rem;
-    }
-
-    #subtitle {
-        font-size: 0.95rem;
-    }
-
-    #navbar {
-        flex-wrap: wrap;
-        height: auto;
-        padding: 8px 0;
-        width: 100%;
-    }
-
-    #navbar a {
-        font-size: var(--mobile-navbar-font-size);
-        margin: 5px 10px;
-    }
-
-    #chat-sidebar-container {
-        flex-direction: column;
-        height: calc(100vh - 145px);
-    }
-
-    #sidebar {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: 0;
-        height: 100%;
-        min-height: 100%;
-        overflow-y: auto;
-        overflow-x: visible;
-        transition: width var(--transition-speed) ease;
-        z-index: 30;
-        pointer-events: none;
-        background-color: var(--chacoal-grey);
-    }
-
-    #chat-sidebar-container.sidebar-collapsed #sidebar {
-        width: var(--mobile-sb-width);
-        pointer-events: auto;
-    }
-
-    #chat-sidebar-container.sidebar-collapsed #sidebar ul li button {
-        font-size: 1rem;
-    }
-
-    #form-container {
-        left: 0;
-        right: 0;
-        padding: 12px;
-        height: var(--mobile-form-height);
-        background: linear-gradient(transparent, var(--dark-bg));
-    }
-
-    #chat-sidebar-container.sidebar-collapsed #form-container {
-        left: var(--mobile-sb-width);
-    }
-
-    #prompt-form {
-        width: 100%;
-        height: auto;
-        max-height: 200px;
-    }
-    #form-container {
-        height: auto;
-        min-height: var(--mobile-form-height);
-    }
-
-    #submit-btn {
-        right: 8px;
-        bottom: 8px;
-    }
-
-    .user-msg,
-    .tuki-msg {
-        max-width: var(--mobile-msg-max-width);
-        margin: 10px;
-        font-size: var(--mobile-font-size);
-    }
-
-    .user-msg {
-        margin-left: auto;
-        margin-right: auto;
-        width: auto;
-    }
-
-    .tuki-msg {
-        width: auto;
-    }
-
-    #chat-container {
-        padding-bottom: 140px; /* Must clear the mobile form overlay */
-    }
-
-    .sidebar-controls {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        padding: 8px;
-    }
-
-    .sidebar-controls button {
-        font-size: 1.2rem;
-    }
-
-    .conv-select {
-        padding: 12px 16px;
-    }
-
-    #toggle-sidebar {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        z-index: 50;
-        pointer-events: auto;
-        background: transparent;
-        border: none;
-        color: var(--neon-yellow);
-        font-size: 1.4rem;
-    }
-
-    .form-name input,
-    .form-description input,
-    .form-priority input,
-    .form-deadline input,
-    .custom-date {
-        width: 100%;
-        min-width: 0;
-        font-size: 1rem;
-    }
-
-    .form-submit input {
-        width: 100%;
-        font-size: 0.95rem;
-        padding: 8px 6px;
-    }
-
-    .check button,
-    .form-check button,
-    .delete button {
-        font-size: 2rem;
-    }
-
-    .priority-header,
-    .priority {
-        width: auto;
-    }
-
-    /* Oculta la columna de descripción en móvil para ganar espacio */
-    table th:nth-child(3),
-    table td:nth-child(3) {
-        display: none;
-    }
-}
+/* 
+NOTE: The mobile @media (max-width: 768px) block now lives at the END of this
+file. It must stay AFTER all base rules so mobile styles win the cascade.
+*/
 
 /* 
 TABLE 
@@ -609,6 +455,7 @@ TABLE DATA COLUMNS
     padding: 0;
     font-size: 1.4rem;
     text-align: center;
+    white-space: nowrap;
 }
 .check, .form-check{
     margin: 0;
@@ -805,6 +652,7 @@ SELECT CALENDAR
     display: flex;
     justify-content: center;
     align-items: center;
+    white-space: nowrap;
 }
 
 .custom-date::-webkit-date-and-time-value {
@@ -862,6 +710,8 @@ SELECT CALENDAR
     flex-direction: row;
     align-items: center;
     justify-content: center;
+    min-width: 0;
+    overflow: hidden;
 }
 
 #cal-heatmap-yaxislabels {
@@ -937,6 +787,36 @@ SELECT CALENDAR
 
 .routine-item.checked{
     background-color: red;
+}
+
+/* 
+TABLE SCROLL WRAPPER (mobile horizontal scroll)
+*/
+.table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+}
+
+/*
+KALE LAYOUT
+*/
+#stats-container {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+#routine-selector {
+    width: 340px;
+    flex-shrink: 0;
+}
+
+#cal-heatmap-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
 }
 
 /* --- REDISEÑO DEL FORMULARIO FLEXIBLE Y ELÁSTICO --- */
@@ -1111,4 +991,271 @@ SELECT CALENDAR
 }
 .model-dropdown-menu::-webkit-scrollbar-thumb {
     background-color: var(--neon-yellow);
+}
+
+/* 
+═══════════════════════════════════════════════════════════════════
+MOBILE — MUST STAY AT THE END OF THE FILE
+All base rules above must win the cascade; this block overrides them.
+═══════════════════════════════════════════════════════════════════
+*/
+@media (max-width: 768px) {
+    #title {
+        font-size: 2.2rem;
+    }
+
+    #subtitle {
+        font-size: 0.95rem;
+    }
+
+    #navbar {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 8px 0;
+        width: 100%;
+    }
+
+    #navbar a {
+        font-size: var(--mobile-navbar-font-size);
+        margin: 5px 10px;
+    }
+
+    #chat-sidebar-container {
+        flex-direction: column;
+        height: calc(100vh - 145px);
+    }
+
+    #sidebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 0;
+        height: 100%;
+        min-height: 100%;
+        overflow-y: auto;
+        overflow-x: visible;
+        transition: width var(--transition-speed) ease;
+        z-index: 30;
+        pointer-events: none;
+        background-color: var(--chacoal-grey);
+    }
+
+    #chat-sidebar-container.sidebar-collapsed #sidebar {
+        width: var(--mobile-sb-width);
+        pointer-events: auto;
+    }
+
+    #chat-sidebar-container.sidebar-collapsed #sidebar ul li button {
+        font-size: 1rem;
+    }
+
+    #form-container {
+        left: 0;
+        right: 0;
+        padding: 12px;
+        height: var(--mobile-form-height);
+        background: linear-gradient(transparent, var(--dark-bg));
+    }
+
+    #chat-sidebar-container.sidebar-collapsed #form-container {
+        left: var(--mobile-sb-width);
+    }
+
+    #prompt-form {
+        width: 100%;
+        height: auto;
+        max-height: 200px;
+    }
+    #form-container {
+        height: auto;
+        min-height: var(--mobile-form-height);
+    }
+
+    #submit-btn {
+        right: 8px;
+        bottom: 8px;
+    }
+
+    .user-msg,
+    .tuki-msg {
+        max-width: var(--mobile-msg-max-width);
+        margin: 10px;
+        font-size: var(--mobile-font-size);
+    }
+
+    .user-msg {
+        margin-left: auto;
+        margin-right: auto;
+        width: auto;
+    }
+
+    .tuki-msg {
+        width: auto;
+    }
+
+    #chat-container {
+        padding-bottom: 140px; /* Must clear the mobile form overlay */
+    }
+
+    .sidebar-controls {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px;
+    }
+
+    .sidebar-controls button {
+        font-size: 1.2rem;
+    }
+
+    .conv-select {
+        padding: 12px 16px;
+    }
+
+    #toggle-sidebar {
+        position: fixed;
+        top: 10px;
+        left: 10px;
+        z-index: 50;
+        pointer-events: auto;
+        background: transparent;
+        border: none;
+        color: var(--neon-yellow);
+        font-size: 1.4rem;
+    }
+
+    .form-name input,
+    .form-description input,
+    .form-priority input,
+    .form-deadline input,
+    .custom-date {
+        width: 100%;
+        min-width: 0;
+        font-size: 1rem;
+    }
+
+    .form-submit input {
+        width: 100%;
+        font-size: 0.95rem;
+        padding: 8px 6px;
+    }
+
+    .check button,
+    .form-check button,
+    .delete button {
+        font-size: 2rem;
+    }
+
+    .priority-header,
+    .priority {
+        width: auto;
+    }
+
+    /* Oculta la columna de descripción en móvil para ganar espacio */
+    table th:nth-child(3),
+    table td:nth-child(3) {
+        display: none;
+    }
+
+    /* ── TABLES: hide non-essential columns on mobile ── */
+    .task-table th:nth-child(3),
+    .task-table td:nth-child(3),
+    .task-table th:nth-child(4),
+    .task-table td:nth-child(4) {
+        display: none;
+    }
+
+    .routine-table th:nth-child(4),
+    .routine-table td:nth-child(4),
+    .routine-table th:nth-child(5),
+    .routine-table td:nth-child(5),
+    .routine-table th:nth-child(6),
+    .routine-table td:nth-child(6) {
+        display: none;
+    }
+
+    /* ── TODAY ROUTINE BAR ── */
+    #today-routine-list {
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+    }
+
+    .routine-item::after {
+        left: 50% !important;
+        transform: translateX(-50%);
+        width: max-content !important;
+        max-width: 200px;
+    }
+
+    /* ── KALE: routines on top (full-width, vertical scroll), heatmap below ── */
+    #stats-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    /* Routines block: full width, vertical scroll of its own (short — leaves
+       room for the heatmap and the big calendar below) */
+    #routine-selector {
+        width: 100% !important;
+        max-width: 100%;
+        flex-shrink: 0;
+        max-height: 16vh;
+        overflow-y: auto;
+        overflow-x: hidden;
+        margin-bottom: 8px;
+    }
+
+    .calendar-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    #cal-heatmap-yaxislabels {
+        display: none;
+    }
+
+    /* Heatmap: let the SVG render at its natural pixel size (small cells in
+       mobile make it fit); flex centers it, small margin above/below */
+    #cal-heatmap-wrapper {
+        width: 100% !important;
+        max-width: 100%;
+        display: flex;
+        justify-content: center;
+        padding: 8px 0;
+    }
+
+    /* FullCalendar: shorter on mobile so the page fits the viewport */
+    #calendar {
+        height: 45vh;
+    }
+
+    /* ── CHAT MODEL DROPDOWN ── */
+    .form-controls {
+        justify-content: flex-end;
+    }
+
+    /* Expanded: panel floats just ABOVE the prompt form (where the chevron
+       lives), full width, never centred in the middle of the screen */
+    .model-selector-details[open] .model-dropdown-menu {
+        position: fixed;
+        left: 5vw !important;
+        right: 5vw !important;
+        top: auto !important;
+        bottom: 86px !important;
+        transform: none !important;
+        width: 90vw !important;
+        max-width: 90vw !important;
+        min-width: 0 !important;
+        max-height: 60vh;
+        margin: 0;
+    }
+
+    /* Collapsed: never paint anything in the middle of the screen */
+    .model-selector-details:not([open]) .model-dropdown-menu {
+        display: none !important;
+        visibility: hidden !important;
+    }
 }

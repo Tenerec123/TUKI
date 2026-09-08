@@ -99,6 +99,18 @@ async function LoadHeatmap(id) {
         });
     });
 
+    const isMobile = window.innerWidth <= 768;
+
+    // One heatmap for both modes: full last year (54 weeks), exactly as
+    // before. Only the cell size changes — small screens get tiny cells
+    // (they are just little lights) so the whole year fits the width.
+    const range = 54;
+    let cellSize = 12; // desktop default
+    if (isMobile) {
+        // Cells are tiny lights — 3px keeps the whole year nicely on screen.
+        cellSize = 3;
+    }
+
     var initDate = moment().subtract(1, 'years').startOf('week').toDate();
     var lowLimit = moment().subtract(1, 'years').startOf('day');
     var upLimit = moment().startOf('day');
@@ -110,8 +122,8 @@ async function LoadHeatmap(id) {
         domain: "week",
         subDomain: "day",
         rowLimit: 7,
-        range: 54, 
-        cellSize: 12,
+        range: range, 
+        cellSize: cellSize,
         cellPadding: 2,
         start: initDate, 
         data: checkData,
