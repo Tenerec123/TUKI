@@ -1084,8 +1084,8 @@ SELECT CALENDAR
     position: absolute;
     bottom: calc(100% + 10px);
     right: 0;
-    min-width: 180px;
-    max-height: 180px;
+    min-width: 400px;
+    max-height: 500px;
     overflow-y: auto;
     background-color: #1a1a1d;
     border: 2px solid var(--neon-yellow);
@@ -1095,6 +1095,35 @@ SELECT CALENDAR
     z-index: 1100;
     box-shadow: 0 -4px 15px rgba(255, 255, 0, 0.2);
     animation: tukiPop 0.15s ease-out forwards;
+}
+
+#model-searcher {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    background: none;
+    background-color: hsl(0, 0%, 10%, .9);
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 0, 0.2);
+    color: var(--neon-yellow);
+    font-family: monospace;
+    font-size: 0.95rem;
+    padding: 10px 12px;
+    resize: none;
+    overflow-x: hidden;
+    overflow-y: auto;
+    white-space: nowrap;
+    box-sizing: border-box;
+    z-index: 1;
+}
+
+#model-searcher::placeholder {
+    color: rgba(255, 255, 0, 0.5);
+}
+
+#model-searcher:focus {
+    outline: none;
+    border-bottom-color: var(--neon-yellow);
 }
 
 .model-item {

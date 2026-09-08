@@ -17,7 +17,7 @@ let can_record = false;
 let is_recording = false;
 let recorder = null;
 let chunks = [];
-
+let modelDict = null;
 function SetupStream(stream) {
     recorder = new MediaRecorder(stream);
 
@@ -643,7 +643,27 @@ function Render(){
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-
+    modelDict = {}
+    model_lists = document.querySelectorAll('.sub-details ul')
+    await fetch('https://openrouter.ai/api/v1/models')
+        .then(res => res.json())
+        .then(object => object.data)
+        .then(data => {
+            model_lists.forEach(list =>{
+                data.forEach(model => {
+                    modelDict[model.id] = model.name
+                    if (model.architecture.output_modalities.length != 1 || model.architecture.output_modalities[0] != 'text') return;
+                    item = document.createElement('li');
+                    item.classList.add('model-item');
+                    item.setAttribute('data-model', model.id);
+                    const i = parseFloat(model.pricing.prompt) * 1_000_000;
+                    const o = parseFloat(model.pricing.completion) * 1_000_000;
+                    item.textContent = `${i.toFixed(2)} ${o.toFixed(2)} | ${model.name}`;
+                    list.appendChild(item);
+                })
+            })
+        })
+    
     const container = document.getElementById('chat-sidebar-container');
     
     toggleBtn.addEventListener('click', () => {
@@ -676,7 +696,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     await LoadModelConfig();
     Render();
 })
+modelSearcher = document.getElementById('model-searcher')
+let timer;
+modelSearcher.addEventListener('input', () => {
+  clearTimeout(timer);                    // cancela el anterior
+  timer = setTimeout(filtrarModelos, 200); // espera 200ms tras el último keystroke
+});
 
+function filtrarModelos() {
+    for (const [key, value] of Object.entries(modelDict)) {
+        model_selectors = document.querySelectorAll(`li[data-model="${key}"]`);
+        dispValue =  (value.toLowerCase().includes(modelSearcher.value.toLowerCase())) ? '' : 'none'
+        model_selectors.forEach(selector => selector.style.display = dispValue)
+        console.log(key, value);
+    }
+}
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();
     const x = rect.left; 

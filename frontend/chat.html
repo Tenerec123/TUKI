@@ -47,38 +47,24 @@
     <div class="form-controls">
       <details class="model-selector-details">
         <summary class="model-dropdown-btn" title="Seleccionar Modelo">
-          
           <i class="bi bi-chevron-up"></i>
         </summary>
-        <div class="model-dropdown-menu"  style="width: 200px;">
+        <div class="model-dropdown-menu">
+          <textarea id="model-searcher" name="text" cols="32" rows="1"></textarea>
           <details class="sub-details">
             <summary>
               <span>Orchestrator: </span>
-              <span class="model-current-name" id="orchestrator-name">DeepSeek V4 Flash</span>
+              <span class="model-current-name" id="orchestrator-name"></span>
             </summary>
             <ul>
-              <li class="model-item selected-model" data-model="deepseek/deepseek-v4-flash">DeepSeek V4 Flash</li>
-              <li class="model-item" data-model="openai/gpt-5.6-luna">GPT-5.6 Luna</li>
-              <li class="model-item" data-model="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</li>
-              <li class="model-item" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
-              <li class="model-item" data-model="qwen/qwen3-coder-30b-a3b-instruct">Qwen3 Coder 30B</li>
-              <li class="model-item" data-model="xiaomi/mimo-v2.5">Xiaomi MiMo V2.5</li>
-              <li class="model-item" data-model="tencent/hy3">Tencent Hy3</li>
             </ul>
           </details>
           <details class="sub-details">
             <summary>
               <span>Searcher: </span>
-              <span class="model-current-name" id="searcher-name">Gemini 2.5 Flash Lite</span>
+              <span class="model-current-name" id="searcher-name"></span>
             </summary>
             <ul>
-              <li class="model-item" data-model="deepseek/deepseek-v4-flash">DeepSeek V4 Flash</li>
-              <li class="model-item" data-model="openai/gpt-5.6-luna">GPT-5.6 Luna</li>
-              <li class="model-item selected-model" data-model="google/gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</li>
-              <li class="model-item" data-model="minimax/minimax-m2.5">MiniMax M2.5</li>
-              <li class="model-item" data-model="qwen/qwen3-coder-30b-a3b-instruct">Qwen3 Coder 30B</li>
-              <li class="model-item" data-model="xiaomi/mimo-v2.5">Xiaomi MiMo V2.5</li>
-              <li class="model-item" data-model="tencent/hy3">Tencent Hy3</li>
             </ul>
           </details>
         </div>
