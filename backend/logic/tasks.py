@@ -32,6 +32,7 @@ def update_task_logic(id:int, updated_task:TaskUpdate, db: Session):
     if updated_task.priority is not None:db_task.priority = updated_task.priority
     if updated_task.deadline is not None:db_task.deadline = updated_task.deadline
     if updated_task.finished is not None:db_task.finished = updated_task.finished
+    if updated_task.project_id is not None:db_task.project_id = updated_task.project_id
     db.commit()
     return db_task
 

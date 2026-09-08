@@ -37,11 +37,19 @@ def DeleteTask(task_id: int):
         return f"Task {deleted_task.name} with id {deleted_task.id} successfully deleted"
 
 
-def UpdateTask(task_id: int, name: str = None, description: str = None, priority: int = None, deadline: str = None, finished: bool = None):
+def UpdateTask(task_id: int, name: str = None, description: str = None, priority: int = None, deadline: str = None, finished: bool = None, project_id: int = None):
     '''
-    Only provided fields are modified.
-'''
+    Only provided fields are modified. null/absent fields are left unchanged; there is no way to unassign a project.
+    Args:
+        name: New name (optional).
+        description: New description (optional).
+        priority: New priority 1-64 (optional).
+        deadline: New deadline YYYY-MM-DD (optional).
+        finished: True/False (optional).
+        project_id: Project ID to reassign (optional). null/absent = keep current project.
+    '''
     with SessionLocal() as db:
+        resolved, note = _resolve_project(db, project_id, None)
         update_task_logic(
             id=task_id,
             updated_task=TaskUpdate(
@@ -49,10 +57,11 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
                 description=description,
                 priority=priority,
                 deadline=None if deadline is None else date.fromisoformat(deadline),
-                finished=finished
+                finished=finished,
+                project_id=resolved
             ),
             db=db)
-        return f"Task {name} with id:{task_id} successfully updated."
+        return f"Task {task_id} successfully updated{note}"
 
 
 def CreateRoutine(name: str, description: str, priority: int, frequency: str, init_date: str = None, project_id: int = None, project_name: str = None, icon: str = None):
