@@ -27,7 +27,7 @@ def create_note_logic(note:NoteMetaCreate, permission:bool, db: Session):
     extra = "vault/" if permission else "draft/"
     noteM = NoteMeta(
         title = note.title,
-        path = extra + note.path,
+        path = extra + (note.path or ""),
     )
     db.add(noteM)
     db.commit()

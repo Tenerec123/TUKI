@@ -176,17 +176,18 @@ def UpdateProject(project_id: int, name: str = None, description: str = None, pr
         update_project_logic(id=project_id, updated_project=update_data, db=db)
         return f"Project {project_id} updated successfully{note}"
 
-def DraftCreateNote(title:str, path:str, content:str,):
+def DraftCreateNote(title: str, path: str = None, content: str = ""):
     '''
-        Args:
-            title: omit .md
-            path: folder1/folder2/folder3 format. empty str if note is in root
-            content: markdown
+    Creates a note in the draft folder.
+    Args:
+        title: omit .md
+        path: folder1/folder2/folder3 format (optional). null/empty = root of drafts.
+        content: markdown
     '''
     with SessionLocal() as db:
         create_note_logic(NoteMetaCreate(
             title=title,
-            path=path,
+            path=path or "",
             content=content
         ),
         permission=False,
