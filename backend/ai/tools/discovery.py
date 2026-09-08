@@ -172,15 +172,17 @@ def get_tool_schemas(*names: str) -> list[dict]:
 
 
 def _sanitize_args(args: dict) -> dict:
-    """Clean model-generated args before passing to tool functions.
-
-    Models often send the string "null" instead of JSON null for optional fields.
+    """
+    Clean model-generated args before passing to tool functions.
     """
     cleaned = {}
     for key, value in args.items():
-        if isinstance(value, str) and value.lower() in ("null", "none"):
-            continue
         if value is None:
+            continue
+        if isinstance(value, str) and (value.lower() in ("null", "none") or value.strip() == ""):
+            continue
+        # 0 means "no priority" for optional fields; drop it so the field is not changed.
+        if key == "priority" and value == 0:
             continue
         cleaned[key] = value
     return cleaned
