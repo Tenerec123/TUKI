@@ -16,6 +16,7 @@ let id_of_menu_disp = null;
 let can_record = false;
 let is_recording = false;
 let recorder = null;
+let mediaStream = null;
 let chunks = [];
 let modelDict = null;
 function SetupStream(stream) {
@@ -46,6 +47,10 @@ async function ToggleMic() {
         if (recorder) {
             recorder.stop();
         }
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(t => t.stop());
+            mediaStream = null;
+        }
         is_recording = false;
         can_record = false;
         recorder = null;
@@ -64,6 +69,7 @@ async function ToggleMic() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         console.log("Acceso al micro concedido");
+        mediaStream = stream;
         SetupStream(stream);
         is_recording = true;
         recorder.start();
@@ -301,16 +307,8 @@ function createTukiMsg() {
 }
 
 function finalizeStream(tukiMsg) {
-    // Streaming is complete: flush any pending debounced render, then do a
-    // final full render of markdown + LaTeX for the last message.
     flushRender();
     if (tukiMsg) renderTukiMarkdown(tukiMsg);
-    // #form-container is absolutely positioned over the bottom of the chat
-    // area. On desktop its 80px input box is vertically centered, so its top
-    // edge sits 100px above the container bottom; 130px clears it with a
-    // 30px margin. Keeping this constant (instead of deriving it from the
-    // last message height) prevents both the hidden-tail bug and huge empty
-    // gaps below short answers.
     chatContainer.style.paddingBottom = "130px";
 }
 
@@ -327,16 +325,13 @@ function handleStreamLine(line, state) {
             state.tukiMsg = createTukiMsg();
             state.tukiMsg.scrollIntoView({ block: "start", behavior: "smooth" });
         }
-        state.tukiMsg.textContent += chunkObj.content;
-        _rawMdStore.set(state.tukiMsg._mdId, state.tukiMsg.textContent);
+        const prev = _rawMdStore.get(state.tukiMsg._mdId) || '';
+        _rawMdStore.set(state.tukiMsg._mdId, prev + chunkObj.content);
         state.lastEvent = "agent";
         scheduleRender(state.tukiMsg);
     }
     else if (chunkObj.type == "tool_call") {
-        // Flush any pending debounced render before inserting the tool block.
         flushRender();
-        // The streamed text phase is complete; render its markdown before the
-        // tool block so a later agent phase starts a fresh message.
         if (state.tukiMsg && (_rawMdStore.get(state.tukiMsg._mdId) || '').trim()) {
             renderTukiMarkdown(state.tukiMsg);
             state.tukiMsg = null;
