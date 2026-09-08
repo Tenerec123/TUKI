@@ -263,11 +263,16 @@ async def WebFetch(url: str):
     from trafilatura import fetch_url, extract
 
     # Fast path: trafilatura fetch + extract
-    html = fetch_url(url)
-    if html:
-        text = extract(html)
-        if text and len(text) > 200:
-            return text
+    try:
+        html = fetch_url(url)
+        if html:
+            text = extract(html)
+            if text and len(text) > 200:
+                return text
+        html = None
+    except Exception:
+        # Degrade to the fallback instead of crashing the whole search.
+        html = None
 
     # Fallback: curl_cffi impersonates Chrome's TLS fingerprint to bypass bot detection
     try:

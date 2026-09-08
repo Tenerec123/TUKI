@@ -1,17 +1,17 @@
 from ..config import WEB_SEARCH_SYSTEM_PROMPT, get_model_config
+from .read import WebFetch
 async def WebSearch(query: str):
     '''
     Asks for data which a subagent will return summarized from the Internet.
+    You can use recent, last week, last month instead of today, but DONT INVENT DATES
     Args:
-        query: explain here what you want, the format and other details 
+        query: the web search
 '''
     from ddgs import DDGS
     from ..agent import openai_agent
     from .discovery import ALL_TOOL_SCHEMAS
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=5))
-        first_search = [{'title': r['title'], 'url': r['href'], 'snippet': r['body']}
-            for r in results]
 
     messages = [
         {
@@ -19,22 +19,20 @@ async def WebSearch(query: str):
             'content':WEB_SEARCH_SYSTEM_PROMPT
         },
         {
-            'role':'developer',
-            'content':f'Initial search results:\n{first_search}'
+            'role':'user',
+            'content':f'query: {query}'
         },
         {
-            'role':'user',
-            'content':query
-        }
+            'role':'developer',
+            'content':f"Websites:\n{'\n\n'.join([await WebFetch(r['href']) for r in results])}"
+        },
     ]
     result = ""
     async for token in openai_agent(
         messages=messages,
         model=get_model_config()['searcher'],
-        max_rounds=2,
-        tool_schemas=[ts for ts in ALL_TOOL_SCHEMAS if ts['function']['name'] in {'WebFetch'}]):
+        max_rounds=1,
+        tool_schemas=[]):
         if token['type'] == "agent":
             result += token['content']
-        elif token['type'] == "tool_result":
-            result = ""  # discard pre-tool chatter
     return result

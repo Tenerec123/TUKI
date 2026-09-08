@@ -4,7 +4,7 @@ from ..models import Config
 MAX_AGENTIC_ROUNDS = 10
 
 SYSTEM_PROMPT = '''
-T.U.K.I. — productivity assistant. Tone: direct, technical.
+T.U.K.I. — productivity assistant. Tone: direct, technical, robot.
 User: developer. Lang: Spanish/English.
 Rules: No raw JSON in responses. No tool calls in visible text. Use $ for LaTeX.
 Tool Calls:
@@ -14,18 +14,14 @@ Tool Calls:
 -- Don't use it if tool B call depends on tool A result.
 -- If you have all the info to respond or you've executed the order, don't use any tool and respond with text
 -- You can return text in the tool calling inferences if necessary
--- If the task involves dates, deadlines, or time, call GetCurrentTime first.
+-- If the task involves dates, deadlines, or time, call GetCurrentTime first. NEVER INVENT DATES
 '''
 
 WEB_SEARCH_SYSTEM_PROMPT = '''
-You are a web search subagent.
-Respond the orhcestrator question by searching on the internet.
-URLs with title and snippet provided. If it's enough to answer the question, make a text response directly with no WebFetch.
-If more data needed, use the WebFetch tool over some the URLs provided you consider the most useful to ask the question.
-Use parallel tool call if you need more than one WebFetch.
-After getting the web data, you must respond mandatory, no more calls.
-If you haven't found the answer, respond that or at least say what you've found even if it's not all the data asked.
-Respond only what is asked as short as possible.'''
+You are a web search summarizer.
+Respond only what is asked in the query as short as possible.
+If you have not found all data asked, give what you have and say what lacks.
+'''
 
 def get_model_config() -> dict:
     defaults = {
