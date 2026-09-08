@@ -92,12 +92,14 @@ def DeleteRoutine(routine_id: int):
 
 def UpdateRoutine(routine_id: int, name: str = None, description: str = None, priority: int = None, frequency: str = None, init_date: str = None, project_id: int = None, icon: str = None):
     '''
-    Only provided fields are modified. Frequency in RRULE syntax.
+    Only provided fields are modified. null/absent fields are left unchanged; there is no way to unassign a project.
+    Frequency in RRULE syntax.
     Args:
-        project_id: Project ID to reassign (optional).
+        project_id: Project ID to reassign (optional). null/absent = keep current project.
         icon: Bootstrap icon CSS class (e.g. bell-fill, clock).
     '''
     with SessionLocal() as db:
+        resolved, note = _resolve_project(db, project_id, None)
         routine = update_routine_logic(
             id=routine_id,
             updated_routine=RoutineUpdate(
@@ -105,12 +107,12 @@ def UpdateRoutine(routine_id: int, name: str = None, description: str = None, pr
                 description=description,
                 priority=priority,
                 frequency=frequency,
-                project_id=project_id,
+                project_id=resolved,
                 icon=icon,
                 init_date=None if init_date is None else date.fromisoformat(init_date)
             ),
             db=db)
-        return f"Routine {routine.name} with id:{routine_id} successfully updated."
+        return f"Routine {routine.name} with id:{routine_id} successfully updated{note}"
 
 
 def CreateProject(name: str, description: str = None, priority: int = None, parent_id: int = None, parent_name: str = None):
@@ -147,22 +149,23 @@ def DeleteProject(project_id: int):
 
 def UpdateProject(project_id: int, name: str = None, description: str = None, priority: int = None, parent_id: int = None):
     '''
-    Only provided fields are modified.
+    Only provided fields are modified. null/absent fields are left unchanged; there is no way to unassign.
     Args:
-        parent_id: Parent project ID (optional).
+        parent_id: Parent project ID (optional). null/absent = keep current parent.
     '''
     if project_id == parent_id:
         return "ERROR: The id of the project cannot be the same as the parent id."
 
     with SessionLocal() as db:
+        resolved, note = _resolve_project(db, parent_id, None)
         update_data = ProjectUpdate(
             name=name,
             description=description,
             priority=priority,
-            parent_id=parent_id
+            parent_id=resolved
         )
         update_project_logic(id=project_id, updated_project=update_data, db=db)
-        return f"Project {project_id} updated successfully."
+        return f"Project {project_id} updated successfully{note}"
 
 def DraftCreateNote(title:str, path:str, content:str,):
     '''

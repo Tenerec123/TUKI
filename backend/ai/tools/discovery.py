@@ -181,8 +181,9 @@ def _sanitize_args(args: dict) -> dict:
             continue
         if isinstance(value, str) and (value.lower() in ("null", "none") or value.strip() == ""):
             continue
-        # 0 means "no priority" for optional fields; drop it so the field is not changed.
-        if key == "priority" and value == 0:
+        # 0 (or negative) means "not assigned" for optional numeric fields;
+        # drop it so the field is not changed.
+        if key in ("priority", "project_id", "parent_id") and isinstance(value, int) and value <= 0:
             continue
         cleaned[key] = value
     return cleaned
