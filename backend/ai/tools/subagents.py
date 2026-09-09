@@ -13,7 +13,17 @@ async def WebSearch(query: str):
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=5))
 
-    results_text = '\n\n'.join([await WebFetch(r['href']) for r in results])
+    pages = []
+    for r in results:
+        if not isinstance(r, dict) or 'href' not in r:
+            continue
+        try:
+            page = await WebFetch(r['href'])
+            if page and not page.startswith("Error:"):
+                pages.append(page)
+        except Exception:
+            pass
+    results_text = '\n\n'.join(pages)
 
     messages = [
         {
