@@ -37,14 +37,16 @@
     </ul>
       
   </nav>
-  <div id="chat-container">
-  </div>
+  <div id="chat-container"></div>
   
 <div id="form-container">
   <form id="prompt-form" method="post">
     <textarea id="prompt-writer" name="text" placeholder="Ask something to TUKI" rows="1"></textarea>
     
     <div class="form-controls">
+      <div id="tuki-thinking" aria-label="TUKI is thinking">
+        <span class="tuki-wheel"></span>
+      </div>
       <details class="model-selector-details">
         <summary class="model-dropdown-btn" title="Seleccionar Modelo">
           <i class="bi bi-chevron-up"></i>

@@ -370,7 +370,7 @@ async function streamConversation(convId) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-
+    document.getElementById('tuki-thinking').style.display = 'flex'
     while (true) {
         const { done, value } = await reader.read();
         if (value) {
@@ -385,6 +385,7 @@ async function streamConversation(convId) {
             decoder.decode();
             if (buffer.trim()) handleStreamLine(buffer, state);
             finalizeStream(state.tukiMsg);
+            document.getElementById('tuki-thinking').style.display = 'none'
             break;
         }
     }
@@ -504,9 +505,6 @@ async function sendPrompt(text){
     chatContainer.style.paddingBottom = "200px";
     scrollToBottom();
     document.getElementById('prompt-writer').value = "";
-    // Schedule an early render200ms from now so formatting appears promptly
-    // even if the AI responds very fast. Renders whatever tukiMsg exists
-    // when the timer fires.
     _pendingSendRender = true;
     setTimeout(() => {
         if (!_pendingSendRender) return;

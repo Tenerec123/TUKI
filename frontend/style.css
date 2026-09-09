@@ -994,6 +994,40 @@ KALE LAYOUT
 }
 
 /* 
+TUKI THINKING INDICATOR
+*/
+#tuki-thinking {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    margin-right: auto;
+    padding: 4px 12px;
+    background-color: var(--green);
+    border-radius: 10px;
+    width: fit-content;
+    min-height: 32px;
+    font-family: monospace;
+    color: #ccff00;
+    font-size: 0.9rem;
+}
+
+/* ── SPINNER WHEEL ── */
+.tuki-wheel {
+    display: inline-block;
+    width: 26px;
+    height: 26px;
+    border: 3px solid rgba(204, 255, 0, 0.15);
+    border-top-color: #ccff00;
+    border-radius: 50%;
+    animation: tuki-spin 0.8s linear infinite;
+}
+
+@keyframes tuki-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 
 ═══════════════════════════════════════════════════════════════════
 MOBILE — MUST STAY AT THE END OF THE FILE
 All base rules above must win the cascade; this block overrides them.
@@ -1095,6 +1129,12 @@ All base rules above must win the cascade; this block overrides them.
 
     #chat-container {
         padding-bottom: 140px; /* Must clear the mobile form overlay */
+    }
+
+    #tuki-thinking {
+        font-size: var(--mobile-font-size);
+        padding: 3px 8px;
+        min-height: 28px;
     }
 
     .sidebar-controls {
