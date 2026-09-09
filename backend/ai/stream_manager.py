@@ -7,6 +7,7 @@ class _StreamState:
     """Internal state for one conversation's stream."""
     tokenlist:list = field(default_factory=list)
     active: bool = False
+    task = None
 
 
 class StreamManager:

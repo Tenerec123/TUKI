@@ -44,7 +44,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         extra_body=extra_body,
     )
     calls: dict[int, dict] = {}
-    text: str = ""
+    assistant_msg = None
     finish = None
     async for chunk in stream:
         # OpenRouter sends usage on the final chunk (may arrive without choices)
@@ -55,7 +55,10 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         choice = chunk.choices[0]
         delta = choice.delta
         if delta.content and delta.content.strip():
-            text+=delta.content
+            if assistant_msg is None:
+                assistant_msg = {'role':'assistant', 'content':''}
+                messages.append(assistant_msg)
+            assistant_msg['content'] += delta.content
             yield {"type":"agent","content":delta.content}
         if delta.tool_calls:
             for tc in delta.tool_calls:
@@ -68,7 +71,6 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
                     calls[tc.index]["arguments"] += tc.function.arguments
         if choice.finish_reason:
             finish = choice.finish_reason
-    messages.append({"role": "assistant", "content": text})
 
     if calls:
         tool_names = [tc['name'] for tc in calls.values()]

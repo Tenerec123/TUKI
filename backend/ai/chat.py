@@ -94,6 +94,9 @@ Use the language of the query. If the query is in Spanish use Spanish, if it's i
 
 async def chat_persistence_wrapper(prompt: Prompt):
     db = SessionLocal()
+    messages = []
+    base_len = 0
+    title_task = None
     try:
         db_conversation = db.query(Conversation).where(
             Conversation.id == prompt.conversation_id
@@ -130,35 +133,36 @@ async def chat_persistence_wrapper(prompt: Prompt):
                 break
             stream_manager.push(prompt.conversation_id, token)
 
-        db_format_messages = []
-        call_list = []
-        for new_msg in messages[base_len:]:
-            if new_msg['role'] == "assistant":
-                calls = new_msg.get("tool_calls","")
-                content = new_msg.get('content', '')
-                if calls == "" and content.strip():
-                    db_format_messages.append(MessageBase(type="agent", text=content))
-                else:
-                    call_list.extend([{'id':tc['id'], 'args':tc['function']['arguments']} for tc in calls])
-            elif new_msg['role'] == "tool":
-                call = next(filter(lambda obj: obj['id'] == new_msg['tool_call_id'], call_list), None)
-                if call is not None:
-                    tc_for_db = {
-                        'id':call['id'],
-                        'name':new_msg['name'],
-                        'args':call['args'],
-                        'result':new_msg['content']
-                    }
-                    db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
-        if db_format_messages:
-            edit_conversation_logic(
-                prompt.conversation_id,
-                ConversationUpdate(messages=db_format_messages),
-                db=db,
-            )
-        if title_task:
-            await title_task
     finally:
-        stream_manager.finish(prompt.conversation_id)
-        print("AI_FINISH")
-        db.close()
+        try:
+            db_format_messages = []
+            call_list = []
+            for new_msg in messages[base_len:]:
+                if new_msg['role'] == "assistant":
+                    calls = new_msg.get("tool_calls","")
+                    content = new_msg.get('content', '')
+                    if calls == "" and content.strip():
+                        db_format_messages.append(MessageBase(type="agent", text=content))
+                    else:
+                        call_list.extend([{'id':tc['id'], 'args':tc['function']['arguments']} for tc in calls])
+                elif new_msg['role'] == "tool":
+                    call = next(filter(lambda obj: obj['id'] == new_msg['tool_call_id'], call_list), None)
+                    if call is not None:
+                        tc_for_db = {
+                            'id':call['id'],
+                            'name':new_msg['name'],
+                            'args':call['args'],
+                            'result':new_msg['content']
+                        }
+                        db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
+            if db_format_messages:
+                edit_conversation_logic(
+                    prompt.conversation_id,
+                    ConversationUpdate(messages=db_format_messages),
+                    db=db,
+                )
+        finally:
+            stream_manager.finish(prompt.conversation_id)
+            db.close()
+            if title_task:
+                await title_task

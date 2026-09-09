@@ -68,7 +68,6 @@ async function ToggleMic() {
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        console.log("Acceso al micro concedido");
         mediaStream = stream;
         SetupStream(stream);
         is_recording = true;
@@ -125,7 +124,6 @@ async function allowRenameConv(conv_id, conv_position) {
     function detectClicksForRename(e){
         conv_rename = e.target.closest('.conv-rename')
         if ((!conv_rename || conv_rename == renameForm.parentNode.children[1])  && !e.target.closest('.active-rename')){
-            console.log("EIEIEI")
             selectBtn = document.createElement('button');
             selectBtn.classList.add('conv-select');
             selectBtn.addEventListener('click', (e) => {
@@ -356,6 +354,12 @@ function handleStreamLine(line, state) {
         }
     }
 }
+const submitBtn = document.getElementById('submit-btn');
+submitBtn.addEventListener('click', event => {
+    if (submitBtn.classList.contains('send')) {return;}
+    event.preventDefault()
+    fetch(`${window.API_URL}/api/ai/stop/${idOfSelectedConv}`, {method:'POST'})
+})
 
 function setThinkingUI(thinking) {
     document.getElementById('tuki-thinking').style.display = thinking ? 'flex' : 'none';
@@ -363,6 +367,8 @@ function setThinkingUI(thinking) {
     if (submitIcon) {
         submitIcon.className = thinking ? 'bi bi-stop-fill' : 'bi bi-arrow-up';
     }
+    submitBtn.classList.remove(thinking ? 'send':'stop')
+    submitBtn.classList.add(thinking ? 'stop':'send')
 }
 
 async function streamConversation(convId) {
@@ -532,7 +538,6 @@ async function sendPrompt(text){
             user_message:text
         })
     });
-    console.log("DONE")
     await streamConversation(idOfSelectedConv);
 }
 
@@ -722,7 +727,6 @@ function filtrarModelos() {
         model_selectors = document.querySelectorAll(`li[data-model="${key}"]`);
         dispValue =  (value.toLowerCase().includes(modelSearcher.value.toLowerCase())) ? '' : 'none'
         model_selectors.forEach(selector => selector.style.display = dispValue)
-        console.log(key, value);
     }
 }
 function OpenMenu(button, id, position){
