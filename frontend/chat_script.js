@@ -357,6 +357,14 @@ function handleStreamLine(line, state) {
     }
 }
 
+function setThinkingUI(thinking) {
+    document.getElementById('tuki-thinking').style.display = thinking ? 'flex' : 'none';
+    const submitIcon = document.querySelector('#submit-btn i');
+    if (submitIcon) {
+        submitIcon.className = thinking ? 'bi bi-stop-fill' : 'bi bi-arrow-up';
+    }
+}
+
 async function streamConversation(convId) {
     const response = await fetch(`${window.API_URL}/api/ai/connect/${convId}`, {
         method: 'GET',
@@ -370,7 +378,7 @@ async function streamConversation(convId) {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    document.getElementById('tuki-thinking').style.display = 'flex'
+    setThinkingUI(true);
     while (true) {
         const { done, value } = await reader.read();
         if (value) {
@@ -385,7 +393,7 @@ async function streamConversation(convId) {
             decoder.decode();
             if (buffer.trim()) handleStreamLine(buffer, state);
             finalizeStream(state.tukiMsg);
-            document.getElementById('tuki-thinking').style.display = 'none'
+            setThinkingUI(false);
             break;
         }
     }
