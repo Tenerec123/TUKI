@@ -18,6 +18,13 @@ Tool Calls:
 -- Update tools only change the fields you send. null or absent = leave unchanged. There is NO way to unassign a project from a task/routine.
 '''
 
+AUDIO_SYSTEM_PROMPT = SYSTEM_PROMPT + '''
+You are in audio mode, so the user will hear only your final text, the last one with no tool calls.
+Rules: Make a short summary of the response, as short as possible, plain text, no md, no latex, just words.
+If many text needed, create a note with the extra info and say it to the user
+The text sent to you has been converted to text with a light audio to text model, so assume that might be errors.
+'''
+
 WEB_SEARCH_SYSTEM_PROMPT = '''
 You are a web search summarizer.
 Respond only what is asked in the query as short as possible.

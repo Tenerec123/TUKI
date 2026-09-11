@@ -10,9 +10,12 @@ def get_whisper_model():
         _model = WhisperModel("tiny", device="cpu", compute_type="int8")
     return _model
 
-async def stt_conversion_logic(file: UploadFile):
+async def stt_conversion_logic(file):
     model = get_whisper_model()
-    audio_data = await file.read()
+    if isinstance(file, io.BytesIO):
+        audio_data = file.read()
+    else:
+        audio_data = await file.read()
     audio_file = io.BytesIO(audio_data)
     segments, info = model.transcribe(audio_file, beam_size=5, language="es", initial_prompt="Hablando con TUKI, mi asistente")
     full_text = ""
