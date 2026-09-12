@@ -12,7 +12,6 @@ import logging
 from contextlib import asynccontextmanager
 logging.getLogger('sqlalchemy.engine').setLevel(logging.WARNING)
 logging.getLogger("watchfiles").setLevel(logging.WARNING)
-logging.getLogger("semantic_router").setLevel(logging.ERROR)
 for logger_name in [ "uvicorn.error"]:
     logger = logging.getLogger(logger_name)
     logger.handlers = []
