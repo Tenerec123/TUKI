@@ -19,6 +19,30 @@ let recorder = null;
 let mediaStream = null;
 let chunks = [];
 let modelDict = null;
+
+const TEXTAREA_MAX_LINES = 5;
+
+// Grow the prompt textarea with its content until it reaches TEXTAREA_MAX_LINES,
+// then switch to internal scrolling instead of expanding further.
+function autoResizeTextarea() {
+    textarea.style.height = 'auto';
+    const lineHeight = parseFloat(getComputedStyle(textarea).lineHeight) || 24;
+    const maxHeight = lineHeight * TEXTAREA_MAX_LINES + 10;
+    textarea.style.height = Math.min(textarea.scrollHeight, maxHeight) + 'px';
+    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    updateChatPadding();
+}
+
+// Keep the chat's bottom padding in sync with the real form height so the
+// last message is never hidden behind the prompt box as it grows.
+function updateChatPadding() {
+    const formEl = document.getElementById('prompt-form');
+    const pad = formEl.offsetHeight + 10;
+    chatContainer.style.paddingBottom = pad + 'px';
+}
+
+window.addEventListener('resize', updateChatPadding);
+textarea.addEventListener('input', autoResizeTextarea);
 function SetupStream(stream) {
     recorder = new MediaRecorder(stream);
 
@@ -312,7 +336,7 @@ function createTukiMsg() {
 function finalizeStream(tukiMsg) {
     flushRender();
     if (tukiMsg) renderTukiMarkdown(tukiMsg);
-    chatContainer.style.paddingBottom = "130px";
+    updateChatPadding();
 }
 
 function handleStreamLine(line, state) {
@@ -519,6 +543,7 @@ async function sendPrompt(text){
     chatContainer.style.paddingBottom = "200px";
     scrollToBottom();
     document.getElementById('prompt-writer').value = "";
+    autoResizeTextarea();
     _pendingSendRender = true;
     setTimeout(() => {
         if (!_pendingSendRender) return;
