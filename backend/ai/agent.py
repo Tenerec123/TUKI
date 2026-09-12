@@ -1,6 +1,5 @@
 import os
 import asyncio
-import json
 from datetime import datetime
 from .tools.discovery import execute_tool_call
 from openai import AsyncOpenAI

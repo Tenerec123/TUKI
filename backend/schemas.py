@@ -5,6 +5,7 @@ from typing import List, Optional
 class ModelConfig(BaseModel):
     orchestrator: str = Field(max_length=128)
     searcher: Optional[str] = Field(default=None, max_length=128)
+    stt: Optional[str] = Field(default=None, max_length=128)
 
 class BaseItem(BaseModel):
     name: str = Field(..., max_length=512, description='Name of the todo')

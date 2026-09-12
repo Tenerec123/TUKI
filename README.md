@@ -8,14 +8,14 @@ T.U.K.I. (T_ENEREC's U_NIFIED K_NOWLEDGE I_NTEGRATOR) is a comprehensive TODO ma
 - ✅ **Tasks** - Manage tasks with deadlines and priority levels
 - ✅ **Routines** - Schedule recurring tasks with frequency settings
 - ✅ **Routine Heatmap** - Visual representation of routine completion patterns
-- ✅ **AI Chat** - Integrated AI assistant powered by Google Gemini
+- ✅ **AI Chat** - Integrated AI assistant powered by OpenRouter
 - ✅ **Conversations** - Store and manage chat histories
 
 ## Tech Stack
 
 - **Backend**: FastAPI, SQLAlchemy, Pydantic
-- **Database**: SQLite
-- **AI**: Google Gemini API, OpenRouter API
+- **Database**: PostgreSQL (pgvector)
+- **AI**: OpenRouter API (orchestrator, searcher, STT, TTS)
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 
 ## Installation
@@ -124,7 +124,6 @@ frontend/
 
 See `.env.example` for all available options:
 
-- `GOOGLE_GENAI_API_KEY` - Your Google Gemini API key
 - `OPENROUTER_API_KEY` - Your OpenRouter API key
 - `DATABASE_URL` - Database connection string
 - `ENVIRONMENT` - development, staging, or production

@@ -661,52 +661,83 @@ function Render(){
     renderMathInElement(document.body, KATEX_OPTIONS);
 }
 
+// ── Model loaders (one per output modality) ──────────────────────────
+
+async function fetchModels(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Failed to fetch models: ${res.status}`);
+    const object = await res.json();
+    return object.data;
+}
+
+function appendModelItem(list, model, showPrice = true) {
+    const item = document.createElement('li');
+    item.classList.add('model-item');
+    item.setAttribute('data-model', model.id);
+    let label = model.name;
+    if (showPrice) {
+        const i = parseFloat(model.pricing.prompt) * 1_000_000;
+        const o = parseFloat(model.pricing.completion) * 1_000_000;
+        label = `${i.toFixed(2)} ${o.toFixed(2)} | ${model.name}`;
+    }
+    item.textContent = label;
+    list.appendChild(item);
+}
+
+async function loadTextModels() {
+    try {
+        const data = await fetchModels('https://openrouter.ai/api/v1/models');
+        const textLists = document.querySelectorAll('.sub-details ul.text');
+        for (const model of data) {
+            const modalities = model.architecture.output_modalities || [];
+            if (modalities.length !== 1 || modalities[0] !== 'text') continue;
+            modelDict[model.id] = model.name
+            textLists.forEach(list => appendModelItem(list, model, true));
+        }
+    } catch (e) {
+        console.error('[CONFIG] Failed to load text models:', e);
+    }
+}
+
+async function loadTranscriptionModels() {
+    try {
+        const data = await fetchModels('https://openrouter.ai/api/v1/models?output_modalities=transcription');
+        const sttList = document.querySelector('.sub-details ul.transcription');
+        for (const model of data) {
+            modelDict[model.id] = model.name
+            appendModelItem(sttList, model, false);
+        }
+    } catch (e) {
+        console.error('[CONFIG] Failed to load transcription models:', e);
+    }
+}
+
+// One delegated click handler for every dynamically-created model item.
+function SetupModelSelectorClick() {
+    const container = document.querySelector('.model-selector-details');
+    container.addEventListener('click', (e) => {
+        const model = e.target.closest('.model-item');
+        if (!model) return;
+        const agentS = model.closest('.sub-details');
+        const selectedBefore = agentS.querySelector('.selected-model');
+        if (selectedBefore == model) { return }
+        if (selectedBefore) { selectedBefore.classList.remove('selected-model') }
+        model.classList.add('selected-model');
+        agentS.querySelector('.model-current-name').textContent = model.textContent;
+        agentS.open = false;
+        SendModelConfig();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     modelDict = {}
-    model_lists = document.querySelectorAll('.sub-details ul')
-    await fetch('https://openrouter.ai/api/v1/models')
-        .then(res => res.json())
-        .then(object => object.data)
-        .then(data => {
-            model_lists.forEach(list =>{
-                data.forEach(model => {
-                    modelDict[model.id] = model.name
-                    if (model.architecture.output_modalities.length != 1 || model.architecture.output_modalities[0] != 'text') return;
-                    item = document.createElement('li');
-                    item.classList.add('model-item');
-                    item.setAttribute('data-model', model.id);
-                    const i = parseFloat(model.pricing.prompt) * 1_000_000;
-                    const o = parseFloat(model.pricing.completion) * 1_000_000;
-                    item.textContent = `${i.toFixed(2)} ${o.toFixed(2)} | ${model.name}`;
-                    list.appendChild(item);
-                })
-            })
-        })
-    
     const container = document.getElementById('chat-sidebar-container');
-    
     toggleBtn.addEventListener('click', () => {
         container.classList.toggle('sidebar-collapsed');
     });
 
-    // Attach model selector handlers FIRST so they work even if async init fails.
-    const agentSelectors = document.querySelectorAll('.sub-details');
-    agentSelectors.forEach(agentS => {
-
-        const possibleModels = agentS.querySelectorAll('.model-item');
-
-        possibleModels.forEach(model => {
-            model.addEventListener('click', () => {
-                const selectedBefore = agentS.querySelector('.selected-model');
-                if (selectedBefore == model) {return}
-                if (selectedBefore) { selectedBefore.classList.remove('selected-model') }
-                model.classList.add('selected-model');
-                agentS.querySelector('.model-current-name').textContent = model.textContent;
-                agentS.open = false;
-                SendModelConfig();
-            })
-        })
-    })
+    SetupModelSelectorClick();
+    await Promise.all([loadTextModels(), loadTranscriptionModels()]);
 
     await getConversations();
     if (conversationList.children){
@@ -778,6 +809,7 @@ async function LoadModelConfig(){
         const targets = [
             ['orchestrator-name', config.orchestrator],
             ['searcher-name', config.searcher],
+            ['stt-name', config.stt],
         ];
         for (const [spanId, model] of targets) {
             if (!model) { continue }
@@ -804,6 +836,7 @@ function SendModelConfig(){
     const config = {
         "orchestrator": getSelectedModel('orchestrator-name'),
         "searcher": getSelectedModel('searcher-name'),
+        "stt": getSelectedModel('stt-name'),
     };
     if (!config.orchestrator || !config.searcher) {
         console.warn('[CONFIG] Missing model selection, skipping save');

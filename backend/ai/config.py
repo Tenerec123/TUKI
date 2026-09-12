@@ -35,6 +35,7 @@ def get_model_config() -> dict:
     defaults = {
         'orchestrator': 'openai/gpt-5.6-luna',
         'searcher': 'google/gemini-2.5-flash-lite',
+        'stt': 'nvidia/parakeet-tdt-0.6b-v3',
     }
     try: 
         db = SessionLocal()

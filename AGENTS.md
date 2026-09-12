@@ -3,9 +3,8 @@
 ## Stack
 - Backend: FastAPI + SQLAlchemy 2.0 + PostgreSQL/pgvector
 - Frontend: Vanilla JS, HTML, CSS (no frameworks)
-- AI: OpenRouter (primary) + Google Gemini (fallback)
-- STT: faster-whisper tiny (CPU)
-- Routing: semantic-router with SLM fallback (Ollama)
+- AI: OpenRouter (orchestrator, searcher, STT, TTS; Gemini models as fallback via OpenRouter)
+- STT: OpenRouter STT (nvidia/parakeet-tdt-0.6b-v3)
 
 ## Conventions
 - PEP 8, 4 spaces, type hints on all functions
