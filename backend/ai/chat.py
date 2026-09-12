@@ -4,7 +4,7 @@ from ..models import Conversation, Message
 from ..routers.conversations import edit_conversation_logic
 from .agent import openai_agent
 from .stream_manager import stream_manager
-from openai import OpenAI
+from openai import AsyncOpenAI
 from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
 from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 import os
@@ -55,14 +55,14 @@ Use the language of the query. If the query is in Spanish use Spanish, if it's i
         "nvidia/nemotron-nano-9b-v2:free",
     ]
 
-    client = OpenAI(
+    client = AsyncOpenAI(
         api_key=os.environ['OPENROUTER_API_KEY'],
         base_url="https://openrouter.ai/api/v1",
     )
 
-    def _call(model: str) -> str | None:
+    for model in models:
         try:
-            response = client.chat.completions.create(
+            response = await client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -73,36 +73,23 @@ Use the language of the query. If the query is in Spanish use Spanish, if it's i
                 timeout=30,
             )
             title = response.choices[0].message.content.strip().strip('"\'')
-            return title if title else None
         except Exception as e:
             print(f"[TITLE GEN] {model} failed: {e}")
-            return None
+            continue
 
-    for model in models:
-        title = await asyncio.to_thread(_call, model)
         if title:
-            db = SessionLocal()
-            try:
+            with SessionLocal() as db:
                 edit_conversation_logic(conv_id, ConversationUpdate(title=title), db=db)
                 print(f"[TITLE GEN] Set title '{title}' via {model}")
                 return
-            finally:
-                db.close()
 
     print("[TITLE GEN] All models failed — conversation remains untitled")
 
-
-async def chat_persistence_wrapper(prompt: Prompt):
-    db = SessionLocal()
-    messages = []
-    base_len = 0
-    title_task = None
-    try:
+def _db_queries1(prompt:Prompt):
+    with SessionLocal() as db:
         db_conversation = db.query(Conversation).where(
             Conversation.id == prompt.conversation_id
         ).first()
-
-        # Check if this is the first user message
         msg_count = db.query(Message).filter(
             Message.conversation_id == prompt.conversation_id
         ).count()
@@ -113,22 +100,37 @@ async def chat_persistence_wrapper(prompt: Prompt):
             ConversationUpdate(messages=[MessageBase(type='prompt', text=prompt.user_message)]),
             db=db,
         )
+        conversation = ConversationSchema.model_validate(db_conversation)
+    return conversation, is_first_message
 
-        title_task = None
+def _db_queries2(prompt:Prompt, db_format_messages):
+    with SessionLocal() as db:
+        edit_conversation_logic(
+            prompt.conversation_id,
+            ConversationUpdate(messages=db_format_messages),
+            db=db,
+        )
+
+async def chat_persistence_wrapper(prompt: Prompt):
+    messages = []
+    base_len = 0
+    title_task = None
+    try:
+        conversation, is_first_message = await asyncio.to_thread(_db_queries1, prompt)
         if is_first_message:
             title_task = asyncio.create_task(
                 _generate_title(prompt.conversation_id, prompt.user_message)
             )
 
         model_config = get_model_config()
-        messages = _build_messages(ConversationSchema.model_validate(db_conversation), SYSTEM_PROMPT)
+        messages = _build_messages(conversation, SYSTEM_PROMPT)
         base_len = len(messages)
         async for token in openai_agent(
             messages=messages,
             model = model_config['orchestrator'],
             max_rounds=MAX_AGENTIC_ROUNDS,
             tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
-            conv_id=db_conversation.id):
+            conv_id=conversation.id):
             if token == "ERROR_TOKEN":
                 break
             stream_manager.push(prompt.conversation_id, token)
@@ -156,13 +158,7 @@ async def chat_persistence_wrapper(prompt: Prompt):
                         }
                         db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
             if db_format_messages:
-                edit_conversation_logic(
-                    prompt.conversation_id,
-                    ConversationUpdate(messages=db_format_messages),
-                    db=db,
-                )
+                await asyncio.to_thread(_db_queries2, prompt, db_format_messages)
         finally:
             stream_manager.finish(prompt.conversation_id)
-            db.close()
-            if title_task:
-                await title_task
+            if title_task: await title_task

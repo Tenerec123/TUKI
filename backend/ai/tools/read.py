@@ -7,7 +7,14 @@ from ...logic.tasks import get_all_tasks_logic, search_tasks_logic
 from ...logic.projects import get_all_project_logic, search_projects_logic
 from ...logic.routines import get_all_routine_logic, search_routines_logic
 from ...logic.notes import get_note_logic, search_notes_logic
-from pathlib import Path
+import asyncio
+import urllib.request
+import json
+import urllib.parse
+import imaplib
+import email as email_lib
+from curl_cffi.requests import AsyncSession
+from trafilatura import fetch_url, extract
 import yfinance as yf
 
 
@@ -84,9 +91,6 @@ def Weather(city: str = None):
     Args:
         city: City name (optional).
     '''
-    import urllib.request
-    import json
-    import urllib.parse
 
     if city is None:
         city = os.environ.get('WEATHER_DEFAULT_CITY', '')
@@ -134,8 +138,6 @@ def CheckEmail(max_unreads: int = 5):
     Args:
         max_unreads: Max emails to fetch (default 5).
     '''
-    import imaplib
-    import email as email_lib
 
     server = os.environ.get('IMAP_SERVER', 'imap.gmail.com')
     user = os.environ.get('EMAIL_USER', '')
@@ -260,11 +262,8 @@ async def WebFetch(url: str):
     '''
     Fetch a web page and return its main text content, clean of HTML.
     '''
-    from trafilatura import fetch_url, extract
-
-    # Fast path: trafilatura fetch + extract
     try:
-        html = fetch_url(url)
+        html = await asyncio.to_thread(fetch_url, url)
         if html:
             text = extract(html)
             if text and len(text) > 200:
@@ -276,7 +275,6 @@ async def WebFetch(url: str):
 
     # Fallback: curl_cffi impersonates Chrome's TLS fingerprint to bypass bot detection
     try:
-        from curl_cffi.requests import AsyncSession
         async with AsyncSession(impersonate="chrome") as session:
             resp = await session.get(url, timeout=15.0)
             html = resp.text if resp.status_code < 400 else None

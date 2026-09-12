@@ -11,6 +11,7 @@ from typing import Union, get_origin, get_args
 from . import read
 from . import exec
 from . import subagents
+import asyncio
 
 # ── Type mapping for JSON schema generation ────────────────────────────
 
@@ -189,25 +190,32 @@ def _sanitize_args(args: dict) -> dict:
     return cleaned
 
 
-async def execute_tool_call(name: str, arguments: str) -> str:
+# Tools that are pure in-process work (<1ms, no I/O): call inline,
+# no thread or coroutine overhead. Everything else goes async or to_thread.
+INLINE_TOOLS = {"GetCurrentTime"}
+
+
+async def execute_tool_call(id:int, name: str, arguments: str) -> tuple:
     """Execute a tool by name with JSON arguments string. Returns result JSON string.
-    Supports both sync and async tool functions.
+    Supports inline (fast pure), async, and sync-to-thread tool functions.
     """
-    import asyncio
     func = ToolDict.get(name)
     if not func:
         print(f"[TOOL] {name} NOT FOUND in ToolDict")
-        return f'"Error: Tool {name} not found"'
+        return id, name, f'Error: Tool {name} not found'
     try:
         args = json.loads(arguments) if isinstance(arguments, str) else arguments
         args = _sanitize_args(args)
         print(f"[TOOL] {name}(args={args})")
-        result = func(**args)
-        if asyncio.iscoroutine(result):
-            result = await result
+        if name in INLINE_TOOLS:
+            result = func(**args)
+        elif asyncio.iscoroutinefunction(func):
+            result = await func(**args)
+        else:
+            result = await asyncio.to_thread(func, **args)
         result_str = result if isinstance(result, str) else json.dumps(result, default=str)
         print(f"[TOOL] {name} → OK ({len(result_str)} chars)")
-        return result_str
+        return id, name, result_str
     except Exception as e:
         print(f"[TOOL] {name} → ERROR: {e}")
-        return json.dumps(f"Execution Error: {str(e)}", default=str)
+        return id, name, f"Execution Error: {str(e)}"

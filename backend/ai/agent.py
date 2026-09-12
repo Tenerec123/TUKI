@@ -1,4 +1,6 @@
 import os
+import asyncio
+import json
 from datetime import datetime
 from .tools.discovery import execute_tool_call
 from openai import AsyncOpenAI
@@ -92,12 +94,14 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
 
         messages.append(assistant)
         
-        # THEN execute tools and append results
-        for tc in calls.values():
-            id = tc['id']
-            name = tc['name']
-            args = tc['arguments']
-            result = await execute_tool_call(name, args)
+        # THEN execute tools in parallel (TaskGroup) and append results in order
+        tasks = []
+        async with asyncio.TaskGroup() as tg:
+            for tc in calls.values():
+                tasks.append(tg.create_task(execute_tool_call(tc['id'], tc['name'], tc['arguments'])))
+
+        for task in tasks:
+            id, name, result = task.result()
             result_preview = result[:100]
             _log(f"   └─ {name} → {result_preview}")
             messages.append({

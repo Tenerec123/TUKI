@@ -1,5 +1,13 @@
 from ..config import WEB_SEARCH_SYSTEM_PROMPT, get_model_config
 from .read import WebFetch
+from ddgs import DDGS
+import asyncio
+
+def _ddgs_search(query: str) -> list:
+    """DDGS is a sync library — run it in a thread, never on the event loop."""
+    with DDGS() as ddgs:
+        return list(ddgs.text(query, max_results=5))
+
 async def WebSearch(query: str):
     '''
     Asks for data which a subagent will return summarized from the Internet.
@@ -7,11 +15,9 @@ async def WebSearch(query: str):
     Args:
         query: the web search
 '''
-    from ddgs import DDGS
     from ..agent import openai_agent
     from .discovery import ALL_TOOL_SCHEMAS
-    with DDGS() as ddgs:
-        results = list(ddgs.text(query, max_results=5))
+    results = await asyncio.to_thread(_ddgs_search, query)
 
     pages = []
     for r in results:
