@@ -8,9 +8,13 @@ from ...logic.notes import create_note_logic, create_folder_logic, delete_note_l
 from ._helpers import _icon_fallback, _resolve_project
 
 
-def CreateTask(name: str, description: str, priority: int, deadline: str, project_id: int = None, project_name: str = None):
+def CreateTask(name: str, priority: int, deadline: str, description: str = None, project_id: int = None, project_name: str = None):
     '''
     Args:
+        name: Short title of the task.
+        priority: Priority 1-64.
+        deadline: Deadline YYYY-MM-DD.
+        description: Longer details (optional). null/empty = task without description.
         project_id: Project ID (preferred). Leave empty if unsure.
         project_name: Alternative to project_id — exact name lookup.
     '''
@@ -64,10 +68,15 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
         return f"Task {task_id} successfully updated{note}"
 
 
-def CreateRoutine(name: str, description: str, priority: int, frequency: str, init_date: str = None, project_id: int = None, project_name: str = None, icon: str = None):
+def CreateRoutine(name: str, priority: int, frequency: str, description: str = None, init_date: str = None, project_id: int = None, project_name: str = None, icon: str = None):
     '''
     Frequency in RRULE syntax (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR).
     Args:
+        name: Short title of the routine.
+        priority: Priority 1-64.
+        frequency: RRULE frequency syntax.
+        description: Longer details (optional). null/empty = routine without description.
+        init_date: Start date YYYY-MM-DD (optional). null = today.
         project_id: Project ID (preferred). Leave empty if unsure.
         project_name: Alternative to project_id — exact name lookup.
         icon: Bootstrap icon CSS class (e.g. bell-fill, clock).
@@ -205,9 +214,13 @@ def DraftDeleteNote(note_id):
         )
     return f"Note {noteM.title} (id:{note_id}) deleted successfully"
 
-def DraftUpdateNote(note_id:int, title:str, content:str):
+def DraftUpdateNote(note_id:int, title:str = None, content:str = None):
     '''
-    Only provided fields are modified.
+    Only provided fields are modified. null/absent fields are left unchanged.
+    Args:
+        note_id: Note id.
+        title: New title (optional).
+        content: New markdown content (optional).
     '''
     with SessionLocal() as db:
         update_note_logic(

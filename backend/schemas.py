@@ -9,7 +9,7 @@ class ModelConfig(BaseModel):
 
 class BaseItem(BaseModel):
     name: str = Field(..., max_length=512, description='Name of the todo')
-    description:str = Field(..., max_length=512, description='Description of the todo')
+    description: Optional[str] = Field(None, max_length=512, description='Description of the todo')
     priority: int = Field(default=0, ge=0, le=64, description="Priority of the todo")
     model_config = ConfigDict(from_attributes=True)
 
