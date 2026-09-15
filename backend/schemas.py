@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from datetime import date, datetime
 from typing import List, Optional
 
@@ -58,6 +58,50 @@ class RoutineUpdate(BaseModel):
 class RoutineCheckSchema(BaseModel):
     routine_id:int = Field(...)
     check_date:date = Field(...)
+
+# Event Classes
+class EventCreate(BaseModel):
+    name: str = Field(..., max_length=512, description='Name of the event')
+    description: Optional[str] = Field(None, max_length=512, description='Description of the event')
+    start_time: datetime = Field(..., description='Event start datetime, naive local time (no timezone offset)')
+    end_time: datetime = Field(..., description='Event end datetime, naive local time (no timezone offset)')
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _reject_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is not None:
+            raise ValueError("Datetimes must be naive local time (no offset)")
+        return v
+
+    @model_validator(mode="after")
+    def _end_not_before_start(self):
+        if self.end_time and self.start_time and self.end_time < self.start_time:
+            raise ValueError("end_time must not precede start_time")
+        return self
+
+class EventSchema(EventCreate):
+    id: int = Field(..., description="Unique identifier of the event")
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EventUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=512, description='Name of the event')
+    description: Optional[str] = Field(None, max_length=512, description='Description of the event')
+    start_time: Optional[datetime] = Field(None, description='Event start datetime, naive local time (no timezone offset)')
+    end_time: Optional[datetime] = Field(None, description='Event end datetime, naive local time (no timezone offset)')
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _reject_aware(cls, v: datetime) -> datetime:
+        if v is not None and v.tzinfo is not None:
+            raise ValueError("Datetimes must be naive local time (no offset)")
+        return v
+
+    @model_validator(mode="after")
+    def _end_not_before_start(self):
+        if self.end_time and self.start_time and self.end_time < self.start_time:
+            raise ValueError("end_time must not precede start_time")
+        return self
 
 # Project Classes
 

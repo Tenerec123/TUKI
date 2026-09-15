@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from backend.routers import config, tasks, routines, projects, conversations, notes, ai
+from backend.routers import config, tasks, routines, projects, conversations, notes, events, ai
 from pathlib import Path
 import anyio
 from dotenv import load_dotenv
@@ -67,4 +67,5 @@ api.include_router(routines.router)
 api.include_router(projects.router)
 api.include_router(conversations.router)
 api.include_router(notes.router)
+api.include_router(events.router)
 api.include_router(ai.router)
