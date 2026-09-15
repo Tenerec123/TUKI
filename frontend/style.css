@@ -588,6 +588,19 @@ BIG CALENDAR
     color: red !important;
 }
 
+/* Timed event in the calendar. Readable neon-yellow text on dark green —
+   never the green-on-green of `.cal-task-done`. */
+.cal-event {
+    background-color: var(--green) !important;
+    border: 1px solid var(--green) !important;
+    color: var(--neon-yellow) !important;
+}
+
+.cal-event .fc-event-title,
+.cal-event .fc-event-main {
+    color: var(--neon-yellow) !important;
+}
+
 .fc-event {
     transition: transform .15s;
 }

@@ -17,10 +17,14 @@ function getIcon(iconName) {
 
 async function LoadCalendar(){
     tasks = []
-    await fetch(`${window.API_URL}/api/tasks/`)
-    .then(response => response.json())
-    .then(data => {
-        data.forEach(task => {
+    events = []
+    await Promise.all([
+        fetch(`${window.API_URL}/api/tasks/`),
+        fetch(`${window.API_URL}/api/events/`)
+    ])
+    .then(([tasksResponse, eventsResponse]) => Promise.all([tasksResponse.json(), eventsResponse.json()]))
+    .then(([taskData, eventData]) => {
+        taskData.forEach(task => {
         tasks.push({
             title:task.name,
             start:task.deadline,
@@ -28,6 +32,22 @@ async function LoadCalendar(){
             className: task.finished ? 'cal-task-done' : task.deadline >= new Date().toISOString().split('T')[0] ? 'cal-task-pending' : 'cal-task-overdue'
         })
     });
+        eventData.forEach(event => {
+            let end = event.end_time
+            // FullCalendar treats `end` as exclusive: a zero-duration event
+            // (start === end) would render invisible. Give it a frontend-only
+            // 30-minute block so it stays visible; stored data stays faithful.
+            if (new Date(event.start_time).getTime() === new Date(event.end_time).getTime()) {
+                end = new Date(new Date(event.end_time).getTime() + 30 * 60000).toISOString()
+            }
+            events.push({
+                title: event.name,
+                start: event.start_time,
+                end: end,
+                className: 'cal-event'
+                // allDay intentionally omitted → defaults to false (timed block)
+            })
+        });
     })
     .catch(error => console.error("Error al obtener datos:", error));
     var calendarEl = document.getElementById('calendar');
@@ -40,7 +60,7 @@ async function LoadCalendar(){
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridDay'
       },
-      events: tasks
+      events: tasks.concat(events)
     });
     calendar.render();
 }
