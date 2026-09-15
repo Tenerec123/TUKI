@@ -1,11 +1,12 @@
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from ...schemas import TaskSchema, ProjectSchema, RoutineSchema
+from ...schemas import TaskSchema, ProjectSchema, RoutineSchema, EventSchema
 from ...database import SessionLocal
 from ...logic.tasks import get_all_tasks_logic, search_tasks_logic
 from ...logic.projects import get_all_project_logic, search_projects_logic
 from ...logic.routines import get_all_routine_logic, search_routines_logic
+from ...logic.events import get_all_events_logic, search_events_logic
 from ...logic.notes import get_note_logic, search_notes_logic
 import asyncio
 import urllib.request
@@ -79,10 +80,34 @@ def GetAllRoutines():
 def SearchRoutines(text: str, limit: int = 5):
     '''
     Semantic search. Returns most relevant results.
-'''
+    '''
     with SessionLocal() as db:
         routines = search_routines_logic(text=text, limit=limit, db=db)
         return [RoutineSchema.model_validate(r).model_dump() for r in routines]
+
+
+def GetAllEvents(first_n: int = None):
+    '''
+    Returns all events (timed commitments such as meetings or appointments).
+    Ordered by start time, soonest first.
+    Args:
+        first_n: Max number of events to return (optional). null/absent = all events.
+    '''
+    with SessionLocal() as db:
+        events = get_all_events_logic(first_n=first_n, db=db)
+        return [EventSchema.model_validate(e).model_dump() for e in events]
+
+
+def SearchEvents(text: str, limit: int = 5):
+    '''
+    Semantic search over events. Returns most relevant results.
+    Args:
+        text: Search query describing the event to find.
+        limit: Max events to return (default 5).
+    '''
+    with SessionLocal() as db:
+        events = search_events_logic(text=text, limit=limit, db=db)
+        return [EventSchema.model_validate(e).model_dump() for e in events]
 
 
 def Weather(city: str = None):

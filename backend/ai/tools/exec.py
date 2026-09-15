@@ -1,9 +1,12 @@
 from datetime import date, datetime
-from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate
+from fastapi import HTTPException
+from pydantic import ValidationError
+from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate, EventCreate, EventUpdate
 from ...database import SessionLocal
 from ...logic.tasks import create_task_logic, delete_task_logic, update_task_logic
 from ...logic.projects import create_project_logic, delete_project_logic, update_project_logic
 from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic
+from ...logic.events import create_event_logic, delete_event_logic, update_event_logic
 from ...logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
 from ._helpers import _icon_fallback, _resolve_project
 
@@ -231,3 +234,72 @@ def DraftUpdateNote(note_id:int, title:str = None, content:str = None):
             ),
             db=db
         )
+
+
+def CreateEvent(name: str, start_time: str, end_time: str, description: str = None):
+    '''
+    Creates a scheduled event (meeting, appointment or other timed commitment).
+    Datetimes are ISO-8601 naive LOCAL time, e.g. 2026-09-15T09:00:00 (no timezone offset).
+    end_time must not precede start_time; start_time == end_time (zero duration) is allowed.
+    Use GetCurrentTime first to resolve relative dates such as "tomorrow".
+    Args:
+        name: Short title of the event.
+        start_time: Start datetime, ISO-8601 naive local (e.g. 2026-09-15T09:00:00).
+        end_time: End datetime, ISO-8601 naive local (e.g. 2026-09-15T10:00:00).
+        description: Longer details (optional). null/empty = event without description.
+    '''
+    try:
+        with SessionLocal() as db:
+            new_event = create_event_logic(
+                event=EventCreate(
+                    name=name,
+                    description=description,
+                    start_time=datetime.fromisoformat(start_time),
+                    end_time=datetime.fromisoformat(end_time),
+                ),
+                db=db)
+            return f"Event {new_event.name} with id {new_event.id} successfully created"
+    except (HTTPException, ValidationError, ValueError) as e:
+        return f"Error creating event: {e}"
+
+
+def UpdateEvent(event_id: int, name: str = None, description: str = None, start_time: str = None, end_time: str = None):
+    '''
+    Only provided fields are modified. null/absent fields are left unchanged.
+    Datetimes are ISO-8601 naive LOCAL time, e.g. 2026-09-15T09:00:00 (no timezone offset).
+    end_time must not precede start_time; start_time == end_time (zero duration) is allowed.
+    Args:
+        event_id: ID of the event to update.
+        name: New name (optional).
+        description: New description (optional).
+        start_time: New start datetime, ISO-8601 naive local (optional).
+        end_time: New end datetime, ISO-8601 naive local (optional).
+    '''
+    try:
+        with SessionLocal() as db:
+            update_event_logic(
+                id=event_id,
+                updated_event=EventUpdate(
+                    name=name,
+                    description=description,
+                    start_time=None if start_time is None else datetime.fromisoformat(start_time),
+                    end_time=None if end_time is None else datetime.fromisoformat(end_time),
+                ),
+                db=db)
+            return f"Event {event_id} successfully updated"
+    except (HTTPException, ValidationError, ValueError) as e:
+        return f"Error updating event: {e}"
+
+
+def DeleteEvent(event_id: int):
+    '''
+    Deletes an event. Irreversible.
+    Args:
+        event_id: ID of the event to delete.
+    '''
+    try:
+        with SessionLocal() as db:
+            deleted_event = delete_event_logic(id=event_id, db=db)
+            return f"Event {deleted_event.name} with id {deleted_event.id} successfully deleted"
+    except HTTPException as e:
+        return f"Error deleting event: {e}"
