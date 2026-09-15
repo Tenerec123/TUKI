@@ -75,6 +75,16 @@ class Routine(Base, TimestampMixin):
     init_date:Mapped[Optional[date]]= mapped_column(nullable=True)
     icon: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
+class Event(Base):
+    __tablename__ = 'events'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(512))
+    start_time: Mapped[datetime] = mapped_column(nullable=False)  # naive local time
+    end_time: Mapped[datetime] = mapped_column(nullable=False)    # naive local time
+    embedding = mapped_column(VECTOR(384))
+
 class Conversation(Base):
     __tablename__="conversations"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -105,6 +115,8 @@ class RoutineCheck(Base):
 @event.listens_for(Task, 'before_update')
 @event.listens_for(Routine, 'before_insert')
 @event.listens_for(Routine, 'before_update')
+@event.listens_for(Event, 'before_insert')
+@event.listens_for(Event, 'before_update')
 def handle_project_embeddings(mapper, connection, target):
     state = inspect(target)
     
