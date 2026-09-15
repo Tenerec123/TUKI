@@ -3,9 +3,9 @@ services:
     image: pgvector/pgvector:0.6.2-pg16
     container_name: tuki-db
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=tuki_db
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
@@ -13,7 +13,7 @@ services:
       - "5432:5432"
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -23,11 +23,13 @@ services:
     container_name: tuki
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
         - PYTHONUNBUFFERED=1
         - OMP_NUM_THREADS=1
         - MKL_NUM_THREADS=1
-        - DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/tuki_db
+        - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     volumes:
       - /mnt/c/Users/HP/Desktop/code/TUKI/vault:/app/vault
       - /mnt/c/Users/HP/Desktop/code/TUKI/draft:/app/draft

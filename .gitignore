@@ -67,3 +67,4 @@ logs/
 # .md notes system (private)
 vault/
 draft/
+.ignore
