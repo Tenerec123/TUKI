@@ -7,14 +7,21 @@ from sqlalchemy import event
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy.inspection import inspect
 from sentence_transformers import SentenceTransformer
+import threading
 
 _embedding_model = None
+_embedding_lock = threading.Lock()
 
 def get_embedding_model():
-    """Load and cache the embedding model on first use"""
+    """Load and cache the embedding model on first use (thread-safe)"""
     global _embedding_model
     if _embedding_model is None:
-        _embedding_model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
+        with _embedding_lock:
+            if _embedding_model is None:
+                _embedding_model = SentenceTransformer(
+                    'sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2',
+                    device='cpu',
+                )
     return _embedding_model
 # Create your models here.
 
