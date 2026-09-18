@@ -60,6 +60,8 @@ async function LoadCalendar(){
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridDay'
       },
+      eventTimeFormat: { hour: 'numeric', minute: '2-digit', hour12: false },
+      slotLabelFormat: { hour: 'numeric', minute: '2-digit', hour12: false },
       events: tasks.concat(events)
     });
     calendar.render();
