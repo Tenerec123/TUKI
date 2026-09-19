@@ -699,6 +699,8 @@ function appendModelItem(list, model, showPrice = true) {
     const item = document.createElement('li');
     item.classList.add('model-item');
     item.setAttribute('data-model', model.id);
+    item.dataset.reasoningMandatory = String(Boolean(model.reasoning && model.reasoning.mandatory));
+    item.dataset.supportedEfforts = JSON.stringify((model.reasoning && model.reasoning.supported_efforts) || []);
     let label = model.name;
     if (showPrice) {
         const i = parseFloat(model.pricing.prompt) * 1_000_000;
@@ -852,16 +854,32 @@ async function LoadModelConfig(){
     }
 }
 
+// Compute the OpenRouter reasoning effort for the orchestrator model from the
+// reasoning metadata stashed on the selected <li> by appendModelItem().
+// Catalog semantics: supported_efforts is ordered descending (most reasoning ->
+// least), so the minimal effort is the LAST element. Models with mandatory
+// reasoning but no supported_efforts (e.g. deepseek/deepseek-r1) fall back to
+// "low". Models without reasoning (or non-mandatory) get "none" (disabled).
+function computeReasoningEffort(item) {
+    const mandatory = item && item.dataset.reasoningMandatory === 'true';
+    if (!mandatory) return 'none';
+    const efforts = JSON.parse(item.dataset.supportedEfforts || '[]');
+    if (efforts.length > 0) return efforts[efforts.length - 1]; // catalog is ordered descending: last = minimum
+    return 'low'; // mandatory reasoning but provider does not list efforts (e.g. deepseek-r1)
+}
+
 function SendModelConfig(){
-    function getSelectedModel(spanId) {
+    function getSelectedModelItem(spanId) {
         const sub = document.getElementById(spanId).closest('.sub-details');
-        const sel = sub.querySelector('.selected-model');
-        return sel ? sel.getAttribute('data-model') : null;
+        return sub.querySelector('.selected-model');
     }
+    const modelId = (el) => el ? el.getAttribute('data-model') : null;
+    const orch = getSelectedModelItem('orchestrator-name');
     const config = {
-        "orchestrator": getSelectedModel('orchestrator-name'),
-        "searcher": getSelectedModel('searcher-name'),
-        "stt": getSelectedModel('stt-name'),
+        "orchestrator": modelId(orch),
+        "orchestrator_effort": computeReasoningEffort(orch),
+        "searcher": modelId(getSelectedModelItem('searcher-name')),
+        "stt": modelId(getSelectedModelItem('stt-name')),
     };
     if (!config.orchestrator || !config.searcher) {
         console.warn('[CONFIG] Missing model selection, skipping save');

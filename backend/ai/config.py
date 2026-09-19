@@ -60,6 +60,7 @@ def get_orchestrator_provider_pin(model: str) -> str | None:
 def get_model_config() -> dict:
     defaults = {
         'orchestrator': 'openai/gpt-oss-120b',
+        'orchestrator_effort': 'none',   # reasoning effort for the orchestrator model
         'searcher': 'google/gemini-2.5-flash-lite',
         'stt': 'nvidia/parakeet-tdt-0.6b-v3',
         'stt_provider': 'openrouter',  # 'openrouter' or 'deepgram'
@@ -68,10 +69,25 @@ def get_model_config() -> dict:
         db = SessionLocal()
         rows = db.query(Config).all()
         values = {row.key: row.value for row in rows}
-        # Legacy migration: use the old 'general' (chat) value as orchestrator.
+        # Legacy migration: use the old 'general' (chat) value as orchestrator
+        # (a plain model id, no effort).
         if 'orchestrator' not in values and 'general' in values:
             values['orchestrator'] = values['general']
+        # The reasoning effort is persisted INSIDE the 'orchestrator' value as a
+        # composite "MODEL_ID EFFORT" (single space). Split it: parts[0] is the
+        # model id, parts[1] (if present) is the effort. A plain id (legacy rows
+        # or no effort saved) keeps the default effort 'none'.
+        if 'orchestrator' in values:
+            parts = values['orchestrator'].split(maxsplit=1)
+            defaults['orchestrator'] = parts[0]
+            if len(parts) == 2:
+                defaults['orchestrator_effort'] = parts[1]
         for key in defaults:
+            # 'orchestrator' was handled above and 'orchestrator_effort' comes
+            # only from the composite split (a stale same-named row must not
+            # clobber it), so both are skipped here.
+            if key in ('orchestrator', 'orchestrator_effort'):
+                continue
             if key in values:
                 defaults[key] = values[key]
     except Exception as e:

@@ -2,6 +2,7 @@ import os
 import asyncio
 from datetime import datetime
 from .tools.discovery import execute_tool_call
+from .config import get_model_config, get_orchestrator_provider_pin
 from openai import AsyncOpenAI
 import traceback
 def _log(msg: str):
@@ -32,9 +33,17 @@ client = AsyncOpenAI(
     api_key=os.environ['OPENROUTER_API_KEY']
 )
 
-async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last:bool = False, session_id: str = "-1", label: str = ""):
-    extra_body = {"reasoning": {"effort": "none"}}
+async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last: bool = False, session_id: str = "-1", label: str = ""):
+    cfg = get_model_config()
+    effort = 'none'
+    if model.split(":")[0] == cfg.get('orchestrator', '').split(":")[0]:
+        effort = cfg.get('orchestrator_effort', 'none')
+    extra_body = {"reasoning": {"effort": effort}}
     if session_id != "-1": extra_body['session_id'] = session_id
+    provider_pin = get_orchestrator_provider_pin(model)
+    if provider_pin:
+        # Preferred provider first; OpenRouter falls back to others on error.
+        extra_body['provider'] = {"order": [provider_pin]}
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
