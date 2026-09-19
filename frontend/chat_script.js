@@ -849,6 +849,11 @@ async function LoadModelConfig(){
                 }
             });
         }
+
+        const orchItem = document.getElementById('orchestrator-name').closest('.sub-details').querySelector('.selected-model');
+        if (orchItem && config.orchestrator_effort === 'none' && computeReasoningEffort(orchItem) !== 'none') {
+            SendModelConfig();
+        }
     } catch (e) {
         console.error('[CONFIG] Failed to load model config:', e);
     }

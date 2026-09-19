@@ -38,7 +38,9 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
     effort = 'none'
     if model.split(":")[0] == cfg.get('orchestrator', '').split(":")[0]:
         effort = cfg.get('orchestrator_effort', 'none')
-    extra_body = {"reasoning": {"effort": effort}}
+    extra_body: dict = {}
+    if effort and effort != 'none':
+        extra_body['reasoning'] = {'effort': effort}
     if session_id != "-1": extra_body['session_id'] = session_id
     provider_pin = get_orchestrator_provider_pin(model)
     if provider_pin:
