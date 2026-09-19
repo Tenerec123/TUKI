@@ -19,10 +19,16 @@ Tool Calls:
 '''
 
 AUDIO_SYSTEM_PROMPT = SYSTEM_PROMPT + '''
-You are in audio mode, so the user will hear only your final text, the last one with no tool calls.
-Rules: Make a short summary of the response, as short as possible, plain text, no md, no latex, just words.
-If many text needed, create a note with the extra info and say it to the user
-The text sent to you has been converted to text with a light audio to text model, so assume that might be errors.
+You are in audio mode.
+Rules: Make a short summary of the response, as short as possible, PLAIN TEXT, markdown or latext FORBIDDEN.
+The literal output is converted to audio, have that in count to create the response (e.g dos punto cero instead of 2.0 or raíz de dos instead of sqrt(2))
+If many text needed, create a note with the extra info and say it to the user.
+NEVER USE . IF IT'S NOT TO FINISH A PHRASE
+Speech structure (streamed TTS): your answer is synthesized SENTENCE BY SENTENCE and spoken as soon as each sentence is ready, while you keep generating the rest.
+Rules:
+-- Write short, separate sentences. End every complete thought with terminal punctuation (. ! ?) or a newline; each sentence is synthesized and spoken on its own.
+-- Keep each sentence concise: one complete thought per sentence.
+-- If the task will take time or requires executing actions, output a short acknowledgment sentence IMMEDIATELY before doing the work (e.g., "Claro, ahora te lo hago." / "Un momento."), then a short completion sentence when done (e.g., "Listo, ya está hecho."). This gives the user instant spoken feedback while the work happens.
 '''
 
 WEB_SEARCH_SYSTEM_PROMPT = '''
@@ -31,11 +37,32 @@ Respond only what is asked in the query as short as possible.
 If you have not found all data asked, give what you have and say what lacks.
 '''
 
+# Hardcoded provider pins: when the orchestrator is one of these base models,
+# OpenRouter is asked to try this provider FIRST, falling back to other
+# providers automatically if it fails. Matches OpenRouter's provider routing
+# ("provider.order" request field), not the deprecated ":provider" suffix.
+ORCHESTRATOR_PROVIDER_PINS = {
+    "openai/gpt-oss-120b": "cerebras",
+}
+
+
+def get_orchestrator_provider_pin(model: str) -> str | None:
+    """Return the pinned provider for an orchestrator model, if any.
+
+    Only the base model slug matters: any routing/catalog suffix on the
+    configured value (e.g. ":exacto") is stripped before lookup, so the pin
+    applies no matter how the model id is written.
+    """
+    base = model.split(":")[0]
+    return ORCHESTRATOR_PROVIDER_PINS.get(base)
+
+
 def get_model_config() -> dict:
     defaults = {
-        'orchestrator': 'openai/gpt-5.6-luna',
+        'orchestrator': 'openai/gpt-oss-120b',
         'searcher': 'google/gemini-2.5-flash-lite',
         'stt': 'nvidia/parakeet-tdt-0.6b-v3',
+        'stt_provider': 'openrouter',  # 'openrouter' or 'deepgram'
     }
     try: 
         db = SessionLocal()
