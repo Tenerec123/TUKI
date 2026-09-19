@@ -1,0 +1,37 @@
+schema: spec-driven
+
+context: |
+  Tech stack: FastAPI 0.104.1, SQLAlchemy 2.0.23, PostgreSQL/pgvector, Alembic 1.12.1 migrations
+  Backend layout: backend/ with routers/ (HTTP) + logic/ (business logic) separation; AI via OpenRouter
+    with auto-discovered tools in backend/ai/tools/
+  Frontend: Vanilla JS + FullCalendar, served from frontend/
+  Deployment: Docker Compose, Debian homelab server
+  Testing: No test runner installed; strict_tdd disabled (see testing capabilities)
+  Style: PEP 8, 4-space indent, type hints on all functions, all code/comments/docs in English,
+    ISO dates (yyyy-mm-dd), RRULE for routine frequencies
+
+rules:
+  proposal:
+    - Include rollback plan for risky changes
+    - Reference affected domains from openspec/specs/ when they exist
+  specs:
+    - Use Given/When/Then for scenarios
+    - Use RFC 2119 keywords (MUST, SHALL, SHOULD, MAY)
+  design:
+    - Include sequence diagrams for complex flows
+    - Document architecture decisions with rationale
+  tasks:
+    - Group by phase, use hierarchical numbering
+    - Keep tasks completable in one session
+  apply:
+    - Follow existing router/logic separation pattern
+    - Type hints on all functions; PEP 8; 4-space indent
+    - Never guess IDs, read first, mutate second
+    tdd: false
+    test_command: ""
+  verify:
+    test_command: ""
+    build_command: ""
+    coverage_threshold: 0
+  archive:
+    - Warn before merging destructive deltas
