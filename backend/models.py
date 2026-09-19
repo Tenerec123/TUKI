@@ -1,6 +1,7 @@
 from backend.database import Base, engine
-from sqlalchemy import Integer, String, ForeignKey
+from sqlalchemy import Integer, String, ForeignKey, Numeric
 from typing import List, Optional
+from decimal import Decimal
 from datetime import date,datetime
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy import event
@@ -99,6 +100,7 @@ class Conversation(Base):
     messages: Mapped[List["Message"]] = relationship("Message",order_by="Message.position", back_populates="conversation", cascade="all, delete-orphan")
     creation_date:Mapped[Optional[date]] = mapped_column(nullable=True)
     last_used:Mapped[Optional[datetime]] = mapped_column(nullable=True)
+    total_cost: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False, server_default="0", default=Decimal("0"))
 
 class Message(Base):
     __tablename__="messages"

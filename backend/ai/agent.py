@@ -3,6 +3,7 @@ import asyncio
 from datetime import datetime
 from .tools.discovery import execute_tool_call
 from .config import get_model_config, get_orchestrator_provider_pin
+from . import cost_tracker
 from openai import AsyncOpenAI
 import traceback
 def _log(msg: str):
@@ -62,6 +63,13 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         # OpenRouter sends usage on the final chunk (may arrive without choices)
         if chunk.usage:
             _log_cache_usage(chunk.usage, label)
+            # Accumulate BEFORE the no-choices guard: the final usage chunk
+            # often arrives without choices and must still register its cost.
+            # This single point covers orchestrator rounds AND the nested
+            # searcher (WebSearch runs its own openai_agent -> _agentic_round).
+            cost_tracker.accumulate(
+                getattr(chunk.usage, "cost", None) or getattr(chunk.usage, "total_cost", None)
+            )
         if not chunk.choices:
             continue
         choice = chunk.choices[0]

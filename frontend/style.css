@@ -140,6 +140,15 @@ SIDEBAR
 .conv-options:hover {
     background-color: var(--neon-red);
 }
+.conv-cost-display {
+    font-family: monospace;
+    font-size: 0.85rem;
+    color: var(--off-yellow);
+    white-space: nowrap;
+    flex-shrink: 0;
+    align-self: center;
+    margin-right: 2px;
+}
 
 .selected-conversation .conv-select{
     background-color: var(--neon-yellow);
@@ -151,6 +160,8 @@ SIDEBAR
     padding: 15px 18px;
     font-size: 0; /* Oculta texto pero mantiene el área para iconos si pusieras */
 }
+/* The cost display lives next to the model selector (form area), never inside
+   the sidebar, so sidebar collapse does not affect it — no hide rule needed. */
 
 /* Animación tipo 'aparición de sistema' */
 @keyframes tukiPop {
@@ -1094,6 +1105,16 @@ All base rules above must win the cascade; this block overrides them.
 
     #chat-sidebar-container.sidebar-collapsed #sidebar ul li button {
         font-size: 1rem;
+    }
+
+    /* Cost display lives beside the model selector (form area), so sidebar
+       collapse never hides it. Tighten it on small screens so it cannot
+       squeeze the mic/send buttons. */
+    .conv-cost-display {
+        font-size: 0.75rem;
+        max-width: 30vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     #form-container {

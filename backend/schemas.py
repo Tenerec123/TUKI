@@ -154,6 +154,7 @@ class ConversationSchema(ConversationCreate):
     messages: Optional[List[MessageSchema]] = Field(default=[])
     creation_date:date = Field(...)
     last_used:datetime = Field(...)
+    total_cost: float = Field(...)
     model_config = ConfigDict(from_attributes=True)
     
 class ConversationUpdate(BaseModel):
@@ -165,6 +166,7 @@ class ConversationData(BaseModel):
     title: str = Field(...)
     id:int = Field(...)
     last_used:datetime = Field(...)
+    total_cost: float = Field(...)
 
 
 class Prompt(BaseModel):

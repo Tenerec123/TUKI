@@ -127,6 +127,7 @@ async function deleteConversation(conv_id){
         chatContainer.innerHTML = ""
         idOfSelectedConv = -1
         posOfSelectedConv = -1
+        updateCostDisplay(0);
     }
     menu_displayed.remove();
     menu_displayed = null;
@@ -147,7 +148,7 @@ async function allowRenameConv(conv_id, conv_position) {
     renameForm.children[0].focus();
     function detectClicksForRename(e){
         conv_rename = e.target.closest('.conv-rename')
-        if ((!conv_rename || conv_rename == renameForm.parentNode.children[1])  && !e.target.closest('.active-rename')){
+        if ((!conv_rename || conv_rename == renameForm.parentNode.querySelector('.conv-options'))  && !e.target.closest('.active-rename')){
             selectBtn = document.createElement('button');
             selectBtn.classList.add('conv-select');
             selectBtn.addEventListener('click', (e) => {
@@ -377,6 +378,16 @@ function handleStreamLine(line, state) {
             state.lastEvent = "tool";
         }
     }
+    else if (chunkObj.type == "cost") {
+        // Update the header cost display in place — never rebuilds the list, so
+        // selection and any open menu are preserved. The payload is the
+        // conversation's persisted total_cost, pushed AFTER the DB write.
+        // Guard: only touch the display when the stream belongs to the
+        // conversation currently shown, so a stale stream cannot clobber it.
+        if (state.convId == idOfSelectedConv) {
+            updateCostDisplay(chunkObj.content);
+        }
+    }
 }
 const submitBtn = document.getElementById('submit-btn');
 submitBtn.addEventListener('click', event => {
@@ -404,7 +415,7 @@ async function streamConversation(convId) {
     });
     if (!response.ok || !response.body) return;
 
-    const state = { tukiMsg: null, lastEvent: "init", callBuffer: [] };
+    const state = { tukiMsg: null, lastEvent: "init", callBuffer: [], convId: convId };
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
@@ -471,6 +482,8 @@ async function loadConversation(conv_id, conv_position){
             })
             // After all messages are loaded, scroll to the bottom of the conversation
             scrollToBottom();
+            // Header cost display mirrors the loaded conversation's total_cost
+            updateCostDisplay(data.total_cost);
         });        
     }
     posOfSelectedConv = conv_position
@@ -481,6 +494,20 @@ async function loadConversation(conv_id, conv_position){
     Render();
     await streamConversation(conv_id);
 }
+function formatCost(v) {
+    if (v == null || isNaN(v)) v = 0;
+    if (v === 0) return "0.00";
+    return v < 0.01 ? v.toFixed(4) : v.toFixed(2);
+}
+
+// Single muted cost readout left of the model selector. Always mirrors the
+// ACTIVE conversation's persisted total_cost: set on conversation load and
+// updated in place on stream "cost" events.
+function updateCostDisplay(v) {
+    const el = document.getElementById('conv-cost-display');
+    if (el) el.textContent = 'Cost: $' + formatCost(v);
+}
+
 async function getConversations(){
     const response = await fetch(`${window.API_URL}/api/conversations/`)
     .then(response => response.json())

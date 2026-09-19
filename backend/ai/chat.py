@@ -3,10 +3,13 @@ from ..database import SessionLocal
 from ..models import Conversation, Message
 from ..routers.conversations import edit_conversation_logic
 from .agent import openai_agent
+from . import cost_tracker
 from .stream_manager import stream_manager
 from openai import AsyncOpenAI
 from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
 from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
+from sqlalchemy import update
+from decimal import Decimal
 import os
 import asyncio
 import json
@@ -111,6 +114,26 @@ def _db_queries2(prompt:Prompt, db_format_messages):
             db=db,
         )
 
+def _db_queries3(conv_id: int, total: Decimal) -> Decimal | None:
+    """Add a turn's inference cost to the conversation's stored total.
+
+    Direct column UPDATE — never PATCH: ConversationUpdate has no
+    total_cost field, so clients cannot forge spend. Returns the new
+    cumulative total (UPDATE ... RETURNING) so the streamed ``cost`` event
+    carries the persisted value, not the turn increment. Returns ``None``
+    when the conversation row is gone (deleted mid-stream): the UPDATE
+    matched 0 rows, nothing to persist, and the caller skips the cost event.
+    """
+    with SessionLocal() as db:
+        new_total = db.execute(
+            update(Conversation)
+            .where(Conversation.id == conv_id)
+            .values(total_cost=Conversation.total_cost + total)
+            .returning(Conversation.total_cost)
+        ).scalar_one_or_none()
+        db.commit()
+    return new_total
+
 async def chat_persistence_wrapper(prompt: Prompt):
     messages = []
     base_len = 0
@@ -125,6 +148,7 @@ async def chat_persistence_wrapper(prompt: Prompt):
         model_config = get_model_config()
         messages = _build_messages(conversation, SYSTEM_PROMPT)
         base_len = len(messages)
+        cost_tracker.reset()  # turn total starts at zero
         async for token in openai_agent(
             messages=messages,
             model = model_config['orchestrator'],
@@ -159,6 +183,17 @@ async def chat_persistence_wrapper(prompt: Prompt):
                         db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
             if db_format_messages:
                 await asyncio.to_thread(_db_queries2, prompt, db_format_messages)
+            # Persist the turn's accumulated cost and push the NDJSON event
+            # BEFORE finish() ends the stream. consume() reads-and-resets, so
+            # each turn writes exactly once (success, ERROR_TOKEN, or
+            # exception all land here; the interrupted round's unrecorded
+            # usage is excluded by design).
+            turn_total = cost_tracker.consume()
+            new_total = await asyncio.to_thread(_db_queries3, prompt.conversation_id, turn_total)
+            # None => conversation was deleted mid-stream; nothing to update
+            # and no cost event to push. finish() below still runs.
+            if new_total is not None:
+                stream_manager.push(prompt.conversation_id, {"type": "cost", "content": float(new_total)})
         finally:
             stream_manager.finish(prompt.conversation_id)
             if title_task: await title_task
