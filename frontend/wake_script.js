@@ -36,6 +36,12 @@ const iconMicFill = `<i class="bi bi-mic-fill"></i>`;
 const WAKE_MODEL = "alexa";
 const THRESHOLD = 0.5;
 
+// Mic sensitivity for the WAKE MODEL ONLY: scale the captured int16 samples
+// before feature extraction (3.0 = ~+9.5 dB). The raw frame is still streamed
+// unamplified to the backend. If you still have to shout, raise this; if the
+// wake word triggers on background noise, lower it. Clipping is guarded.
+const INPUT_GAIN = 3.0;
+
 // Utterance-end tuning (1 frame = 1280 samples @ 16 kHz = 80 ms).
 // The engine waits for this many CONSECUTIVE silent VAD frames before
 // calling onUtterance; 25 frames = ~2 s of silence.
@@ -242,6 +248,19 @@ function playResponse(wavBuffer) {
   enqueueWav(wavBuffer);
 }
 
+// Amplify a mic frame for the wake model only (the raw frame is streamed to
+// the backend unchanged). The melspectrogram consumes the int16 magnitudes
+// as-is, so scaling the samples scales the features and therefore the score.
+function amplifyFrame(frame) {
+  if (INPUT_GAIN === 1) return frame;
+  const out = new Int16Array(frame.length);
+  for (let i = 0; i < frame.length; i++) {
+    const v = frame[i] * INPUT_GAIN;
+    out[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : Math.round(v);
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Wake word engine lifecycle (recreated on every start, kept simple).
 // ---------------------------------------------------------------------------
@@ -282,7 +301,7 @@ async function startEngine() {
   // Microphone feed: every 80 ms frame of Int16 PCM@16 kHz goes to predict().
   microphone = new Microphone(async (frame) => {
     try {
-      const predictions = await engine.predict(frame);
+      const predictions = await engine.predict(amplifyFrame(frame));
       const score = predictions[WAKE_MODEL];
       if (typeof score === "number") setScore(score);
       // While an utterance is streaming, forward every mic frame to the
