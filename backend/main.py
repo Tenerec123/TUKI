@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.routers import config, tasks, routines, projects, conversations, notes, events, ai
+from backend.wake_models import ensure_wake_models
 from pathlib import Path
 import anyio
 from dotenv import load_dotenv
@@ -23,6 +24,10 @@ async def lifespan(app: FastAPI):
     # ---- CÓDIGO QUE SE EJECUTA AL ARRANCAR ----
     # Sube el límite de hilos síncronos para peticiones en paralelo
     anyio.to_thread.current_default_thread_limiter().total_threads = 100
+    
+    # Descarga (solo si faltan) los modelos ONNX del wake word. Idempotente:
+    # si ya están, el chequeo son 4 stat() y no toca la red.
+    ensure_wake_models()
     
     yield  # Aquí es donde la aplicación se queda corriendo
     
@@ -60,6 +65,10 @@ async def read_index():
 @api.get("/notes")
 async def read_notes():
     return FileResponse('frontend/notes.html')
+
+@api.get("/wake")
+async def read_wake():
+    return FileResponse('frontend/wake.html')
 
 api.include_router(config.router)
 api.include_router(tasks.router)
