@@ -21,9 +21,7 @@
 import { OpenWakeWord, configureOrt } from "openwakeword-web";
 import { Microphone } from "openwakeword-web/microphone";
 
-const SERVER_IP = window.location.hostname;
-const API_PORT = window.location.port || "8000";
-const WS_URL = (window.location.protocol === "https:" ? "wss://" : "ws://") + `${SERVER_IP}:${API_PORT}/api/ai/voice-agent-ws`;
+const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/ai/voice-agent-ws`;
 
 const statusEl = document.getElementById("status");
 const toggleBtn = document.getElementById("toggle-btn");
