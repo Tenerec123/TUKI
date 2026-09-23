@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 from datetime import date, datetime
-from typing import List, Optional
+from typing import List, Optional, Literal, Union, Annotated
 
 class ModelConfig(BaseModel):
     orchestrator: str = Field(max_length=100)  # composite "MODEL_ID EFFORT" must fit config.value VARCHAR(128)
@@ -192,3 +192,25 @@ class NoteMetaSchema(BaseModel):
 
 class FolderRequest(BaseModel):
     path: str
+
+# MCP Server Classes
+# One model per transport; the "transport" field is the tag that tells pydantic
+# which schema to use when building a McpServerInfo from a DB row or user JSON.
+class StdioServer(BaseModel):
+    transport: Literal["stdio"] = "stdio"
+    command: str = Field(..., description="Executable that spawns the MCP server")
+    args: list[str] = Field(default_factory=list, description="Arguments passed to the executable")
+    env: dict[str, str] = Field(default_factory=dict, description="Extra env vars for the spawned process")
+
+
+class HttpServer(BaseModel):
+    transport: Literal["http"] = "http"
+    url: str = Field(..., description="MCP server URL (Streamable HTTP or SSE)")
+    headers: dict[str, str] = Field(default_factory=dict, description="Static headers, e.g. Authorization")
+    auth_type: Literal["none", "header", "oauth"] = "none"
+
+class McpServerInfo(BaseModel):
+    """Row from mcp_servers, with the transport-specific config already parsed."""
+    id: int = Field(...)
+    name: str = Field(...)
+    server: Annotated[Union[StdioServer, HttpServer], Field(discriminator="transport")]

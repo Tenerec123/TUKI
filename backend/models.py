@@ -1,5 +1,5 @@
 from backend.database import Base, engine
-from sqlalchemy import Integer, String, ForeignKey, Numeric
+from sqlalchemy import Integer, String, ForeignKey, Numeric, JSON
 from typing import List, Optional
 from decimal import Decimal
 from datetime import date,datetime
@@ -30,6 +30,19 @@ class Config(Base):
     __tablename__ = "config"
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(String(128), nullable=False)
+
+class McpServer(Base):
+    __tablename__ = "mcp_servers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    # 'stdio' (TUKI spawns the server process) or 'http' (remote URL)
+    transport: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Transport-specific config:
+    #   stdio -> {"command": "...", "args": [...], "env": {...}}
+    #   http  -> {"url": "...", "headers": {...}, "auth_type": "none"|"header"|"oauth"}
+    config: Mapped[dict] = mapped_column(JSON, nullable=False)
+    enabled: Mapped[bool] = mapped_column(default=True)
 
 # Mixin: Provee columnas comunes sin ser una tabla por sí misma
 class TimestampMixin:
