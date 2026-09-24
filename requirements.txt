@@ -1,5 +1,5 @@
 fastapi==0.135.2
-uvicorn[standard]==0.24.0
+uvicorn[standard]==0.38.0
 sqlalchemy==2.0.23
 alembic==1.12.1
 pydantic>=2.10.2,<3.0.0
@@ -16,4 +16,4 @@ trafilatura>=1.8.0
 yfinance
 sentence_transformers
 websockets>=15.0
-mcp>=1.27.0
+mcp==1.27.0
