@@ -1,0 +1,180 @@
+"""Auto-discovery for LOCAL tool functions (TUKI code, frozen at runtime)."""
+
+import inspect
+import json
+import re
+import asyncio
+from typing import Union, get_origin, get_args
+from . import read
+from . import exec
+from . import subagents
+
+
+# ── Type mapping for JSON schema generation ────────────────────────────
+
+_TYPE_MAP = {
+    str: "string",
+    int: "integer",
+    float: "number",
+    bool: "boolean",
+}
+
+
+def _py_type_to_json(tp):
+    """Convert Python type hint to JSON schema type dict.
+    Handles Optional[X], List[X], and simple types."""
+    if tp is inspect.Parameter.empty:
+        return {"type": "string"}
+
+    origin = get_origin(tp)
+
+    # Handle Optional[X] → Union[X, None]
+    if origin is Union:
+        args = get_args(tp)
+        non_none = [a for a in args if a is not type(None)]
+        if len(non_none) == 1:
+            base = _TYPE_MAP.get(non_none[0], "string")
+            return {"type": [base, "null"]}
+        return {"type": "string"}
+
+    # Handle List[X]
+    if origin is list:
+        args = get_args(tp)
+        items = _py_type_to_json(args[0]) if args else {"type": "string"}
+        return {"type": "array", "items": items}
+
+    base = _TYPE_MAP.get(tp, "string")
+    return {"type": base}
+
+
+def _parse_docstring(doc: str):
+    """Parse standardized docstring into description and arg_descriptions.
+    
+    Format:
+        First lines: description (everything before 'Args:').
+        Args:
+            param_name: Description text.
+    
+    Returns:
+        (description, arg_descriptions_dict)
+    """
+    if doc == "": return "", {}
+    desc_lines = []
+    arg_descriptions = {}
+    current_section = "desc"
+
+    for line in doc.split('\n'):
+        stripped = line.strip()
+
+        if stripped.startswith('Args:'):
+            current_section = "args"
+            continue
+
+        if current_section == "desc":
+            if stripped:
+                desc_lines.append(stripped)
+        elif current_section == "args":
+            m = re.match(r'^\s*(\w+):\s*(.+)$', stripped)
+            if m:
+                arg_descriptions[m.group(1)] = m.group(2).strip()
+
+    description = ' '.join(desc_lines) if desc_lines else ""
+    return description, arg_descriptions
+
+
+def _discover_module_tools():
+    ToolDict = {}
+    tool_schemas = []
+
+    modules = [read, exec, subagents]
+
+    for module in modules:
+        for name, func in inspect.getmembers(module, inspect.isfunction):
+            if func.__module__ != module.__name__:
+                continue
+
+            doc = inspect.getdoc(func) or ""
+            description, arg_descriptions = _parse_docstring(doc)
+
+            sig = inspect.signature(func)
+
+            properties = {}
+            required = []
+
+            for param_name, param in sig.parameters.items():
+                json_type = _py_type_to_json(param.annotation)
+                has_default = param.default is not inspect.Parameter.empty
+
+                prop = dict(json_type)  # copy
+
+                if param_name in arg_descriptions:
+                    prop["description"] = arg_descriptions[param_name]
+
+                properties[param_name] = prop
+
+                if not has_default:
+                    required.append(param_name)
+
+            schema = {
+                'type': 'function',
+                'function': {
+                    'name': name,
+                    'description': description,
+                    'parameters': {
+                        'type': 'object',
+                        'properties': properties,
+                    }
+                }
+            }
+            if required:
+                schema['function']['parameters']['required'] = required
+
+            ToolDict[name] = func
+            tool_schemas.append(schema)
+
+    return ToolDict, tool_schemas
+
+
+# ── Run discovery once at import time (frozen forever) ─────────────────
+
+ToolDict, TOOL_SCHEMAS = _discover_module_tools()
+
+
+# ── Dispatch helpers ───────────────────────────────────────────────────
+
+def _sanitize_args(args: dict) -> dict:
+    """
+    Clean model-generated args before passing to tool functions.
+    """
+    cleaned = {}
+    for key, value in args.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and (value.lower() in ("null", "none") or value.strip() == ""):
+            continue
+        # 0 (or negative) means "not assigned" for optional numeric fields;
+        # drop it so the field is not changed.
+        if key in ("priority", "project_id", "parent_id") and isinstance(value, int) and value <= 0:
+            continue
+        cleaned[key] = value
+    return cleaned
+
+
+# Tools that are pure in-process work (<1ms, no I/O): call inline,
+# no thread or coroutine overhead. Everything else goes async or to_thread.
+INLINE_TOOLS = {"GetCurrentTime"}
+
+
+async def execute_local_tool(id, name, func, arguments):
+    args = json.loads(arguments) if isinstance(arguments, str) else arguments
+    args = _sanitize_args(args)
+    print(f"[TOOL] {name}(args={args})")
+    if name in INLINE_TOOLS:
+        result = func(**args)
+    elif inspect.iscoroutinefunction(func):
+        result = await func(**args)
+    else:
+        result = await asyncio.to_thread(func, **args)
+    result_str = result if isinstance(result, str) else json.dumps(result, default=str)
+    print(f"[TOOL] {name} → OK ({len(result_str)} chars)")
+    return id, name, result_str

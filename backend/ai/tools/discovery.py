@@ -1,155 +1,36 @@
-"""Auto-discovery system for tool functions.
-Reads functions from read_tools and exec_tools modules,
-generates JSON schemas from function signatures + docstrings.
-"""
+"""Auto-discovery orchestrator: combines frozen LOCAL tools with live MCP tools."""
 
-import inspect
-import json
-import re
-from typing import Union, get_origin, get_args
-
-from . import read
-from . import exec
-from . import subagents
 import asyncio
-
-# ── Type mapping for JSON schema generation ────────────────────────────
-
-_TYPE_MAP = {
-    str: "string",
-    int: "integer",
-    float: "number",
-    bool: "boolean",
-}
+from concurrent.futures import ThreadPoolExecutor
+from .mcp_tools import _discover_mcp_tools, _load_mcps, _discover_mcp_tools_with_status, execute_mcp_tool
+from .local_tools import ToolDict, TOOL_SCHEMAS, execute_local_tool
 
 
-def _py_type_to_json(tp):
-    """Convert Python type hint to JSON schema type dict.
-    Handles Optional[X], List[X], and simple types."""
-    if tp is inspect.Parameter.empty:
-        return {"type": "string"}
+def _run_sync(coro):
+    """Run a coroutine to completion even if an event loop is already running.
 
-    origin = get_origin(tp)
-
-    # Handle Optional[X] → Union[X, None]
-    if origin is Union:
-        args = get_args(tp)
-        non_none = [a for a in args if a is not type(None)]
-        if len(non_none) == 1:
-            base = _TYPE_MAP.get(non_none[0], "string")
-            return {"type": [base, "null"]}
-        return {"type": "string"}
-
-    # Handle List[X]
-    if origin is list:
-        args = get_args(tp)
-        items = _py_type_to_json(args[0]) if args else {"type": "string"}
-        return {"type": "array", "items": items}
-
-    base = _TYPE_MAP.get(tp, "string")
-    return {"type": base}
-
-
-def _parse_docstring(doc: str):
-    """Parse standardized docstring into description and arg_descriptions.
-    
-    Format:
-        First lines: description (everything before 'Args:').
-        Args:
-            param_name: Description text.
-    
-    Returns:
-        (description, arg_descriptions_dict)
+    asyncio.run() refuses when a loop is active (uvicorn imports the app INSIDE
+    its running serve() loop), and on Python 3.13 a private loop's
+    run_until_complete() is rejected too. Safest path: run asyncio.run() in a
+    worker thread, where no loop is running at all.
     """
-    if doc == "": return "", {}
-    desc_lines = []
-    arg_descriptions = {}
-    current_section = "desc"
-
-    for line in doc.split('\n'):
-        stripped = line.strip()
-
-        if stripped.startswith('Args:'):
-            current_section = "args"
-            continue
-
-        if current_section == "desc":
-            if stripped:
-                desc_lines.append(stripped)
-        elif current_section == "args":
-            m = re.match(r'^\s*(\w+):\s*(.+)$', stripped)
-            if m:
-                arg_descriptions[m.group(1)] = m.group(2).strip()
-
-    description = ' '.join(desc_lines) if desc_lines else ""
-    return description, arg_descriptions
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        return pool.submit(asyncio.run, coro).result()
 
 
 def _discover_tools():
-    """Scan read_tools and exec_tools modules for tool functions.
-
-    Modules are scanned in order (read tools first, write tools second),
-    so the full tool list keeps that ordering. Function signature +
-    docstring generate the JSON schema.
-
-    Returns:
-        (ToolDict, tool_schemas)
-    """
-    ToolDict = {}
-    tool_schemas = []
-
-    modules = [read, exec, subagents]
-
-    for module in modules:
-        for name, func in inspect.getmembers(module, inspect.isfunction):
-            if func.__module__ != module.__name__:
-                continue
-
-            doc = inspect.getdoc(func) or ""
-            description, arg_descriptions = _parse_docstring(doc)
-
-            sig = inspect.signature(func)
-
-            properties = {}
-            required = []
-
-            for param_name, param in sig.parameters.items():
-                json_type = _py_type_to_json(param.annotation)
-                has_default = param.default is not inspect.Parameter.empty
-
-                prop = dict(json_type)  # copy
-
-                if param_name in arg_descriptions:
-                    prop["description"] = arg_descriptions[param_name]
-
-                properties[param_name] = prop
-
-                if not has_default:
-                    required.append(param_name)
-
-            schema = {
-                'type': 'function',
-                'function': {
-                    'name': name,
-                    'description': description,
-                    'parameters': {
-                        'type': 'object',
-                        'properties': properties,
-                    }
-                }
-            }
-            if required:
-                schema['function']['parameters']['required'] = required
-
-            ToolDict[name] = func
-            tool_schemas.append(schema)
-
-    return ToolDict, tool_schemas
+    """Build the combined schema list at import time."""
+    mcp_schemas = _run_sync(_discover_mcp_tools())
+    return [*TOOL_SCHEMAS, *mcp_schemas]
 
 
 # ── Run discovery once at import time ──────────────────────────────────
 
-ToolDict, ALL_TOOL_SCHEMAS = _discover_tools()
+ALL_TOOL_SCHEMAS = _discover_tools()
 
 ORCHESTRATOR_BLACKLIST = {
     "WebFetch",
@@ -161,61 +42,41 @@ ORCHESTRATOR_TOOL_SCHEMAS = [
 ]
 
 
-def get_tool_schemas(*names: str) -> list[dict]:
-    """Look up tool schemas by name from the full set.
-    Use this to give subagents exactly the tools they need.
+async def refresh_mcp_tools() -> list[dict]:
+    """Re-discover MCP servers from the DB and splice their schemas in place.
+
+    Only the MCP half is refreshed — local tool schemas never change at
+    runtime. Call after MCP CRUD mutations. Returns per-server diagnostics so
+    the UI can report failures:
+      [{"name": ..., "status": "ok", "tools": [...]} |
+       {"name": ..., "status": "error", "error": "..."}]
     """
-    by_name = {s['function']['name']: s for s in ALL_TOOL_SCHEMAS}
-    return [by_name[n] for n in names if n in by_name]
+    mcps = _load_mcps()
+    new_schemas, diagnostics = await _discover_mcp_tools_with_status(mcps)
+    ALL_TOOL_SCHEMAS[:] = [*TOOL_SCHEMAS, *new_schemas]
+    ORCHESTRATOR_TOOL_SCHEMAS[:] = [
+        s for s in ALL_TOOL_SCHEMAS
+        if s['function']['name'] not in ORCHESTRATOR_BLACKLIST
+    ]
+    return diagnostics
 
 
 # ── Dispatch ───────────────────────────────────────────────────────────
 
-
-def _sanitize_args(args: dict) -> dict:
-    """
-    Clean model-generated args before passing to tool functions.
-    """
-    cleaned = {}
-    for key, value in args.items():
-        if value is None:
-            continue
-        if isinstance(value, str) and (value.lower() in ("null", "none") or value.strip() == ""):
-            continue
-        # 0 (or negative) means "not assigned" for optional numeric fields;
-        # drop it so the field is not changed.
-        if key in ("priority", "project_id", "parent_id") and isinstance(value, int) and value <= 0:
-            continue
-        cleaned[key] = value
-    return cleaned
-
-
-# Tools that are pure in-process work (<1ms, no I/O): call inline,
-# no thread or coroutine overhead. Everything else goes async or to_thread.
-INLINE_TOOLS = {"GetCurrentTime"}
-
-
-async def execute_tool_call(id:int, name: str, arguments: str) -> tuple:
-    """Execute a tool by name with JSON arguments string. Returns result JSON string.
-    Supports inline (fast pure), async, and sync-to-thread tool functions.
+async def execute_tool_call(id: int, name: str, arguments: str) -> tuple:
+    """Execute a tool by name with JSON arguments string. Returns (id, name, result).
+    Supports inline (fast pure), async, sync-to-thread, and MCP tools.
     """
     func = ToolDict.get(name)
-    if not func:
-        print(f"[TOOL] {name} NOT FOUND in ToolDict")
-        return id, name, f'Error: Tool {name} not found'
     try:
-        args = json.loads(arguments) if isinstance(arguments, str) else arguments
-        args = _sanitize_args(args)
-        print(f"[TOOL] {name}(args={args})")
-        if name in INLINE_TOOLS:
-            result = func(**args)
-        elif asyncio.iscoroutinefunction(func):
-            result = await func(**args)
+        if func:
+            return await execute_local_tool(id, name, func, arguments)
+        elif (parts := name.split("_", 2)) and parts[0] == "mcp":
+            return await execute_mcp_tool(id, parts[1], parts[2], arguments)
         else:
-            result = await asyncio.to_thread(func, **args)
-        result_str = result if isinstance(result, str) else json.dumps(result, default=str)
-        print(f"[TOOL] {name} → OK ({len(result_str)} chars)")
-        return id, name, result_str
+            print(f"[TOOL] {name} NOT FOUND in ToolDict")
+            return id, name, f'Error: Tool {name} not found'
+
     except Exception as e:
         print(f"[TOOL] {name} → ERROR: {e}")
         return id, name, f"Execution Error: {str(e)}"

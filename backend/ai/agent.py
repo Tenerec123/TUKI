@@ -92,6 +92,12 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         if choice.finish_reason:
             finish = choice.finish_reason
 
+    # Debug: log any text the model emitted in THIS round (per-round text may
+    # arrive interleaved with tool calls; without this line the agent logs
+    # never show it).
+    if assistant_msg is not None and assistant_msg.get("content"):
+        _log(f"   text({label}): {assistant_msg['content'][:120]!r}")
+
     if calls:
         tool_names = [tc['name'] for tc in calls.values()]
         _log(f"→ Tools called: {tool_names[:5]}")
@@ -139,7 +145,7 @@ async def openai_agent(messages:list, model:str, max_rounds:int, tool_schemas: l
         for i in range(max_rounds):
             _log(f"── Round {i+1}/{max_rounds}")
             is_last = i == max_rounds - 1
-            async for token in _agentic_round(messages, model, tool_schemas, is_last=is_last,session_id= str(conv_id), label= f"round-{i+1}/{max_rounds}"):
+            async for token in _agentic_round(messages, model, tool_schemas, is_last=is_last, session_id= str(conv_id), label= f"round-{i+1}/{max_rounds}"):
                 yield token
                 if token['type'] == "finish": break
             else: continue

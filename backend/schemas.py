@@ -167,6 +167,7 @@ class ConversationData(BaseModel):
     id:int = Field(...)
     last_used:datetime = Field(...)
     total_cost: float = Field(...)
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Prompt(BaseModel):
@@ -212,5 +213,27 @@ class HttpServer(BaseModel):
 class McpServerInfo(BaseModel):
     """Row from mcp_servers, with the transport-specific config already parsed."""
     id: int = Field(...)
-    name: str = Field(...)
+    name: str = Field(..., pattern=r"^[^\s_]+$", description="Unique name; no spaces or underscores (tool names are parsed as mcp_<server>_<tool>)")
+    enabled: bool = Field(default=True, description="Whether TUKI exposes this server's tools to the models")
     server: Annotated[Union[StdioServer, HttpServer], Field(discriminator="transport")]
+
+    @classmethod
+    def from_row(cls, row):
+        """Build a McpServerInfo from an McpServer ORM row."""
+        return cls(id=row.id, name=row.name, enabled=row.enabled,
+                   server={**row.config, "transport": row.transport})
+
+
+class McpServerCreate(BaseModel):
+    """Payload to register a new MCP server."""
+    name: str = Field(..., pattern=r"^[^\s_]+$", description="Unique name; no spaces or underscores")
+    enabled: bool = Field(default=True)
+    server: Annotated[Union[StdioServer, HttpServer], Field(discriminator="transport")]
+
+
+class McpServerUpdate(BaseModel):
+    """Partial update. Header values equal to the MASK sentinel (or absent) keep
+    the stored secret untouched; present real values replace it."""
+    name: Optional[str] = Field(default=None, pattern=r"^[^\s_]+$")
+    enabled: Optional[bool] = None
+    server: Optional[Annotated[Union[StdioServer, HttpServer], Field(discriminator="transport")]] = None
