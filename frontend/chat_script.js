@@ -3,11 +3,8 @@ const chatContainer = document.getElementById('chat-container');
 const createChatBTN = document.getElementById('create-chat');
 const conversationList = document.getElementById('conversation-list');
 const textarea = document.getElementById('prompt-writer')
-const SERVER_IP = window.location.hostname;
 const toggleBtn = document.getElementById('toggle-sidebar');
-const API_PORT = window.location.port || "8000";
 const mic = document.getElementById('toggle-mic');
-window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 let posOfSelectedConv = -1;
 let idOfSelectedConv = -1;
 let menu_displayed = null;
@@ -55,7 +52,7 @@ function SetupStream(stream) {
         chunks = [];
         const formData = new FormData();
         formData.append('file', blob, 'recording.ogg');
-        const response = await fetch(`${window.API_URL}/api/ai/stt`, {
+        const response = await fetch(`/api/ai/stt`, {
             method: 'POST',
             body: formData,
         }).then(response => response.json())
@@ -107,7 +104,7 @@ async function createConversation(){
     chat = {
         title:"new_chat"
     }
-    const response = await fetch(`${window.API_URL}/api/conversations/`, {
+    const response = await fetch(`/api/conversations/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -122,7 +119,7 @@ async function createConversation(){
 
 }
 async function deleteConversation(conv_id){
-    const response = await fetch(`${window.API_URL}/api/conversations/${conv_id}`, {method: 'DELETE'});
+    const response = await fetch(`/api/conversations/${conv_id}`, {method: 'DELETE'});
     if (conv_id == idOfSelectedConv){
         chatContainer.innerHTML = ""
         idOfSelectedConv = -1
@@ -168,7 +165,7 @@ async function allowRenameConv(conv_id, conv_position) {
             const formData = new FormData(document.getElementsByClassName('rename-form')[0]);
             const data = Object.fromEntries(formData.entries());
             const newName = data.newname
-            const response2 = await fetch(`${window.API_URL}/api/conversations/${conv_id}`, {
+            const response2 = await fetch(`/api/conversations/${conv_id}`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json'
@@ -393,7 +390,7 @@ const submitBtn = document.getElementById('submit-btn');
 submitBtn.addEventListener('click', event => {
     if (submitBtn.classList.contains('send')) {return;}
     event.preventDefault()
-    fetch(`${window.API_URL}/api/ai/stop/${idOfSelectedConv}`, {method:'POST'})
+    fetch(`/api/ai/stop/${idOfSelectedConv}`, {method:'POST'})
 })
 
 function setThinkingUI(thinking) {
@@ -407,7 +404,7 @@ function setThinkingUI(thinking) {
 }
 
 async function streamConversation(convId) {
-    const response = await fetch(`${window.API_URL}/api/ai/connect/${convId}`, {
+    const response = await fetch(`/api/ai/connect/${convId}`, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json'
@@ -447,7 +444,7 @@ async function loadConversation(conv_id, conv_position){
         conversationList.children[posOfSelectedConv].classList.remove('selected-conversation');
         }
         chatContainer.innerHTML = ""
-        const response = await fetch(`${window.API_URL}/api/conversations/${conv_id}`)
+        const response = await fetch(`/api/conversations/${conv_id}`)
         .then(response => response.json())
         .then(data => {
             data.messages.forEach((message)=>{
@@ -509,7 +506,7 @@ function updateCostDisplay(v) {
 }
 
 async function getConversations(){
-    const response = await fetch(`${window.API_URL}/api/conversations/`)
+    const response = await fetch(`/api/conversations/`)
     .then(response => response.json())
     .then(data => {
         conversationList.innerHTML = ""
@@ -580,7 +577,7 @@ async function sendPrompt(text){
         if (msgs.length > 0) renderTukiMarkdown(msgs[msgs.length - 1]);
     }, 200);
     
-    await fetch(`${window.API_URL}/api/ai/execute`, {
+    await fetch(`/api/ai/execute`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -857,7 +854,7 @@ function OpenMenu(button, id, position){
 
 async function LoadModelConfig(){
     try {
-        const res = await fetch(`${window.API_URL}/api/config/models`);
+        const res = await fetch(`/api/config/models`);
         if (!res.ok) { return }
         const config = await res.json();
         const targets = [
@@ -917,7 +914,7 @@ function SendModelConfig(){
         console.warn('[CONFIG] Missing model selection, skipping save');
         return;
     }
-    fetch(`${window.API_URL}/api/config/models`, {
+    fetch(`/api/config/models`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

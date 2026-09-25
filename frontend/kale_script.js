@@ -1,7 +1,4 @@
-const SERVER_IP = window.location.hostname;
-const API_PORT = window.location.port || "8000";
 const Rselector = document.getElementById('routine-selector');
-window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 let obj_selected = null;
 
 function getIcon(iconName) {
@@ -19,8 +16,8 @@ async function LoadCalendar(){
     tasks = []
     events = []
     await Promise.all([
-        fetch(`${window.API_URL}/api/tasks/`),
-        fetch(`${window.API_URL}/api/events/`)
+        fetch(`/api/tasks/`),
+        fetch(`/api/events/`)
     ])
     .then(([tasksResponse, eventsResponse]) => Promise.all([tasksResponse.json(), eventsResponse.json()]))
     .then(([taskData, eventData]) => {
@@ -68,7 +65,7 @@ async function LoadCalendar(){
 }
 
 async function LoadRoutineSelector(){
-    await fetch(`${window.API_URL}/api/routines/`)
+    await fetch(`/api/routines/`)
     .then(response => response.json())
     .then(data => {
         let first = true;
@@ -85,7 +82,7 @@ async function LoadRoutineSelector(){
                 LoadHeatmap(routine.id);
             })
             
-            response = await fetch(`${window.API_URL}/api/routines/accuracy/${routine.id}`)
+            response = await fetch(`/api/routines/accuracy/${routine.id}`)
             const textData = await response.text();
             const accuracy = parseFloat(textData);
             console.log(accuracy == 'NaN')
@@ -111,7 +108,7 @@ async function LoadRoutineSelector(){
 async function LoadHeatmap(id) {
     document.getElementById('cal-heatmap').innerHTML = ''
     var checkData = {};
-    await fetch(`${window.API_URL}/api/routines/stats/${id}`)
+    await fetch(`/api/routines/stats/${id}`)
     .then(response => response.json())
     .then(data => {
         data.forEach(check => {

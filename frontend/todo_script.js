@@ -6,9 +6,6 @@ const ProjectContainer = document.getElementById('project-container');
 const RoutinesContainer = document.getElementById('routine-container');
 const CheckCreateButton = document.getElementById('check-create-button');
 const TodayRoutines = document.getElementById('today-routine-list')
-const SERVER_IP = window.location.hostname;
-const API_PORT = window.location.port || "8000"
-window.API_URL = `http://${SERVER_IP}:${API_PORT}`;
 
 function getIcon(iconName) {
     if (!iconName) return 'person-walking';
@@ -47,7 +44,7 @@ function syncIsoDateText(nativeInput) {
 }
 
 async function LoadTasks() {
-    await fetch(`${window.API_URL}/api/tasks/`)
+    await fetch(`/api/tasks/`)
     .then(response => response.json())
     .then(data => {
 
@@ -112,7 +109,7 @@ async function LoadTasks() {
 }
 
 async function LoadProjects() {
-    await fetch(`${window.API_URL}/api/projects/`)
+    await fetch(`/api/projects/`)
     .then(response => response.json())
     .then(data => {
     ProjectContainer.innerHTML = '';
@@ -151,7 +148,7 @@ async function LoadProjects() {
     .catch(error => console.error("Error al obtener datos:", error));
 }
 async function LoadRoutines() {
-  await fetch(`${window.API_URL}/api/routines/`)
+  await fetch(`/api/routines/`)
   .then(response => response.json())
   .then(data => {
     
@@ -221,7 +218,7 @@ async function CheckClick(element, id){
     Checked_str = "true"
   }
   if (id == -1){return}
-  const response = await fetch(`${window.API_URL}/api/tasks/${id}`, {
+  const response = await fetch(`/api/tasks/${id}`, {
         method: 'PATCH',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -230,7 +227,7 @@ async function CheckClick(element, id){
     });
 }
 async function LoadTodayRoutines() {
-   const response = await fetch(`${window.API_URL}/api/routines/today`)
+   const response = await fetch(`/api/routines/today`)
    .then(response => response.json())
    .then(data => {
     data.forEach(routine=>{
@@ -239,10 +236,10 @@ async function LoadTodayRoutines() {
         if (routine.checked){newRoutine.classList.add('checked')}
         newRoutine.addEventListener('click', async (e) => {
             if (newRoutine.classList.contains('checked')){
-                await fetch(`${window.API_URL}/api/routines/uncheck/${routine.id}`, {method:'DELETE'})
+                await fetch(`/api/routines/uncheck/${routine.id}`, {method:'DELETE'})
             }
             else{
-                await fetch(`${window.API_URL}/api/routines/check/${routine.id}`, {method:'POST'})
+                await fetch(`/api/routines/check/${routine.id}`, {method:'POST'})
             }
             newRoutine.classList.toggle('checked')
         });
@@ -263,7 +260,7 @@ TaskCreator.addEventListener('submit', async (e) => {
       data.finished = "True"
     }
     console.log(data)
-    const response = await fetch(`${window.API_URL}/api/tasks/`, {
+    const response = await fetch(`/api/tasks/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -284,7 +281,7 @@ ProjectCreator.addEventListener('submit', async (e) => {
     const formData = new FormData(ProjectCreator);
     const data = Object.fromEntries(formData.entries());
     console.log(data)
-    const response = await fetch(`${window.API_URL}/api/projects/`, {
+    const response = await fetch(`/api/projects/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -305,7 +302,7 @@ RoutineCreator.addEventListener('submit', async (e) => {
     e.preventDefault();
     const formData = new FormData(RoutineCreator);
     const data = Object.fromEntries(formData.entries());
-    const response = await fetch(`${window.API_URL}/api/routines/`, {
+    const response = await fetch(`/api/routines/`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
@@ -322,7 +319,7 @@ RoutineCreator.addEventListener('submit', async (e) => {
 });
 async function Delete(type, object, id){
   object.parentElement.parentElement.remove()
-  const resp = await fetch(`${window.API_URL}/api/${type}/${id}`,{
+  const resp = await fetch(`/api/${type}/${id}`,{
         method: 'DELETE',
         headers: {
             'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
