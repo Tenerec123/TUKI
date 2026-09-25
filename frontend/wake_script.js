@@ -48,12 +48,19 @@ const VAD_STOP_FRAMES = 25;
 // even if the VAD never reports silence.
 const MAX_CAPTURE_DURATION = 20;
 
+// Local wake-word confirmation tone. Generate it in the browser with Web Audio
+// so detection feedback needs no backend request or audio-file download.
+const CONFIRMATION_TONE_HZ = 880;
+const CONFIRMATION_DURATION_SECONDS = 0.12;
+const CONFIRMATION_GAIN = 0.08;
+
 let engine = null;              // OpenWakeWord instance (recreated on each start)
 let microphone = null;          // Microphone instance
 let running = false;
 let isPlaying = false;          // true while a sentence WAV is playing or queued
 let playbackQueue = [];         // ArrayBuffer[] of sentence WAVs awaiting playback
 let currentAudio = null;        // <audio> element currently playing a sentence
+let confirmationAudioContext = null; // Web Audio context for the detection tone
 
 // Streaming voice agent state (wake detected -> utterance end):
 let ws = null;                 // WebSocket to /api/ai/voice-agent-ws
@@ -82,6 +89,67 @@ function log(message, cls = "info") {
 
 function setScore(value) {
   scoreEl.textContent = value === null ? "score: --" : `score: ${value.toFixed(2)}`;
+}
+
+// ---------------------------------------------------------------------------
+// Wake-word confirmation tone: generated locally with Web Audio. The context is
+// prepared from the start button's user gesture so browser autoplay rules do
+// not suspend the sound when onDetection fires later.
+// ---------------------------------------------------------------------------
+async function prepareConfirmationAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    log("Confirmation sound unavailable: Web Audio is not supported.", "error");
+    return false;
+  }
+
+  if (!confirmationAudioContext || confirmationAudioContext.state === "closed") {
+    confirmationAudioContext = new AudioContextClass();
+  }
+  if (confirmationAudioContext.state !== "running") {
+    await confirmationAudioContext.resume();
+  }
+  return confirmationAudioContext.state === "running";
+}
+
+async function playConfirmationTone() {
+  try {
+    if (!(await prepareConfirmationAudio())) return;
+
+    const context = confirmationAudioContext;
+    const now = context.currentTime;
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+
+    oscillator.type = "sine";
+    oscillator.frequency.setValueAtTime(CONFIRMATION_TONE_HZ, now);
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(CONFIRMATION_GAIN, now + 0.01);
+    gain.gain.setValueAtTime(CONFIRMATION_GAIN, now + CONFIRMATION_DURATION_SECONDS - 0.02);
+    gain.gain.linearRampToValueAtTime(0, now + CONFIRMATION_DURATION_SECONDS);
+
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start(now);
+    oscillator.stop(now + CONFIRMATION_DURATION_SECONDS);
+    oscillator.addEventListener("ended", () => {
+      oscillator.disconnect();
+      gain.disconnect();
+    }, { once: true });
+  } catch (err) {
+    log(`Confirmation sound failed: ${err}`, "error");
+  }
+}
+
+async function closeConfirmationAudio() {
+  if (!confirmationAudioContext) return;
+  try {
+    await confirmationAudioContext.close();
+  } catch (err) {
+    log(`Confirmation audio close error: ${err}`, "error");
+  } finally {
+    confirmationAudioContext = null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +334,14 @@ async function startEngine() {
   setStatus("LOADING MODELS");
   log("Loading wake word engine... (models: python scripts/download_wake_models.py)");
 
+  // Unlock audio during the start-button gesture so wake detection feedback
+  // remains audible even though onDetection happens outside that gesture.
+  try {
+    await prepareConfirmationAudio();
+  } catch (err) {
+    log(`Confirmation sound unavailable: ${err}`, "error");
+  }
+
   // numThreads: 1 avoids the COOP/COEP headers required for shared memory.
   // Object form of wasmPaths (mjs + wasm) lets ORT dynamically import the
   // vendored jsep module; files are named .js (not .mjs) so the static file
@@ -285,9 +361,10 @@ async function startEngine() {
     vadStopFrames: VAD_STOP_FRAMES,
     maxCaptureDuration: MAX_CAPTURE_DURATION,
     onDetection: ({ label, score }) => {
-      if (!running || isPlaying) return; // ignore while a response is playing
+      if (!running || isPlaying || streaming) return; // one confirmation per command
       setStatus("WAKE WORD DETECTED");
       log(`DETECTED "${label}" score=${score.toFixed(3)} — streaming command...`, "detection");
+      playConfirmationTone();
       startVoiceStream();
     },
     onUtterance: async ({ label }) => {
@@ -331,6 +408,7 @@ async function stopEngine() {
     currentAudio.pause();
     currentAudio = null;
   }
+  await closeConfirmationAudio();
   try {
     if (microphone) await microphone.stop();
   } catch (err) {
@@ -361,6 +439,7 @@ toggleBtn.addEventListener("click", async () => {
     toggleBtn.innerHTML = iconMicFill;
     toggleBtn.classList.add("listening");
   } catch (err) {
+    await closeConfirmationAudio();
     setStatus("ERROR", true);
     log(`Engine failed to start: ${err}`, "error");
     log(
