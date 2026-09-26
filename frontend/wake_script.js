@@ -66,6 +66,17 @@ let confirmationAudioContext = null; // Web Audio context for the detection tone
 let ws = null;                 // WebSocket to /api/ai/voice-agent-ws
 let streaming = false;         // true between wake detection and utterance end
 let bytesStreamed = 0;         // audio bytes actually sent to the server
+let phrasesReceived = 0;      // phrase WAVs received for the current reply
+
+// The server applies ONE uniform treatment to every phrase (tail fade + short
+// inter-phrase silence) and cannot know which phrase ends the reply, so the
+// longer closing tail is applied here — the client is what knows the stream is
+// over. Played as the last queued item, it also keeps the wake word re-armed
+// only after the response has finished sounding.
+const CLOSING_TAIL_SECONDS = 0.4;
+// Silence is generated at this rate; a silent WAV lasts nframes/framerate, so
+// the rate only needs to be self-consistent to get the duration right.
+const SILENCE_WAV_RATE = 24000;
 
 // ---------------------------------------------------------------------------
 // Tiny console that mirrors key events to both the page log and the browser
@@ -181,6 +192,7 @@ function startVoiceStream() {
   if (streaming) return; // already streaming (another callback fired early)
   streaming = true;
   bytesStreamed = 0;
+  phrasesReceived = 0;
   setStatus("PROCESSING");
 
   ws = new WebSocket(WS_URL);
@@ -205,11 +217,18 @@ function startVoiceStream() {
       }
       return;
     }
-    // Binary frame: a WAV for one sentence — enqueue for sequential playback.
+    // Binary frame: a WAV for one phrase — enqueue for sequential playback.
     // Multiple frames arrive over time; the socket stays open until the whole
     // reply has been streamed, so do NOT treat each frame as the final one.
+    if (!running) {
+      // Engine stopped after this frame was dispatched: discard it, otherwise
+      // it would play and set the status over IDLE.
+      log("Phrase WAV discarded — engine stopped.", "info");
+      return;
+    }
     const bytes = event.data.byteLength;
-    log(`Sentence WAV received (${bytes} bytes)`);
+    phrasesReceived++;
+    log(`Phrase WAV received (${bytes} bytes)`);
     enqueueWav(event.data);
   };
 
@@ -227,7 +246,12 @@ function startVoiceStream() {
         setStatus("LISTENING");
         log("Reverted to LISTENING — say the wake word again.", "info");
       }
+      return;
     }
+    // Normal end of the reply: the server streamed every phrase and closed the
+    // socket. Append the closing tail as the last queued item so the response
+    // settles naturally (see CLOSING_TAIL_SECONDS).
+    if (phrasesReceived > 0) enqueueWav(makeSilenceWav(CLOSING_TAIL_SECONDS));
   };
 }
 
@@ -266,13 +290,40 @@ async function finishVoiceStream(label) {
 }
 
 // ---------------------------------------------------------------------------
-// Sequential playback queue: every sentence WAV arriving over the socket is
+// Sequential playback queue: every phrase WAV arriving over the socket is
 // enqueued and played one after the other (FIFO), so the user hears the first
-// sentence while the LLM is still producing the rest.
+// phrase while the LLM is still producing the rest.
 // ---------------------------------------------------------------------------
 function enqueueWav(wavBuffer) {
   playbackQueue.push(wavBuffer);
   if (!isPlaying) playNext();
+}
+
+// Build a silent mono 16-bit WAV of the requested duration, used as the
+// closing tail so the reply ends with a natural pause instead of a hard stop.
+function makeSilenceWav(seconds) {
+  const frames = Math.round(SILENCE_WAV_RATE * seconds);
+  const dataSize = frames * 2; // 1 channel * 16-bit
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+  const writeAscii = (offset, text) => {
+    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  };
+
+  writeAscii(0, "RIFF");
+  view.setUint32(4, 36 + dataSize, true);
+  writeAscii(8, "WAVE");
+  writeAscii(12, "fmt ");
+  view.setUint32(16, 16, true); // PCM fmt chunk size
+  view.setUint16(20, 1, true);  // audio format: PCM
+  view.setUint16(22, 1, true);  // channels: mono
+  view.setUint32(24, SILENCE_WAV_RATE, true);
+  view.setUint32(28, SILENCE_WAV_RATE * 2, true); // byte rate
+  view.setUint16(32, 2, true);  // block align
+  view.setUint16(34, 16, true); // bits per sample
+  writeAscii(36, "data");
+  view.setUint32(40, dataSize, true); // samples are already zero
+  return buffer;
 }
 
 function playNext() {
@@ -401,6 +452,10 @@ async function stopEngine() {
   ws?.close();
   ws = null;
   bytesStreamed = 0;
+  // Cleared so the onclose of the socket we just closed cannot see the
+  // discarded reply's count and enqueue a closing tail that would set the
+  // status to RESPONSE PLAYING after IDLE.
+  phrasesReceived = 0;
   // Barge-in: clear the queue and silence the currently playing sentence.
   playbackQueue = [];
   isPlaying = false;

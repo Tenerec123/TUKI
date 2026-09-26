@@ -18,3 +18,4 @@ sentence_transformers
 websockets>=15.0
 mcp==1.27.0
 anyio==4.13.0
+pytest>=8.0,<10.0

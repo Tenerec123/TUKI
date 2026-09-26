@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from typing import AsyncIterator
 from urllib.parse import urlencode
 
@@ -95,10 +96,13 @@ class DeepgramSTTProvider(STTProvider):
         url = f"{DEEPGRAM_WS_URL}?{urlencode(params)}"
         print(f"[deepgram] connecting to {url}")
 
+        t_start = time.perf_counter()
         transcript = ""
 
         async with websockets.connect(url, additional_headers=headers) as ws:
+            t_conn = time.perf_counter()
             print("[deepgram] connected to Deepgram WS")
+            print(f"[PERF] stt: connect={(t_conn - t_start) * 1000:.1f}ms")
 
             # Forward each incoming chunk to the socket as it arrives.
             chunk_count = 0
@@ -108,7 +112,11 @@ class DeepgramSTTProvider(STTProvider):
                     await ws.send(chunk)
                     chunk_count += 1
                     total_bytes += len(chunk)
+            # Anchor for finalization: the instant the last audio frame left.
+            t_fwd_end = time.perf_counter()
             print(f"[deepgram] forwarded {chunk_count} chunks / {total_bytes} bytes to Deepgram")
+            print(f"[PERF] stt: forward took={(t_fwd_end - t_conn) * 1000:.1f}ms "
+                  f"chunks={chunk_count} bytes={total_bytes}")
 
             # Signal that no more audio will be sent. Deepgram's documented
             # close message is CloseStream (not "Close").
@@ -123,6 +131,7 @@ class DeepgramSTTProvider(STTProvider):
             # tarea..." from multi-segment utterances).
             final_segments: list[str] = []
             last_interim = ""
+            t_first_final = None
             async for message in ws:
                 data = json.loads(message)
                 msg_type = data.get("type")
@@ -140,14 +149,33 @@ class DeepgramSTTProvider(STTProvider):
                 if not text:
                     continue
                 if data.get("is_final"):
+                    if t_first_final is None:
+                        t_first_final = time.perf_counter()
+                        print(f"[PERF] stt: first_final=+{(t_first_final - t_fwd_end) * 1000:.1f}ms "
+                              f"after last frame (endpointing fired early)")
                     final_segments.append(text)
                     transcript = " ".join(final_segments)
                 else:
                     last_interim = text
                 print(f"[deepgram] transcript={transcript!r}")
+            t_results_end = time.perf_counter()
 
         # Fall back to the last interim hypothesis when no final was received.
         if not final_segments and last_interim:
             transcript = last_interim
+        # Phase costs, not a single latency: Deepgram transcribes while the user
+        # speaks, so ``forward`` spans the utterance and ``wall_ms`` is mostly
+        # that same time. What the user actually waits on is ``connect`` plus
+        # ``finalize``.
+        t_end = time.perf_counter()
+        first_final_ms = (t_first_final - t_fwd_end) * 1000 if t_first_final else -1.0
+        print(
+            f"[PERF] stt: SUMMARY connect={(t_conn - t_start) * 1000:.1f}ms "
+            f"forward={(t_fwd_end - t_conn) * 1000:.1f}ms "
+            f"finalize={(t_results_end - t_fwd_end) * 1000:.1f}ms "
+            f"first_final={first_final_ms:.1f}ms "
+            f"wall_ms={(t_end - t_start) * 1000:.1f}ms "
+            f"chunks={chunk_count} bytes={total_bytes} finals={len(final_segments)}"
+        )
         print(f"[deepgram] session closed, returning transcript={transcript!r}")
         return transcript

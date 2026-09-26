@@ -1,5 +1,6 @@
 import os
 import asyncio
+import time
 from datetime import datetime
 from .tools.discovery import execute_tool_call
 from .config import get_model_config, get_orchestrator_provider_pin
@@ -47,6 +48,9 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
     if provider_pin:
         # Preferred provider first; OpenRouter falls back to others on error.
         extra_body['provider'] = {"order": [provider_pin]}
+    t_round = time.perf_counter()
+    ttft_text = None
+    ttft_tool = None
     stream = await client.chat.completions.create(
         model=model,
         messages=messages,
@@ -75,12 +79,18 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         choice = chunk.choices[0]
         delta = choice.delta
         if delta.content and delta.content.strip():
+            if ttft_text is None:
+                # Same non-blank test as the yield below, so TTFT marks the
+                # first delta the voice pipeline would actually speak.
+                ttft_text = (time.perf_counter() - t_round) * 1000
             if assistant_msg is None:
                 assistant_msg = {'role':'assistant', 'content':''}
                 messages.append(assistant_msg)
             assistant_msg['content'] += delta.content
             yield {"type":"agent","content":delta.content}
         if delta.tool_calls:
+            if ttft_tool is None:
+                ttft_tool = (time.perf_counter() - t_round) * 1000
             for tc in delta.tool_calls:
                 calls.setdefault(tc.index, {"id": "", "name": "", "arguments": ""})
                 if tc.id:
@@ -91,6 +101,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
                     calls[tc.index]["arguments"] += tc.function.arguments
         if choice.finish_reason:
             finish = choice.finish_reason
+    t_stream_end = time.perf_counter()
 
     # Debug: log any text the model emitted in THIS round (per-round text may
     # arrive interleaved with tool calls; without this line the agent logs
@@ -135,21 +146,36 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
                 "content": result,
             })
             yield {"type":"tool_result","content":{'id':id, 'name':name, 'result':result}}
- 
+
+    t_round_end = time.perf_counter()
+    # text=no marks a silent tool-only round: gpt-oss-120b emits no text while
+    # gpt-6-luna does, so a silent round is a round the user waits through
+    # hearing nothing.
+    _log(f"[PERF] agent: round={label} round_ms={(t_round_end - t_round) * 1000:.1f} "
+         f"ttft_text={f'{ttft_text:.1f}' if ttft_text is not None else '-'} "
+         f"ttft_tool={f'{ttft_tool:.1f}' if ttft_tool is not None else '-'} "
+         f"stream_ms={(t_stream_end - t_round) * 1000:.1f} "
+         f"tools_ms={(t_round_end - t_stream_end) * 1000:.1f} "
+         f"text={'yes' if assistant_msg else 'no'} tool_calls={len(calls)}")
+
     if finish == "stop" or len(calls) == 0: yield {"type":"finish", "content":""}
     
 async def openai_agent(messages:list, model:str, max_rounds:int, tool_schemas: list, conv_id:int=-1):
     _log(f"═══════════════════════════════════════════════")
     _log(f"AGENT START — model={model}")
+    t_agent = time.perf_counter()
     try:
         for i in range(max_rounds):
+            t_loop = time.perf_counter()
             _log(f"── Round {i+1}/{max_rounds}")
+            _log(f"[PERF] agent: round={i+1}/{max_rounds} start=+{(t_loop - t_agent) * 1000:.1f}ms")
             is_last = i == max_rounds - 1
             async for token in _agentic_round(messages, model, tool_schemas, is_last=is_last, session_id= str(conv_id), label= f"round-{i+1}/{max_rounds}"):
                 yield token
                 if token['type'] == "finish": break
             else: continue
             break
+        _log(f"[PERF] agent: AGENT_END total_ms={(time.perf_counter() - t_agent) * 1000:.1f}ms")
         _log("AGENT END — OK")
     except Exception as e:
         _log(f"AGENT ERROR: {e}")
