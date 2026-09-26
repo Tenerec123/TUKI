@@ -5,7 +5,7 @@ from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, Pro
 from ...database import SessionLocal
 from ...logic.tasks import create_task_logic, delete_task_logic, update_task_logic
 from ...logic.projects import create_project_logic, delete_project_logic, update_project_logic
-from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic
+from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic, set_routine_check_logic
 from ...logic.events import create_event_logic, delete_event_logic, update_event_logic
 from ...logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
 from ._helpers import _icon_fallback, _resolve_project
@@ -134,6 +134,29 @@ def UpdateRoutine(routine_id: int, name: str = None, description: str = None, pr
             ),
             db=db)
         return f"Routine {routine.name} with id:{routine_id} successfully updated{note}"
+
+def SetRoutineCheck(routine_id: int, day: str, checked: bool):
+    '''
+    Marks or unmarks a routine as done on a specific day.
+    Args:
+        checked: true to mark the routine as done, false to unmark it.
+    '''
+    info_to_the_model = {
+        "applied":"change applied",
+        "unchanged":"nothing changed, it was already as desired",
+        "unavailable_future": "you cannot change future dates",
+        "unavailable_out": "date out of routine scope"
+    }
+    try:
+        target = date.fromisoformat(day)
+        with SessionLocal() as db:
+            return info_to_the_model[set_routine_check_logic(
+                id=routine_id,
+                day=target,
+                checked=checked,
+                db=db)]
+    except (HTTPException, ValidationError, ValueError, TypeError) as e:
+        return f"Error updating routine check: {e}"
 
 
 def CreateProject(name: str, description: str = None, priority: int = None, parent_id: int = None, parent_name: str = None):

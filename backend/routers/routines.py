@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from datetime import date
 from typing import List
 from ..schemas import RoutineCreate, RoutineSchema, RoutineUpdate, RoutineToday, RoutineCheckSchema
 from ..database import get_db
-from ..logic.routines import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, check_routine_logic, uncheck_routine_logic, get_routine_stats_logic, get_accuracy_logic
+from ..logic.routines import get_routine_logic, get_all_routine_logic, create_routine_logic, update_routine_logic, delete_routine_logic, get_today_routine_logic, set_routine_check_logic, get_routine_stats_logic, get_accuracy_logic, current_date
 router = APIRouter(
     prefix="/api/routines",
     tags=["routines"]
@@ -29,13 +30,16 @@ def get_routine(id:int, db: Session = Depends(get_db)):
 def get_all_routine(db: Session = Depends(get_db)):
     return get_all_routine_logic(db=db)
 
-@router.post("/check/{id:str}")
-def check_routine(id:int, db:Session = Depends(get_db)):
-    return check_routine_logic(id=id,db=db)
+@router.post("/check/{id:int}")
+def check_routine(id: int, day: date = None, db: Session = Depends(get_db)):
+    # current_date(), not date.today(): the container runs UTC.
+    if day is None: day = current_date()
+    return set_routine_check_logic(id=id, day=day, checked=True, db=db)
 
-@router.delete("/uncheck/{id:str}")
-def uncheck_routine(id:int, db:Session = Depends(get_db)):
-    return uncheck_routine_logic(id=id,db=db)
+@router.delete("/uncheck/{id:int}")
+def uncheck_routine(id: int, day: date = None, db: Session = Depends(get_db)):
+    if day is None: day = current_date()
+    return set_routine_check_logic(id=id, day=day, checked=False, db=db)
 
 @router.post("/", response_model=RoutineSchema)
 def create_routine(routine: RoutineCreate, db: Session = Depends(get_db)):
