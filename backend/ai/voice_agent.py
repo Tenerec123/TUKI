@@ -8,7 +8,7 @@ from typing import AsyncIterator
 from .stt import get_stt_provider
 from .agent import openai_agent
 from .config import get_model_config, AUDIO_SYSTEM_PROMPT
-from .tools.discovery import ALL_TOOL_SCHEMAS
+from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 from .tts import mark_phrase_complete, text_to_speech_wav
 
 # Sentence terminators recognized by the streaming splitter.
@@ -197,7 +197,7 @@ async def voice_agent_logic(stream) -> AsyncIterator[bytes]:
                 messages=messages,
                 model=get_model_config()['orchestrator'],
                 max_rounds=10,
-                tool_schemas=ALL_TOOL_SCHEMAS,
+                tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
             ):
                 if isinstance(token, str):
                     # The agent yields the literal string 'ERROR_TOKEN' on failure.

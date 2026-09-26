@@ -43,6 +43,7 @@ If you have not found all data asked, give what you have and say what lacks.
 # ("provider.order" request field), not the deprecated ":provider" suffix.
 ORCHESTRATOR_PROVIDER_PINS = {
     "openai/gpt-oss-120b": "cerebras",
+    "z-ai/glm-5.3-flash": "together",
 }
 
 
