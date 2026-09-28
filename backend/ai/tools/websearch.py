@@ -7,6 +7,7 @@ exposed as an LLM tool, it is internal plumbing for those two tools.
 import asyncio
 import io
 import ipaddress
+import logging
 import socket
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
@@ -16,7 +17,32 @@ from curl_cffi.requests import AsyncSession
 from ddgs import DDGS
 from pypdf import PdfReader
 
+logger = logging.getLogger(__name__)
+
 SEARCH_RESULTS = 5
+
+# Search engines, queried in PARALLEL and merged into a single ranked list of
+# SEARCH_RESULTS rows. Measured over 36 queries (en/es/news): 0.6s median
+# against 1.5-6.1s for the ddgs "auto" default, which fans out to every engine
+# and pays for the slowest one. Both engines together cost barely more than
+# yandex alone, so one going down or blocking degrades the blend instead of
+# emptying it. "auto" is deliberately NOT in this list: ddgs expands it to every
+# engine and shuffles the order, which would undo the speed.
+SEARCH_BACKENDS = 'yandex,bing'
+
+# Rendered in the browser: the HTML we get back is navigation chrome, not content.
+UNFETCHABLE_DOMAINS = (
+    'youtube.com',
+    'youtu.be',
+    'tiktok.com',
+    'twitter.com',
+    'x.com',
+    'pinterest.com',
+)
+
+# Overfetch, so dropping the dead ones does not shrink the result set.
+SEARCH_CANDIDATES = SEARCH_RESULTS * 3
+
 FETCH_TIMEOUT_S = 8.0
 FETCH_DEADLINE_S = 10.0
 MIN_PAGE_CHARS = 200
@@ -45,15 +71,35 @@ class Page:
     text: str
 
 
+def _is_unfetchable(url: str) -> bool:
+    host = (urlparse(url).hostname or '').lower()
+    return any(host == d or host.endswith('.' + d) for d in UNFETCHABLE_DOMAINS)
+
+
 def search(query: str) -> list[dict]:
     """Return raw search rows (at least `href` and `title`).
 
     Single entry point for search: swap the body of this function to change
     search provider. Nothing else in the codebase talks to a search backend.
     """
-    with DDGS() as ddgs:
-        rows = list(ddgs.text(query, max_results=SEARCH_RESULTS))
-    return [r for r in rows if isinstance(r, dict) and r.get("href")]
+    try:
+        with DDGS() as ddgs:
+            rows = list(ddgs.text(query, max_results=SEARCH_CANDIDATES, backend=SEARCH_BACKENDS))
+    except Exception:
+        logger.warning('search backend failed for query %r', query, exc_info=True)
+        return []
+
+    kept: list[dict] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        href = row.get('href')
+        if not href or _is_unfetchable(href):
+            continue
+        kept.append(row)
+        if len(kept) == SEARCH_RESULTS:
+            break
+    return kept
 
 
 def _is_public_http_url(url: str) -> bool:
