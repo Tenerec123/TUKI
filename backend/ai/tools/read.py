@@ -8,14 +8,12 @@ from ...logic.projects import get_all_project_logic, search_projects_logic
 from ...logic.routines import get_all_routine_logic, search_routines_logic
 from ...logic.events import get_all_events_logic, search_events_logic
 from ...logic.notes import get_note_logic, search_notes_logic
-import asyncio
 import urllib.request
 import json
 import urllib.parse
 import imaplib
 import email as email_lib
-from curl_cffi.requests import AsyncSession
-from trafilatura import fetch_url, extract
+from .websearch import fetch_page
 import yfinance as yf
 
 
@@ -287,24 +285,5 @@ async def WebFetch(url: str):
     '''
     Fetch a web page and return its main text content, clean of HTML.
     '''
-    try:
-        html = await asyncio.to_thread(fetch_url, url)
-        if html:
-            text = extract(html)
-            if text and len(text) > 200:
-                return text
-        html = None
-    except Exception:
-        # Degrade to the fallback instead of crashing the whole search.
-        html = None
-
-    # Fallback: curl_cffi impersonates Chrome's TLS fingerprint to bypass bot detection
-    try:
-        async with AsyncSession(impersonate="chrome") as session:
-            resp = await session.get(url, timeout=15.0)
-            html = resp.text if resp.status_code < 400 else None
-    except Exception:
-        html = None
-
-    text = extract(html) if html else ""
+    text = await fetch_page(url)
     return text or f"Error: Could not extract content from {url}"

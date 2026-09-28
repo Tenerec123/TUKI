@@ -32,9 +32,17 @@ Audio mode: your reply is spoken aloud, never read.
 
 WEB_SEARCH_SYSTEM_PROMPT = '''
 You are a web search summarizer.
-Respond only what is asked in the query as short as possible.
-If you have not found all data asked, give what you have and say what lacks.
+-- Answer only what the query asked, as short as possible, no preamble.
+-- Cite every claim with its bracketed page number, like [1].
+-- Drop any claim no page supports.
+-- End with a line "Sources:" and one line per number you used: "1. <title> (<url>)".
+-- If the pages do not answer the query, say what is missing.
+-- NEVER invent facts, dates or numbers.
 '''
+
+# Character cap, not a token cap: max_tokens counts reasoning tokens for reasoning
+# models, so it fights the summarizer instead of bounding it.
+SUMMARY_MAX_CHARS = 1200
 
 # Hardcoded provider pins: when the orchestrator is one of these base models,
 # OpenRouter is asked to try this provider FIRST, falling back to other

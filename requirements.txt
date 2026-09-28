@@ -13,6 +13,7 @@ psycopg[binary]
 ddgs>=9.0.0
 curl_cffi>=0.15.0
 trafilatura>=1.8.0
+pypdf>=5.0.0
 yfinance
 sentence_transformers
 websockets>=15.0
