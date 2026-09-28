@@ -2,6 +2,29 @@ from ..config import WEB_SEARCH_SYSTEM_PROMPT, SUMMARY_MAX_CHARS, get_model_conf
 from .websearch import fetch_pages, search
 import asyncio
 
+# The summarizer call is bounded so a slow provider cannot stall the tool. The
+# fetch side is already capped (8s per URL, 10s per batch), but the model call
+# had no timeout and the OpenAI SDK default is 600s. A normal call is 2-4s, so
+# 15s is roughly 4x headroom over the common case while cutting off the tail
+# that was observed reaching 19s. On timeout we fall back to the raw sources.
+SUMMARY_TIMEOUT_S = 15.0
+
+async def _consume(stream):
+    """Drain the summarizer stream into (text, truncated).
+
+    The agent yields the literal string 'ERROR_TOKEN' when a round raises, which
+    happens AFTER whatever already streamed, so the text may be partial.
+    """
+    result = ""
+    truncated = False
+    async for token in stream:
+        if isinstance(token, str):
+            truncated = True
+            break
+        if token['type'] == "agent":
+            result += token['content']
+    return result, truncated
+
 async def WebSearch(query: str):
     '''
     Searches the internet and returns a written summary of the sources it found.
@@ -37,18 +60,20 @@ async def WebSearch(query: str):
     ]
     result = ""
     truncated = False
-    async for token in openai_agent(
-        messages=messages,
-        model=get_model_config()['searcher'],
-        max_rounds=1,
-        tool_schemas=[]):
-        # The agent yields the literal string 'ERROR_TOKEN' when a round raises,
-        # which happens AFTER whatever already streamed, so the text may be partial.
-        if isinstance(token, str):
-            truncated = True
-            break
-        if token['type'] == "agent":
-            result += token['content']
+    try:
+        result, truncated = await asyncio.wait_for(
+            _consume(openai_agent(
+                messages=messages,
+                model=get_model_config()['searcher'],
+                max_rounds=1,
+                tool_schemas=[])),
+            timeout=SUMMARY_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        # The pages are already downloaded, so the user is not left with nothing:
+        # hand back the raw sources with their URLs instead of the summary.
+        listing = "\n".join(f"- {p.url}" for p in pages)
+        return (f"The summary took longer than {SUMMARY_TIMEOUT_S:.0f}s. "
+                f"Raw sources for '{query}':\n{listing}")
 
     # Pages were fetched above, so an empty result is a summarizer failure, not
     # a missing-source one: say so instead of blaming the sources.
