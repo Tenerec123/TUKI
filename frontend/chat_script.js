@@ -904,10 +904,16 @@ function SendModelConfig(){
     }
     const modelId = (el) => el ? el.getAttribute('data-model') : null;
     const orch = getSelectedModelItem('orchestrator-name');
+    const searcher = getSelectedModelItem('searcher-name');
+    // Model and effort are sent as SEPARATE fields for every reasoning model,
+    // and the backend composes "MODEL_ID EFFORT" when it stores them. The
+    // client must not build the composite itself: a client older than the
+    // backend would write the row without the effort and the failure is silent.
     const config = {
         "orchestrator": modelId(orch),
         "orchestrator_effort": computeReasoningEffort(orch),
-        "searcher": modelId(getSelectedModelItem('searcher-name')),
+        "searcher": modelId(searcher),
+        "searcher_effort": computeReasoningEffort(searcher),
         "stt": modelId(getSelectedModelItem('stt-name')),
     };
     if (!config.orchestrator || !config.searcher) {

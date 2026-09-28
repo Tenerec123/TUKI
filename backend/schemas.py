@@ -3,11 +3,11 @@ from datetime import date, datetime
 from typing import List, Optional, Literal, Union, Annotated
 
 class ModelConfig(BaseModel):
-    orchestrator: str = Field(max_length=100)  # composite "MODEL_ID EFFORT" must fit config.value VARCHAR(128)
-    # Reasoning effort for the orchestrator model ("none", "low", ...).
-    # None means "not saved yet, use default 'none'".
+    orchestrator: str = Field(max_length=100)
     orchestrator_effort: Optional[str] = Field(default=None, max_length=16)
     searcher: Optional[str] = Field(default=None, max_length=128)
+
+    searcher_effort: Optional[str] = Field(default=None, max_length=16)
     stt: Optional[str] = Field(default=None, max_length=128)
 
 class BaseItem(BaseModel):

@@ -3,7 +3,7 @@ import asyncio
 import time
 from datetime import datetime
 from .tools.discovery import execute_tool_call
-from .config import get_model_config, get_orchestrator_provider_pin
+from .config import get_model_config, get_model_effort, get_orchestrator_provider_pin
 from . import cost_tracker
 from openai import AsyncOpenAI
 import traceback
@@ -37,11 +37,15 @@ client = AsyncOpenAI(
 
 async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last: bool = False, session_id: str = "-1", label: str = ""):
     cfg = get_model_config()
-    effort = 'none'
-    if model.split(":")[0] == cfg.get('orchestrator', '').split(":")[0]:
-        effort = cfg.get('orchestrator_effort', 'none')
     extra_body: dict = {}
-    if effort and effort != 'none':
+    # Sent whenever an effort is configured, INCLUDING 'none'. Omitting the
+    # field leaves the choice to the provider, and inclusionai/ling-3.0-flash
+    # defaults to reasoning ON: measured 380 reasoning tokens and 3.8s to first
+    # token, against 0 tokens and 0.9s with effort explicitly none. In voice
+    # that is dead air before the summary can start. The value itself is never
+    # decided here, it always comes from the per-model config.
+    effort = get_model_effort(model, cfg)
+    if effort is not None:
         extra_body['reasoning'] = {'effort': effort}
     if session_id != "-1": extra_body['session_id'] = session_id
     provider_pin = get_orchestrator_provider_pin(model)
