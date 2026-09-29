@@ -67,6 +67,7 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
     calls: dict[int, dict] = {}
     assistant_msg = None
     finish = None
+    inference_closed = False
     async for chunk in stream:
         # OpenRouter sends usage on the final chunk (may arrive without choices)
         if chunk.usage:
@@ -83,6 +84,8 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         choice = chunk.choices[0]
         delta = choice.delta
         if delta.content and delta.content.strip():
+            if inference_closed:
+                inference_closed = False
             if ttft_text is None:
                 # Same non-blank test as the yield below, so TTFT marks the
                 # first delta the voice pipeline would actually speak.
@@ -93,6 +96,9 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
             assistant_msg['content'] += delta.content
             yield {"type":"agent","content":delta.content}
         if delta.tool_calls:
+            if not inference_closed and assistant_msg is not None and assistant_msg.get("content"):
+                inference_closed = True
+                yield {"type":"inference_end","content":""}
             if ttft_tool is None:
                 ttft_tool = (time.perf_counter() - t_round) * 1000
             for tc in delta.tool_calls:
@@ -105,6 +111,9 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
                     calls[tc.index]["arguments"] += tc.function.arguments
         if choice.finish_reason:
             finish = choice.finish_reason
+            if not inference_closed and assistant_msg is not None and assistant_msg.get("content"):
+                inference_closed = True
+                yield {"type":"inference_end","content":""}
     t_stream_end = time.perf_counter()
 
     # Debug: log any text the model emitted in THIS round (per-round text may
