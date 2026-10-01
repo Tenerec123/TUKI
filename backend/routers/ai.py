@@ -1,18 +1,15 @@
 from ..schemas import Prompt
-from fastapi import APIRouter, UploadFile, File, Response, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, UploadFile, File, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from ..ai.stt import get_stt_provider
 from ..ai.stream_manager import stream_manager
 from ..ai.chat import chat_persistence_wrapper
 from ..ai.agent import openai_agent
-from ..ai.tts import TTS_CHANNELS, TTS_SAMPLE_WIDTH, TTS_DEFAULT_RATE
 from ..ai.voice_agent import voice_agent_logic
 from ..ai.config import get_model_config, AUDIO_SYSTEM_PROMPT
 from ..ai.tools.discovery import ALL_TOOL_SCHEMAS
 import asyncio
-import io
 import json
-import wave
 from typing import AsyncIterator
 
 router = APIRouter(
@@ -52,36 +49,6 @@ async def stt_conversion(file: UploadFile = File(...)):
         content_type=file.content_type or "audio/ogg",
     )
     return result_text
-
-@router.post("/voice-agent")
-async def voice_agent(request: Request):
-    # voice_agent_logic streams one WAV per phrase with no framing, so legacy
-    # clients (ESP32, curl) still get a single valid WAV. The header is written
-    # from the TTS constants up front: a reply can legitimately have zero
-    # phrases (input like "...", a failed agent turn), and a writer closed with
-    # no params raises instead of returning anything.
-    combined = io.BytesIO()
-    phrase_count = 0
-    with wave.open(combined, "wb") as out:
-        out.setnchannels(TTS_CHANNELS)
-        out.setsampwidth(TTS_SAMPLE_WIDTH)
-        out.setframerate(TTS_DEFAULT_RATE)
-        async for wav_bytes in voice_agent_logic(request.stream()):
-            with wave.open(io.BytesIO(wav_bytes), "rb") as src:
-                params = (src.getnchannels(), src.getsampwidth(), src.getframerate())
-                if params != (out.getnchannels(), out.getsampwidth(), out.getframerate()):
-                    # Concatenating mismatched PCM would emit corrupt audio.
-                    raise ValueError(
-                        f"Inconsistent PCM parameters across phrases: {params} != "
-                        f"{(out.getnchannels(), out.getsampwidth(), out.getframerate())}"
-                    )
-                out.writeframes(src.readframes(src.getnframes()))
-            phrase_count += 1
-    if phrase_count == 0:
-        # Nothing to speak is a valid outcome (the WS path just closes the
-        # socket), so answer with a silent WAV instead of a 500.
-        print("[voice-agent] no phrases to synthesize — returning an empty WAV")
-    return Response(content=combined.getvalue(), media_type="audio/wav")
 
 
 @router.websocket("/voice-agent-ws")
