@@ -21,7 +21,6 @@ Tool Calls:
 AUDIO_SYSTEM_PROMPT = SYSTEM_PROMPT + '''
 Audio mode: your reply is spoken aloud, never read.
 -- Plain text only: no markdown, no LaTeX, no $ math.
--- Spell numbers for speech: "dos punto cero" not "2.0", "raíz de dos" not "sqrt(2)".
 -- Never use a period mid-phrase.
 -- One short sentence per thought, and stop as soon as the answer is given.
 -- Never repeat data the user just gave you.
@@ -59,7 +58,7 @@ MODEL_KEYS = (
     'exec_tools', 'final_resp', 'get_data', 'general',
 )
 # Keys in the same dict that are NOT models, so they must not be split.
-NON_MODEL_KEYS = ('stt_provider',)
+NON_MODEL_KEYS = ('stt_provider', 'tts_provider')
 
 # Reasoning effort levels OpenRouter accepts. Anything else in a stored value is
 # ignored rather than sent, so a corrupted row degrades to the provider default
@@ -125,6 +124,7 @@ def get_model_config() -> dict:
         'searcher': 'google/gemini-2.5-flash-lite',
         'stt': 'nvidia/parakeet-tdt-0.6b-v3',
         'stt_provider': 'openrouter',  # 'openrouter' or 'deepgram'
+        'tts_provider': 'deepgram',
     }
     try: 
         db = SessionLocal()
