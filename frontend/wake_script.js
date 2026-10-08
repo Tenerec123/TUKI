@@ -4,10 +4,13 @@
 // entirely in the browser via onnxruntime-web WASM. When the wake word is
 // detected, the follow-up utterance is STREAMED as 16 kHz PCM to the backend
 // over a WebSocket (/api/ai/voice-agent-ws), so the backend can forward it to
-// Deepgram in real time while the user still speaks. The backend synthesizes
-// the reply SENTENCE BY SENTENCE: each sentence WAV arrives as its own binary
-// frame and is queued for sequential playback with plain <audio> elements, so
-// the user hears the first sentence while the LLM is still generating the rest.
+// Deepgram in real time while the user still speaks. The reply travels back
+// over the same socket in one of two shapes: with ?proto=2 a JSON pcm_start
+// preamble declares the sample rate and the audio then arrives as raw PCM16
+// binary frames scheduled through Web Audio; without the param each sentence
+// arrives as its own WAV frame and is queued for sequential <audio> playback.
+// Either way the first sentence is audible while the LLM is still generating
+// the rest.
 //
 // Why WebSocket instead of HTTP streaming: browser streaming uploads (a
 // ReadableStream request body with duplex "half") require HTTP/2, which
@@ -21,7 +24,7 @@
 import { OpenWakeWord, configureOrt } from "openwakeword-web";
 import { Microphone } from "openwakeword-web/microphone";
 
-const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/ai/voice-agent-ws`;
+const WS_URL = `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/api/ai/voice-agent-ws?proto=2`;
 
 const statusEl = document.getElementById("status");
 const toggleBtn = document.getElementById("toggle-btn");
@@ -73,7 +76,17 @@ let confirmationAudioContext = null; // Web Audio context for the detection tone
 let ws = null;                 // WebSocket to /api/ai/voice-agent-ws
 let streaming = false;         // true between wake detection and utterance end
 let bytesStreamed = 0;         // audio bytes actually sent to the server
-let phrasesReceived = 0;      // phrase WAVs received for the current reply
+let bytesReceived = 0;         // audio bytes received from server (PCM or WAV)
+let firstPcmReceived = false;  // first frame received for this reply
+let pcmAudioCtx = null;
+let pcmNextTime = 0;
+let pcmGen = 0;                // reply generation; bumping invalidates scheduled sources
+let pcmPending = 0;            // current generation's buffers scheduled but not ended
+let pcmMode = false;
+let pcmModeDecided = false;    // the first binary frame decided WAV vs PCM
+let pcmSrcRate = 0;            // rate declared by the reply's pcm_start
+let resampleTail = new Float32Array(0); // input samples carried across frames when resampling
+let resampleFrac = 0;          // fractional read position carried across frames
 
 // Pre-roll ring — always rotating, even while idle.
 let ringFrames = [];
@@ -134,6 +147,25 @@ async function prepareConfirmationAudio() {
     await confirmationAudioContext.resume();
   }
   return confirmationAudioContext.state === "running";
+}
+
+// The PCM player's AudioContext is created and resumed from the start button's
+// gesture, so autoplay rules do not suspend reply playback later. The per-reply
+// rate check lives in configurePcmPlayer: a context is pinned to one rate.
+async function preparePcmAudio() {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    log("PCM playback unavailable: Web Audio is not supported.", "error");
+    return false;
+  }
+
+  if (!pcmAudioCtx || pcmAudioCtx.state === "closed") {
+    pcmAudioCtx = new AudioContextClass();
+  }
+  if (pcmAudioCtx.state !== "running") {
+    await pcmAudioCtx.resume();
+  }
+  return pcmAudioCtx.state === "running";
 }
 
 async function playConfirmationTone() {
@@ -218,15 +250,17 @@ function flushPending() {
 // wake word's onset and startVoiceStream() opens the socket; frames keep
 // joining pendingFrames until the socket is OPEN, then the whole batch goes
 // out and live frames follow via pushAudioFrame(); VAD end ->
-// finishVoiceStream() sends {"type":"end"} so the backend can answer; each
-// sentence WAV arrives as its own binary frame and is queued for sequential
-// playback.
+// finishVoiceStream() sends {"type":"end"} so the backend can answer. The
+// reply arrives either as a JSON pcm_start preamble followed by raw PCM16
+// frames (?proto=2, played by the Web Audio PCM player) or as one binary WAV
+// per sentence (legacy, queued for sequential <audio> playback).
 // ---------------------------------------------------------------------------
 function startVoiceStream() {
   if (streaming) return; // already streaming (another callback fired early)
   streaming = true;
   bytesStreamed = 0;
-  phrasesReceived = 0;
+  bytesReceived = 0;
+  firstPcmReceived = false;
   setStatus("PROCESSING");
 
   ws = new WebSocket(WS_URL);
@@ -237,34 +271,72 @@ function startVoiceStream() {
     flushPending();
   };
 
+  // New reply: invalidate the previous generation's scheduled sources. The
+  // AudioContext is deliberately kept — closing it per reply would throw away
+  // the context unlocked in the start-button gesture (see preparePcmAudio).
+  pcmMode = false;
+  pcmModeDecided = false;
+  pcmSrcRate = 0;
+  pcmGen++;
+  pcmPending = 0;
+  pcmNextTime = 0;
+  resetPcmResampler();
+
   ws.onmessage = (event) => {
     if (typeof event.data === "string") {
-      // JSON error frame from the backend.
-      let detail = event.data;
+      // JSON frame: pcm_start or error
+      let parsed;
       try {
-        const parsed = JSON.parse(event.data);
-        if (parsed.detail) detail = parsed.detail;
-      } catch { /* not JSON — log the raw text */ }
-      log(`Voice agent error: ${detail}`, "error");
-      if (running) {
-        setStatus("LISTENING");
-        log("Reverted to LISTENING — say the wake word again.", "info");
+        parsed = JSON.parse(event.data);
+      } catch {
+        log(`Voice agent message: ${event.data}`, "info");
+        return;
+      }
+      if (parsed.type === "error") {
+        log(`Voice agent error: ${parsed.detail || event.data}`, "error");
+        if (running) {
+          setStatus("LISTENING");
+          log("Reverted to LISTENING — say the wake word again.", "info");
+        }
+        return;
+      }
+      if (parsed.type === "pcm_start") {
+        pcmMode = true;
+        configurePcmPlayer(parsed.sample_rate || 24000);
       }
       return;
     }
-    // Binary frame: a WAV for one phrase — enqueue for sequential playback.
-    // Multiple frames arrive over time; the socket stays open until the whole
-    // reply has been streamed, so do NOT treat each frame as the final one.
+    // Binary frame
     if (!running) {
-      // Engine stopped after this frame was dispatched: discard it, otherwise
-      // it would play and set the status over IDLE.
-      log("Phrase WAV discarded — engine stopped.", "info");
+      log("Audio frame discarded — engine stopped.", "info");
       return;
     }
-    const bytes = event.data.byteLength;
-    phrasesReceived++;
-    log(`Phrase WAV received (${bytes} bytes)`);
-    enqueueWav(event.data);
+    const arrayBuffer = event.data;
+    const bytes = arrayBuffer.byteLength;
+    bytesReceived += bytes;
+    if (!pcmModeDecided) {
+      // The FIRST binary frame decides the mode for the whole reply; later
+      // frames are never re-sniffed (a PCM chunk could start with "RIFF").
+      pcmModeDecided = true;
+      if (!pcmMode) {
+        const first4 = new Uint8Array(arrayBuffer, 0, Math.min(4, bytes));
+        const isRiff = first4[0] === 82 && first4[1] === 73 && first4[2] === 70 && first4[3] === 70;
+        pcmMode = !isRiff;
+      }
+    }
+    if (pcmMode) {
+      if (!firstPcmReceived) {
+        log(`PCM frame received (${bytes} bytes)`);
+        firstPcmReceived = true;
+      }
+      enqueuePcm(arrayBuffer);
+      return;
+    }
+    if (!firstPcmReceived) {
+      log(`WAV received (${bytes} bytes)`);
+      firstPcmReceived = true;
+    }
+    enqueueWav(arrayBuffer);
   };
 
   ws.onerror = () => {
@@ -278,16 +350,27 @@ function startVoiceStream() {
       streaming = false;
       pendingFrames = null;
       bytesStreamed = 0;
+      closePcmPlayer();
+      isPlaying = false; // the context close stopped any sounding audio
       if (running) {
         setStatus("LISTENING");
         log("Reverted to LISTENING — say the wake word again.", "info");
       }
       return;
     }
-    // Normal end of the reply: the server streamed every phrase and closed the
-    // socket. Append the closing tail as the last queued item so the response
-    // settles naturally (see CLOSING_TAIL_SECONDS).
-    if (phrasesReceived > 0) enqueueWav(makeSilenceWav(CLOSING_TAIL_SECONDS));
+    // Normal end of the reply: socket closed after streaming. The closing
+    // tail is appended as the last scheduled item so the response settles
+    // naturally (see CLOSING_TAIL_SECONDS).
+    if (bytesReceived > 0) {
+      if (pcmMode) appendPcmSilence(CLOSING_TAIL_SECONDS);
+      else enqueueWav(makeSilenceWav(CLOSING_TAIL_SECONDS));
+    }
+    if (pcmMode) {
+      // Status stays RESPONSE PLAYING until the last buffer ends (drain).
+      maybeFinishPcm(pcmGen);
+    } else if (playbackQueue.length === 0 && !isPlaying) {
+      finishReplyPlayback();
+    }
   };
 }
 
@@ -368,12 +451,8 @@ function makeSilenceWav(seconds) {
 
 function playNext() {
   if (playbackQueue.length === 0) {
-    // Queue drained — back to listening.
-    isPlaying = false;
-    if (running) {
-      setStatus("LISTENING");
-      log("Response finished — back to LISTENING.", "info");
-    }
+    if (ws === null) finishReplyPlayback();
+    else isPlaying = false;
     return;
   }
   isPlaying = true;
@@ -405,6 +484,167 @@ function playResponse(wavBuffer) {
   enqueueWav(wavBuffer);
 }
 
+// PCM player (proto=2): raw PCM16 frames scheduled as AudioBufferSources on
+// pcmAudioCtx. pcmGen stamps every scheduled source so a superseded reply's
+// callbacks cannot touch state; pcmPending counts the current generation's
+// sources that have not ended. The reply is drained — and only then is the
+// wake word re-armed — when the socket is closed AND pcmPending hits zero.
+function configurePcmPlayer(sampleRate) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+  try {
+    pcmSrcRate = sampleRate;
+    // A context is pinned to one rate: reuse only when it already matches the
+    // reply's declared rate; otherwise close it and recreate (never orphan one).
+    if (pcmAudioCtx && pcmAudioCtx.state !== "closed" && pcmAudioCtx.sampleRate !== sampleRate) {
+      try {
+        pcmAudioCtx.close();
+      } catch (e) {
+        log(`PCM context close error: ${e}`, "error");
+      }
+      pcmAudioCtx = null;
+    }
+    if (!pcmAudioCtx || pcmAudioCtx.state === "closed") {
+      try {
+        pcmAudioCtx = new AudioContextClass({ sampleRate });
+      } catch (e) {
+        // Browser rejected the rate: fall back — enqueuePcm resamples to
+        // whatever rate the context actually runs at.
+        pcmAudioCtx = new AudioContextClass();
+      }
+    }
+    if (pcmAudioCtx.state !== "running") {
+      pcmAudioCtx.resume().catch((err) => log(`PCM context resume failed: ${err}`, "error"));
+    }
+    resetPcmResampler();
+    pcmNextTime = pcmAudioCtx.currentTime + 0.08; // prebuffer ~80ms
+    isPlaying = true;
+    setStatus("RESPONSE PLAYING");
+  } catch (e) {
+    console.error("PCM player config failed", e);
+  }
+}
+
+// Queue one raw PCM16 frame (ArrayBuffer) for gapless playback, resampling
+// linearly to the context's rate when the browser rejected the declared one.
+function enqueuePcm(arrayBuffer) {
+  if (!pcmAudioCtx || pcmAudioCtx.state === "closed") return;
+  const gen = pcmGen;
+  const ctx = pcmAudioCtx;
+  const byteLength = arrayBuffer.byteLength;
+  const inputCount = Math.floor(byteLength / 2);
+  if (inputCount === 0) return;
+  // Arm the wake guard BEFORE decoding: a decode error must not leave the
+  // status claiming idle while buffers are already scheduled.
+  isPlaying = true;
+  setStatus("RESPONSE PLAYING");
+
+  // Decode int16 little-endian; the odd trailing byte of a malformed frame
+  // is dropped by the (i * 2 + 1) < byteLength guard.
+  const dv = new DataView(arrayBuffer);
+  const input = new Float32Array(inputCount);
+  for (let i = 0; i < inputCount && (i * 2 + 1) < byteLength; i++) {
+    input[i] = dv.getInt16(i * 2, true) / 32768;
+  }
+
+  const ratio = pcmSrcRate > 0 ? pcmSrcRate / ctx.sampleRate : 1;
+  let output = input;
+  if (ratio !== 1) {
+    // Linear-interpolated resample with a carried tail, mirroring
+    // frontend/vendor/openwakeword-web/mic-worklet.js so frame boundaries
+    // neither drop nor duplicate samples when downsampling.
+    const data = new Float32Array(resampleTail.length + input.length);
+    data.set(resampleTail, 0);
+    data.set(input, resampleTail.length);
+    const out = new Float32Array(Math.ceil(data.length / ratio) + 2);
+    let t = resampleFrac;
+    let n = 0;
+    while (Math.floor(t) + 1 < data.length) {
+      const i = Math.floor(t);
+      out[n++] = data[i] + (data[i + 1] - data[i]) * (t - i);
+      t += ratio;
+    }
+    const keepFrom = Math.floor(t);
+    resampleTail = data.slice(keepFrom);
+    resampleFrac = t - keepFrom;
+    output = out.subarray(0, n);
+    if (output.length === 0) return; // everything carried into the tail
+  }
+
+  const audioBuffer = ctx.createBuffer(1, output.length, ctx.sampleRate);
+  audioBuffer.getChannelData(0).set(output);
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(ctx.destination);
+  const startAt = Math.max(pcmNextTime, ctx.currentTime);
+  src.start(startAt);
+  pcmNextTime = startAt + audioBuffer.duration;
+  if (pcmNextTime < ctx.currentTime) {
+    pcmNextTime = ctx.currentTime;
+  }
+  pcmPending++;
+  src.onended = () => onPcmSourceEnded(gen);
+}
+
+function appendPcmSilence(seconds) {
+  if (!pcmAudioCtx || pcmAudioCtx.state === "closed" || seconds <= 0) return;
+  const gen = pcmGen;
+  const ctx = pcmAudioCtx;
+  const samples = Math.round(ctx.sampleRate * seconds);
+  if (samples <= 0) return;
+  const audioBuffer = ctx.createBuffer(1, samples, ctx.sampleRate);
+  const src = ctx.createBufferSource();
+  src.buffer = audioBuffer;
+  src.connect(ctx.destination);
+  const startAt = Math.max(pcmNextTime, ctx.currentTime);
+  src.start(startAt);
+  pcmNextTime = startAt + audioBuffer.duration;
+  pcmPending++;
+  src.onended = () => onPcmSourceEnded(gen);
+}
+
+// One scheduled buffer of generation `gen` ended. A stale generation (a reply
+// that has since been superseded) must not touch shared state.
+function onPcmSourceEnded(gen) {
+  if (gen !== pcmGen) return;
+  pcmPending--;
+  maybeFinishPcm(gen);
+}
+
+// Drain signal: socket closed AND every buffer of the current generation has
+// ended — only then does the reply count as finished.
+function maybeFinishPcm(gen) {
+  if (gen !== pcmGen || ws !== null || pcmPending > 0) return;
+  finishReplyPlayback();
+}
+
+// Reply playback fully drained: re-arm the wake word (isPlaying is what the
+// onDetection guard checks).
+function finishReplyPlayback() {
+  isPlaying = false;
+  if (running) {
+    setStatus("LISTENING");
+    log("Response finished — back to LISTENING.", "info");
+  }
+}
+
+function resetPcmResampler() {
+  resampleTail = new Float32Array(0);
+  resampleFrac = 0;
+}
+
+function closePcmPlayer() {
+  pcmGen++; // stale sources' onended callbacks must not touch state
+  pcmPending = 0;
+  pcmNextTime = 0;
+  if (pcmAudioCtx) {
+    try {
+      pcmAudioCtx.close();
+    } catch (e) {}
+    pcmAudioCtx = null;
+  }
+}
+
 // Amplify a mic frame for the wake model only (the raw frame is streamed to
 // the backend unchanged). The melspectrogram consumes the int16 magnitudes
 // as-is, so scaling the samples scales the features and therefore the score.
@@ -426,11 +666,17 @@ async function startEngine() {
   log("Loading wake word engine... (models: python scripts/download_wake_models.py)");
 
   // Unlock audio during the start-button gesture so wake detection feedback
-  // remains audible even though onDetection happens outside that gesture.
+  // and reply playback remain audible even though they happen outside that
+  // gesture.
   try {
     await prepareConfirmationAudio();
   } catch (err) {
     log(`Confirmation sound unavailable: ${err}`, "error");
+  }
+  try {
+    await preparePcmAudio();
+  } catch (err) {
+    log(`PCM playback unavailable: ${err}`, "error");
   }
 
   // numThreads: 1 avoids the COOP/COEP headers required for shared memory.
@@ -452,7 +698,7 @@ async function startEngine() {
     vadStopFrames: VAD_STOP_FRAMES,
     maxCaptureDuration: MAX_CAPTURE_DURATION,
     onDetection: ({ label, score }) => {
-      if (!running || isPlaying || streaming) return; // one confirmation per command
+      if (!running || streaming || ws !== null || isPlaying) return;
       setStatus("WAKE WORD DETECTED");
       log(`DETECTED "${label}" score=${score.toFixed(3)} — streaming command...`, "detection");
       // Freeze the pre-roll: the whole ring ships with this utterance.
@@ -463,7 +709,7 @@ async function startEngine() {
       startVoiceStream();
     },
     onUtterance: async ({ label }) => {
-      if (!running || isPlaying) return; // ignore while a response is playing
+      if (!running) return;
       await finishVoiceStream(label);
     },
   });
@@ -504,17 +750,18 @@ async function stopEngine() {
   ws?.close();
   ws = null;
   bytesStreamed = 0;
-  // Cleared so the onclose of the socket we just closed cannot see the
-  // discarded reply's count and enqueue a closing tail that would set the
-  // status to RESPONSE PLAYING after IDLE.
-  phrasesReceived = 0;
-  // Barge-in: clear the queue and silence the currently playing sentence.
+  bytesReceived = 0;
+  firstPcmReceived = false;
+  pcmMode = false;
+  pcmModeDecided = false;
+  pcmSrcRate = 0;
   playbackQueue = [];
   isPlaying = false;
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
   }
+  closePcmPlayer();
   await closeConfirmationAudio();
   try {
     if (microphone) await microphone.stop();

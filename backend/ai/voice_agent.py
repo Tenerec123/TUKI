@@ -9,7 +9,7 @@ from .stt import get_stt_provider
 from .agent import openai_agent
 from .config import get_model_config, AUDIO_SYSTEM_PROMPT
 from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
-from .tts import TTSSession, get_tts_provider, iter_wav_turns
+from .tts import TTSSession, get_tts_provider, iter_wav_turns, TTSTurnEnd
 from .tts.sanitize import MarkdownSanitizer, sanitize_chunk_report, sanitize_stream_report
 
 
@@ -54,16 +54,17 @@ def _print_voice_summary(perf: dict, stats: dict, session: TTSSession) -> None:
         session.report()
 
 
-async def voice_agent_logic(stream: AsyncIterable[bytes]) -> AsyncIterator[bytes]:
-    """Stream the agent's reply as one WAV per turn, in order.
+async def voice_agent_logic(stream: AsyncIterable[bytes], streaming_path: bool = False) -> AsyncIterator[dict | bytes]:
+    """Stream the agent's reply. Supports both legacy WAV-per-turn and PCM streaming.
 
-    Pipeline: STT (utterance) -> LLM streaming (openai_agent) -> markdown sanitizer -> sentence splitter -> duplex TTS session -> one WAV per turn. The TTS session is opened BEFORE the LLM stream starts: connect is a real network round trip and the LLM's time-to-first-token is a real wait, so running them concurrently normally makes the connect free.
+    Pipeline: STT (utterance) -> LLM streaming (openai_agent) -> markdown sanitizer -> sentence splitter -> duplex TTS session.
 
-    The consumer yields whole WAVs because the browser plays each WebSocket binary frame as a standalone ``<audio>`` blob (``frontend/wake_script.js``), so bare continuous PCM would not play at all. ``iter_wav_turns`` re-frames the stream at the boundaries the provider reports, keeping the wire contract what the client already expects.
-
-    There is no per-phrase fade: ``_soften_phrase_wav`` and the deleted ``_stretch_final_sibilant`` were two halves of ONE workaround for a Kokoro bug (dropped word-final /s/). Aura-2 has no such bug, and fading a clean tail would damage the low-amplitude consonants the workaround existed to protect. The 0.2 s inter-phrase pad went with it -- at one sentence per turn that was dead air.
+    Paths:
+    - Legacy (streaming_path=False): yields bytes as WAV per turn via iter_wav_turns.
+    - Streaming (streaming_path=True): yields dict {"type":"pcm_start","sample_rate":<int>} before first PCM chunk,
+      then yields bytes chunks of raw PCM16. TTSTurnEnd markers are used for accounting/logging.
     """
-# Real-time streaming STT: the Deepgram WebSocket opens first, then each raw PCM16 (16 kHz mono) chunk is forwarded as it arrives. No WAV wrapper, no buffering.
+    # Real-time streaming STT: the Deepgram WebSocket opens first, then each raw PCM16 (16 kHz mono) chunk is forwarded as it arrives. No WAV wrapper, no buffering.
     perf: dict = {"t_req": time.perf_counter()}
     provider = get_stt_provider("deepgram")
     perf["t_stt"] = time.perf_counter()
@@ -79,7 +80,7 @@ async def voice_agent_logic(stream: AsyncIterable[bytes]) -> AsyncIterator[bytes
     stats: dict = {"turns": 0, "audio_ms": 0.0, "bytes": 0}
     sanitizer = MarkdownSanitizer()
 
-# Connect now, in parallel with the LLM: awaiting it here would add the handshake straight onto the user's wait.
+    # Connect now, in parallel with the LLM: awaiting it here would add the handshake straight onto the user's wait.
     connect_task = asyncio.create_task(session.start())
     perf["t_connect"] = time.perf_counter()
 
@@ -96,7 +97,7 @@ async def voice_agent_logic(stream: AsyncIterable[bytes]) -> AsyncIterator[bytes
             perf["tts_connect_ms"] = (
                 perf["t_connected"] - perf["t_connect"]
             ) * 1000
-# ``connect_overlapped`` is sampled where first text arrives, not here: reaching this point at all means the agent already produced text.
+            # ``connect_overlapped`` is sampled where first text arrives, not here: reaching this point at all means the agent already produced text.
             print(
                 f"[PERF] voice: tts_connect={perf['tts_connect_ms']:.1f}ms "
                 f"(awaited at first push, overlapped="
@@ -134,7 +135,7 @@ async def voice_agent_logic(stream: AsyncIterable[bytes]) -> AsyncIterator[bytes
                 if "first_text" not in perf:
                     perf["first_text"] = time.perf_counter()
                     perf["first_text_ms"] = (perf["first_text"] - t_agent) * 1000
-# Whether the handshake FINISHED while the LLM was still producing its first token. Sampled HERE on purpose: by the first push "first_text" is already set, so testing it later always reports "no".
+                    # Whether the handshake FINISHED while the LLM was still producing its first token. Sampled HERE on purpose: by the first push "first_text" is already set, so testing it later always reports "no".
                     perf["connect_overlapped"] = connect_task.done()
                     print(
                         f"[PERF] voice: first_text_delta=+{perf['first_text_ms']:.1f}ms "
@@ -164,22 +165,57 @@ async def voice_agent_logic(stream: AsyncIterable[bytes]) -> AsyncIterator[bytes
 
     producer_task = asyncio.create_task(producer())
     try:
-        async for wav_bytes in iter_wav_turns(session):
-            audio_ms = _wav_duration_ms(wav_bytes)
-            nbytes = len(wav_bytes)
-            print(f"[PERF] voice: turn={stats['turns'] + 1} audio={audio_ms:.1f}ms bytes={nbytes}")
-            stats["turns"] += 1
-            stats["audio_ms"] += audio_ms
-            stats["bytes"] += nbytes
-            if stats["turns"] == 1:
-                stats["first_audio"] = time.perf_counter()
-                stats["p1_audio"] = audio_ms
-                t_first_push = getattr(session, "t_first_push", None)
-                if t_first_push is not None:
-                    stats["ttfb"] = (
-                        session.first_audio_s - t_first_push
-                    ) * 1000 if session.first_audio_s else -1.0
-            yield wav_bytes
+        if streaming_path:
+            sent_pcm_start = False
+            async for item in session.audio():
+                if isinstance(item, TTSTurnEnd):
+                    stats["turns"] += 1
+                    # Log per-turn from markers (avoid per-chunk spam)
+                    print(f"[PERF] voice: turn={stats['turns']} audio={item.audio_ms:.1f}ms chars={item.chars}")
+                    t_first_push = getattr(session, "t_first_push", None)
+                    if stats["turns"] == 1:
+                        stats["p1_audio"] = item.audio_ms
+                        if t_first_push is not None and getattr(session, "first_audio_s", None):
+                            try:
+                                stats["ttfb"] = (session.first_audio_s - t_first_push) * 1000
+                            except Exception:
+                                stats["ttfb"] = -1.0
+                    continue
+                if isinstance(item, bytes):
+                    if not sent_pcm_start:
+                        rate = session.sample_rate
+                        yield {"type": "pcm_start", "sample_rate": rate}
+                        sent_pcm_start = True
+                    nbytes = len(item)
+                    rate = session.sample_rate
+                    if rate > 0:
+                        audio_ms = nbytes / 2 / rate * 1000
+                    else:
+                        audio_ms = 0.0
+                    stats["bytes"] += nbytes
+                    stats["audio_ms"] += audio_ms
+                    if stats.get("first_audio") is None:
+                        stats["first_audio"] = time.perf_counter()
+                    yield item
+                    continue
+        else:
+            async for wav_bytes in iter_wav_turns(session):
+                audio_ms = _wav_duration_ms(wav_bytes)
+                nbytes = len(wav_bytes)
+                print(f"[PERF] voice: turn={stats['turns'] + 1} audio={audio_ms:.1f}ms bytes={nbytes}")
+                stats["turns"] += 1
+                stats["audio_ms"] += audio_ms
+                stats["bytes"] += nbytes
+                if stats["turns"] == 1:
+                    stats["first_audio"] = time.perf_counter()
+                    stats["p1_audio"] = audio_ms
+                    t_first_push = getattr(session, "t_first_push", None)
+                    if t_first_push is not None and getattr(session, "first_audio_s", None):
+                        try:
+                            stats["ttfb"] = (session.first_audio_s - t_first_push) * 1000
+                        except Exception:
+                            stats["ttfb"] = -1.0
+                yield wav_bytes
     finally:
         producer_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):

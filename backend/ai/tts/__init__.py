@@ -1,7 +1,9 @@
 from .base import (
     TTSSession,
     TTSProvider,
-    iter_wav_turns,)
+    TTSTurnEnd,
+    iter_wav_turns,
+)
 from .deepgram import DeepgramTTSProvider
 from .openrouter import OpenRouterTTSProvider
 from ..config import get_model_config
@@ -32,5 +34,7 @@ def get_tts_provider(provider_name: str | None = None) -> TTSProvider:
 __all__ = [
     "get_tts_provider",
     "TTSSession",
+    "TTSProvider",
+    "TTSTurnEnd",
     "iter_wav_turns",
 ]

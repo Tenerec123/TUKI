@@ -53,17 +53,18 @@ async def stt_conversion(file: UploadFile = File(...)):
 
 @router.websocket("/voice-agent-ws")
 async def voice_agent_ws(websocket: WebSocket):
-    """Stream an utterance over WebSocket: binary PCM16 frames in, WAVs out.
+    """Stream an utterance over WebSocket: binary PCM16 frames in, audio out.
 
-    The browser connects via WebSocket (works over plain HTTP/1.1, no TLS),
-    sends raw PCM16 16 kHz mono mic frames as binary messages, and signals
-    the end of the utterance with a JSON ``{"type": "end"}`` message. Each
-    sentence of the reply is sent back as a separate binary WAV message as
-    soon as it is synthesized, so playback can start while the LLM is still
-    generating the rest of the answer.
+    Protocol:
+    - Legacy (no query param): returns WAV per turn (binary frames).
+    - Streaming (?proto=2): returns JSON pcm_start frame, then binary PCM16 frames, ends on socket close.
     """
     await websocket.accept()
     print("[voice-agent-ws] WebSocket accepted")
+
+    # Check protocol version from query params
+    query_params = websocket.query_params
+    use_proto2 = query_params.get("proto") == "2"
 
     async def audio_chunks() -> AsyncIterator[bytes]:
         """Yield incoming binary audio frames until the utterance ends."""
@@ -88,8 +89,11 @@ async def voice_agent_ws(websocket: WebSocket):
                     return
 
     try:
-        async for wav_bytes in voice_agent_logic(audio_chunks()):
-            await websocket.send_bytes(wav_bytes)
+        async for item in voice_agent_logic(audio_chunks(), streaming_path=use_proto2):
+            if isinstance(item, dict):
+                await websocket.send_json(item)
+            elif isinstance(item, bytes):
+                await websocket.send_bytes(item)
     except WebSocketDisconnect:
         return
     except Exception as exc:

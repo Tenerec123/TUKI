@@ -91,6 +91,157 @@ def test_each_session_reports_its_own_sample_rate():
 # moment into a HUNG REQUEST rather than a failed one.
 
 
+# --- PCM streaming path -----------------------------------------------------
+from backend.ai.tts.base import TTSTurnEnd
+
+
+class FakePCMStream:
+    async def __anext__(self):
+        raise StopAsyncIteration
+    def __aiter__(self):
+        return self
+
+
+class FakeStreamingSession:
+    def __init__(self, audio_items):
+        self._audio_items = audio_items
+        self._sample_rate = 24000
+    @property
+    def sample_rate(self):
+        return self._sample_rate
+    async def start(self):
+        pass
+    async def push_text(self, text):
+        pass
+    async def flush(self):
+        pass
+    async def clear(self):
+        pass
+    async def audio(self):
+        for item in self._audio_items:
+            yield item
+    async def close(self):
+        pass
+
+
+def _stub_streaming_pipeline(monkeypatch, va, audio_items, sample_rate=24000):
+    """Stub every external dependency of the streaming path.
+
+    The producer task must never reach a live LLM/DB call even if the event
+    loop gets a chance to run it before the consumer cancels it.
+    """
+    async def fake_transcribe_stream(stream):
+        return "hola"
+    monkeypatch.setattr(va, "get_stt_provider", lambda name=None: type('P', (), {'transcribe_stream': staticmethod(fake_transcribe_stream)})())
+
+    async def fake_openai_agent(**_kwargs):
+        return
+        yield  # unreachable: without a yield this would be a coroutine, not an async generator
+    monkeypatch.setattr(va, "openai_agent", fake_openai_agent)
+
+    class FakeTTSProvider:
+        def session(self):
+            session = FakeStreamingSession(audio_items)
+            session._sample_rate = sample_rate
+            return session
+    monkeypatch.setattr(va, "get_tts_provider", lambda: FakeTTSProvider())
+
+
+async def _collect_streaming(va):
+    return [item async for item in va.voice_agent_logic(FakePCMStream(), streaming_path=True)]
+
+
+def test_pcm_chunks_forwarded_unbuffered(monkeypatch):
+    from backend.ai import voice_agent as va
+    chunk = b"\x01\x00\x02\x00"
+    _stub_streaming_pipeline(monkeypatch, va, [chunk, TTSTurnEnd(index=1, chars=4, audio_ms=10.0)])
+
+    res = asyncio.run(_collect_streaming(va))
+    # Exact wire contract: preamble dict, then the raw chunk bytes — markers
+    # must never reach the wire.
+    assert res == [{"type": "pcm_start", "sample_rate": 24000}, chunk]
+    assert not any(isinstance(item, TTSTurnEnd) for item in res)
+
+
+def test_pcm_start_carries_session_sample_rate(monkeypatch):
+    from backend.ai import voice_agent as va
+    _stub_streaming_pipeline(
+        monkeypatch, va,
+        [b"\x01\x00", TTSTurnEnd(index=1, chars=4, audio_ms=1.0)],
+        sample_rate=48000,
+    )
+
+    res = asyncio.run(_collect_streaming(va))
+    assert res[0] == {"type": "pcm_start", "sample_rate": 48000}
+
+
+def test_pcm_marker_accounting_pins_turns_and_first_audio(monkeypatch):
+    """Markers drive turns/p1_audio (C5); payload bytes are counted exactly."""
+    from backend.ai import voice_agent as va
+    chunk1 = b"\x01\x00" * 10
+    chunk2 = b"\x02\x00" * 20
+    _stub_streaming_pipeline(monkeypatch, va, [
+        chunk1, TTSTurnEnd(index=1, chars=5, audio_ms=123.0),
+        chunk2, TTSTurnEnd(index=2, chars=7, audio_ms=456.0),
+    ])
+    captured: list[dict] = []
+    monkeypatch.setattr(
+        va, "_print_voice_summary",
+        lambda perf, stats, session: captured.append(dict(stats)),
+    )
+
+    res = asyncio.run(_collect_streaming(va))
+
+    assert res == [{"type": "pcm_start", "sample_rate": 24000}, chunk1, chunk2]
+    assert len(captured) == 1
+    stats = captured[0]
+    assert stats["turns"] == 2
+    assert stats["p1_audio"] == 123.0  # the FIRST marker, not the last
+    assert stats["bytes"] == len(chunk1) + len(chunk2)
+
+
+def test_voice_ws_dispatches_frames_by_proto(monkeypatch):
+    """?proto=2 prepends the JSON pcm_start; without it only binary WAV frames
+    may go on the wire (the legacy contract)."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.routers import ai as ai_router
+
+    wav_payload = b"RIFF\x24\x00\x00\x00WAVEfmt"
+    pcm_payload = b"\x01\x00\x02\x00"
+
+    async def fake_logic(stream, streaming_path=False):
+        if streaming_path:
+            yield {"type": "pcm_start", "sample_rate": 24000}
+            yield pcm_payload
+        else:
+            yield wav_payload
+
+    monkeypatch.setattr(ai_router, "voice_agent_logic", fake_logic)
+    app = FastAPI()
+    app.include_router(ai_router.router)
+
+    def drain(ws) -> list[dict]:
+        frames = []
+        while True:
+            message = ws.receive()
+            if message["type"] != "websocket.send":
+                return frames  # websocket.close ends the read
+            frames.append(message)
+
+    with TestClient(app) as client:
+        with client.websocket_connect("/api/ai/voice-agent-ws") as ws:
+            legacy = drain(ws)
+        assert legacy == [{"type": "websocket.send", "bytes": wav_payload}]
+
+        with client.websocket_connect("/api/ai/voice-agent-ws?proto=2") as ws:
+            streaming = drain(ws)
+        assert streaming[0]["type"] == "websocket.send"
+        assert json.loads(streaming[0]["text"]) == {"type": "pcm_start", "sample_rate": 24000}
+        assert streaming[1] == {"type": "websocket.send", "bytes": pcm_payload}
+        assert len(streaming) == 2
+
+
 def test_close_without_start_terminates_the_consumer():
     """A failed connect must end the iterator, not hang it forever."""
     session = DeepgramTTTSession()
