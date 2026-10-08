@@ -42,11 +42,18 @@ const INPUT_GAIN = 3.0;
 
 // Utterance-end tuning (1 frame = 1280 samples @ 16 kHz = 80 ms).
 // The engine waits for this many CONSECUTIVE silent VAD frames before
-// calling onUtterance; 25 frames = ~2 s of silence.
-const VAD_STOP_FRAMES = 25;
+// calling onUtterance; 12 frames = ~960 ms of silence.
+const VAD_STOP_FRAMES = 12;
 // Hard cap on capture duration: never buffer longer than this (seconds),
 // even if the VAD never reports silence.
 const MAX_CAPTURE_DURATION = 20;
+
+// Pre-roll: keep the last PREROLL_FRAMES mic frames (~1 s) so a detection
+// can rewind past the wake word. The model only crosses the threshold AFTER
+// the wake word has been said, so starting the capture at the detection
+// frame loses whatever the user said in between. Nothing is trimmed — the
+// whole ring ships with the utterance, wake word included.
+const PREROLL_FRAMES = 13;        // 13 x 80 ms = 1.04 s
 
 // Local wake-word confirmation tone. Generate it in the browser with Web Audio
 // so detection feedback needs no backend request or audio-file download.
@@ -67,6 +74,12 @@ let ws = null;                 // WebSocket to /api/ai/voice-agent-ws
 let streaming = false;         // true between wake detection and utterance end
 let bytesStreamed = 0;         // audio bytes actually sent to the server
 let phrasesReceived = 0;      // phrase WAVs received for the current reply
+
+// Pre-roll ring — always rotating, even while idle.
+let ringFrames = [];
+// Pre-roll snapshot plus the frames that arrive while the socket is still
+// CONNECTING; flushed in one batch on open, then dropped.
+let pendingFrames = null;
 
 // The server applies ONE uniform treatment to every phrase (tail fade + short
 // inter-phrase silence) and cannot know which phrase ends the reply, so the
@@ -178,15 +191,36 @@ if (!window.isSecureContext) {
 }
 
 // ---------------------------------------------------------------------------
+// Pre-roll ring: the last PREROLL_FRAMES frames. The worklet posts a fresh
+// slice per frame (mic-worklet.js:44), so holding references is safe — no
+// copy needed.
+// ---------------------------------------------------------------------------
+function pushRing(frame) {
+  ringFrames.push(frame);
+  if (ringFrames.length > PREROLL_FRAMES) ringFrames.shift();
+}
+
+// Send the held pre-roll as soon as the socket can take it.
+function flushPending() {
+  if (!pendingFrames || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const frames = pendingFrames;
+  pendingFrames = null;
+  for (const frame of frames) sendFrame(frame);
+}
+
+// ---------------------------------------------------------------------------
 // Voice agent call: STREAM the utterance as 16 kHz mono PCM over a WebSocket
 // (/api/ai/voice-agent-ws). The backend forwards each binary frame to
 // Deepgram's WebSocket in real time, so transcription starts while the user
 // is still speaking.
 //
-// Flow: wake word detected -> startVoiceStream() opens the socket; every mic
-// frame is pushed by pushAudioFrame(); VAD end -> finishVoiceStream() sends
-// {"type":"end"} so the backend can answer; each sentence WAV arrives as its
-// own binary frame and is queued for sequential playback.
+// Flow: wake word detected -> the ring is frozen into pendingFrames at the
+// wake word's onset and startVoiceStream() opens the socket; frames keep
+// joining pendingFrames until the socket is OPEN, then the whole batch goes
+// out and live frames follow via pushAudioFrame(); VAD end ->
+// finishVoiceStream() sends {"type":"end"} so the backend can answer; each
+// sentence WAV arrives as its own binary frame and is queued for sequential
+// playback.
 // ---------------------------------------------------------------------------
 function startVoiceStream() {
   if (streaming) return; // already streaming (another callback fired early)
@@ -199,7 +233,8 @@ function startVoiceStream() {
   ws.binaryType = "arraybuffer";
 
   ws.onopen = () => {
-    // Socket is up; mic frames pushed by pushAudioFrame() land here.
+    // Socket is up: release the pre-roll held while it was CONNECTING.
+    flushPending();
   };
 
   ws.onmessage = (event) => {
@@ -241,6 +276,7 @@ function startVoiceStream() {
     if (streaming) {
       // Socket closed mid-utterance (server went away before "end") — bail.
       streaming = false;
+      pendingFrames = null;
       bytesStreamed = 0;
       if (running) {
         setStatus("LISTENING");
@@ -255,23 +291,27 @@ function startVoiceStream() {
   };
 }
 
+function sendFrame(frame) {
+  // ws.send() serializes synchronously and the worklet hands out a fresh
+  // slice per frame, so neither a copy nor a lifetime guard is needed.
+  bytesStreamed += frame.byteLength;
+  ws.send(new Uint8Array(frame.buffer, frame.byteOffset, frame.byteLength));
+}
+
 function pushAudioFrame(frame) {
   if (!streaming || !ws) return;
-  // Copy the frame: the Microphone may reuse the underlying buffer after the
-  // callback returns, but the socket sends asynchronously.
-  const copy = new Uint8Array(frame.byteLength);
-  copy.set(new Uint8Array(frame.buffer, frame.byteOffset, frame.byteLength));
-  bytesStreamed += copy.byteLength;
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(copy);
-  }
-  // CONNECTING: drop the frame — the socket opens in milliseconds and the
-  // first few frames are negligible, so no buffering keeps this simple.
+  // CONNECTING frames never reach here: pendingFrames holds them until
+  // ws.onopen flushes the batch.
+  if (ws.readyState === WebSocket.OPEN) sendFrame(frame);
 }
 
 async function finishVoiceStream(label) {
   if (!streaming) return;
   streaming = false;
+  // A socket that opened late still owes us the pre-roll; after this the
+  // batch is dead either way, so never leave pendingFrames behind.
+  flushPending();
+  pendingFrames = null;
 
   log(`Utterance streamed (${label}): ${(bytesStreamed / 2 / 16000).toFixed(1)} s of audio`);
   if (bytesStreamed === 0) {
@@ -415,6 +455,10 @@ async function startEngine() {
       if (!running || isPlaying || streaming) return; // one confirmation per command
       setStatus("WAKE WORD DETECTED");
       log(`DETECTED "${label}" score=${score.toFixed(3)} — streaming command...`, "detection");
+      // Freeze the pre-roll: the whole ring ships with this utterance.
+      // Frames arriving while the socket connects join the same batch.
+      pendingFrames = ringFrames.slice();
+      log(`Pre-roll: ${pendingFrames.length}/${PREROLL_FRAMES} frames`);
       playConfirmationTone();
       startVoiceStream();
     },
@@ -430,9 +474,16 @@ async function startEngine() {
       const predictions = await engine.predict(amplifyFrame(frame));
       const score = predictions[WAKE_MODEL];
       if (typeof score === "number") setScore(score);
-      // While an utterance is streaming, forward every mic frame to the
-      // backend in real time (copied: frames may be reused after the call).
-      if (streaming) pushAudioFrame(frame);
+      pushRing(frame);
+      // onDetection runs INSIDE predict(), so for the triggering frame
+      // pendingFrames already exists and must receive it too.
+      if (!streaming) return;
+      if (pendingFrames) {
+        pendingFrames.push(frame);
+        flushPending(); // no-op until the socket reaches OPEN
+      } else {
+        pushAudioFrame(frame);
+      }
     } catch (err) {
       log(`Predict error: ${err}`, "error");
     }
@@ -449,6 +500,7 @@ async function stopEngine() {
   running = false;
   // Abort any in-flight voice stream.
   streaming = false;
+  pendingFrames = null;
   ws?.close();
   ws = null;
   bytesStreamed = 0;
@@ -471,6 +523,8 @@ async function stopEngine() {
   }
   microphone = null;
   engine = null;
+  // Stale frames from a previous run must not become the next pre-roll.
+  ringFrames = [];
   setStatus("IDLE");
   setScore(null);
   log("Stopped. Engine will be recreated on next start.", "info");
