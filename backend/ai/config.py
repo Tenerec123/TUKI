@@ -14,7 +14,7 @@ Tool Calls:
 -- Don't use it if tool B call depends on tool A result.
 -- If you have all the info to respond or you've executed the order, don't use any tool and respond with text
 -- You can return text in the tool calling inferences if necessary
--- If the task involves dates, deadlines, or time, call GetCurrentTime first. NEVER INVENT DATES
+-- Date args take a relative expression (today, tomorrow, next monday, end_of_month, today+7d; d/w/m/y) or an absolute YYYY-MM-DD if the user gives one. Don't compute it: call GetCurrentTime only to report the time. NEVER INVENT DATES
 -- Update tools only change the fields you send. null or absent = leave unchanged. There is NO way to unassign a project from a task/routine.
 '''
 

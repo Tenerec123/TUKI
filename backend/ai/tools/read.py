@@ -20,7 +20,7 @@ import yfinance as yf
 def GetCurrentTime():
     '''
     Current date and time in the user's timezone (Europe/Madrid by default).
-    Call this when the task involves dates, deadlines, or scheduling.
+    Call this only to report the current date/time to the user — never to compute dates for other tools.
     Returns day of week, date, time, and UTC offset.
 '''
     tz = ZoneInfo(os.environ.get('TIMEZONE', 'Europe/Madrid'))

@@ -1,14 +1,15 @@
-from datetime import date, datetime
+from datetime import datetime
 from fastapi import HTTPException
 from pydantic import ValidationError
 from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate, EventCreate, EventUpdate
 from ...database import SessionLocal
 from ...logic.tasks import create_task_logic, delete_task_logic, update_task_logic
 from ...logic.projects import create_project_logic, delete_project_logic, update_project_logic
-from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic, set_routine_check_logic
+from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic, set_routine_check_logic, current_date
 from ...logic.events import create_event_logic, delete_event_logic, update_event_logic
 from ...logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
 from ._helpers import _icon_fallback, _resolve_project
+from .dates import parse_relative_date
 
 
 def CreateTask(name: str, priority: int, deadline: str, description: str = None, project_id: int = None, project_name: str = None):
@@ -16,7 +17,7 @@ def CreateTask(name: str, priority: int, deadline: str, description: str = None,
     Args:
         name: Short title of the task.
         priority: Priority 1-64.
-        deadline: Deadline YYYY-MM-DD.
+        deadline: When the task is due.
         description: Longer details (optional). null/empty = task without description.
         project_id: Project ID (preferred). Leave empty if unsure.
         project_name: Alternative to project_id — exact name lookup.
@@ -28,7 +29,7 @@ def CreateTask(name: str, priority: int, deadline: str, description: str = None,
                 name=name,
                 description=description,
                 priority=priority,
-                deadline=date.fromisoformat(deadline),
+                deadline=parse_relative_date(deadline),
                 project_id=resolved
             ),
             db=db)
@@ -51,7 +52,7 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
         name: New name (optional).
         description: New description (optional).
         priority: New priority 1-64 (optional).
-        deadline: New deadline YYYY-MM-DD (optional).
+        deadline: New deadline (optional).
         finished: True/False (optional).
         project_id: Project ID to reassign (optional). null/absent = keep current project.
     '''
@@ -63,7 +64,7 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
                 name=name,
                 description=description,
                 priority=priority,
-                deadline=None if deadline is None else date.fromisoformat(deadline),
+                deadline=None if deadline is None else parse_relative_date(deadline),
                 finished=finished,
                 project_id=resolved
             ),
@@ -79,7 +80,7 @@ def CreateRoutine(name: str, priority: int, frequency: str, description: str = N
         priority: Priority 1-64.
         frequency: RRULE frequency syntax.
         description: Longer details (optional). null/empty = routine without description.
-        init_date: Start date YYYY-MM-DD (optional). null = today.
+        init_date: Start date (optional). null = today.
         project_id: Project ID (preferred). Leave empty if unsure.
         project_name: Alternative to project_id — exact name lookup.
         icon: Bootstrap icon CSS class (e.g. bell-fill, clock).
@@ -96,7 +97,7 @@ def CreateRoutine(name: str, priority: int, frequency: str, description: str = N
                 frequency=frequency,
                 project_id=resolved,
                 icon=icon,
-                init_date=datetime.today().date() if init_date is None else date.fromisoformat(init_date)
+                init_date=current_date() if init_date is None else parse_relative_date(init_date)
             ),
             db=db)
         return f"Routine {name} with id {new_routine.id} successfully created{note}"
@@ -130,7 +131,7 @@ def UpdateRoutine(routine_id: int, name: str = None, description: str = None, pr
                 frequency=frequency,
                 project_id=resolved,
                 icon=icon,
-                init_date=None if init_date is None else date.fromisoformat(init_date)
+                init_date=None if init_date is None else parse_relative_date(init_date)
             ),
             db=db)
         return f"Routine {routine.name} with id:{routine_id} successfully updated{note}"
@@ -148,7 +149,7 @@ def SetRoutineCheck(routine_id: int, day: str, checked: bool):
         "unavailable_out": "date out of routine scope"
     }
     try:
-        target = date.fromisoformat(day)
+        target = parse_relative_date(day)
         with SessionLocal() as db:
             return info_to_the_model[set_routine_check_logic(
                 id=routine_id,
