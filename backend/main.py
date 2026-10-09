@@ -4,9 +4,15 @@ from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from backend.routers import config, tasks, routines, projects, conversations, notes, events, ai, mcp
 from backend.wake_models import ensure_wake_models
+from backend.models import get_embedding_model
 from pathlib import Path
 import anyio
+import time
 from dotenv import load_dotenv
+
+# Boot warmup for the local embedding model: bounded so a cold-cache download
+# that stalls cannot hold readiness hostage (see lifespan below).
+EMBEDDING_WARMUP_TIMEOUT_S = 15.0
 basedir = Path(__file__).resolve().parent.parent 
 load_dotenv(basedir / ".env")
 import logging
@@ -28,7 +34,22 @@ async def lifespan(app: FastAPI):
     # Descarga (solo si faltan) los modelos ONNX del wake word. Idempotente:
     # si ya están, el chequeo son 4 stat() y no toca la red.
     ensure_wake_models()
-    
+
+    # Warm the local embedding model at boot. Otherwise the first encode pays
+    # torch's CPU init inside a request (measured ~4s on CreateTask's
+    # before_insert hook). Blocking CPU work, so it runs in a worker thread.
+    # A failure here must not abort boot: embeddings fall back to lazy loading.
+    try:
+        def _warm_embeddings() -> None:
+            get_embedding_model().encode("warmup")
+
+        started = time.perf_counter()
+        with anyio.fail_after(EMBEDDING_WARMUP_TIMEOUT_S):
+            await anyio.to_thread.run_sync(_warm_embeddings)
+        print(f"[warmup] embedding model ready in {time.perf_counter() - started:.1f}s")
+    except Exception as exc:
+        print(f"[warmup] embedding warmup failed, will load lazily: {exc}")
+
     yield  # Aquí es donde la aplicación se queda corriendo
     
     # ---- CÓDIGO QUE SE EJECUTA AL APAGAR (Opcional) ----
