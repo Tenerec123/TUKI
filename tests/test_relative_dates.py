@@ -5,7 +5,7 @@ is 2026-10-09, a Friday.
 """
 
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -14,10 +14,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.ai.tools.dates import parse_relative_date
+from backend.ai.tools.dates import parse_relative_date, parse_relative_datetime
 import backend.ai.tools.dates as dates
 
 TODAY = date(2026, 10, 9)  # Friday
+NOW = datetime(2026, 10, 9, 15, 45, 30)  # Friday afternoon
 
 
 @pytest.mark.parametrize("expr,expected", [
@@ -105,4 +106,53 @@ def test_error_message_is_model_readable():
     with pytest.raises(ValueError) as excinfo:
         parse_relative_date("next tuesday-ish", today=TODAY)
     assert "next tuesday-ish" in str(excinfo.value)
+    assert "YYYY-MM-DD" in str(excinfo.value)
+
+
+def test_datetime_iso_passthrough():
+    assert parse_relative_datetime("2026-09-15T09:00:00", now=NOW) == datetime(2026, 9, 15, 9, 0, 0)
+
+
+def test_datetime_iso_space_separator():
+    assert parse_relative_datetime("2026-09-15 09:00", now=NOW) == datetime(2026, 9, 15, 9, 0, 0)
+
+
+def test_datetime_iso_date_is_midnight():
+    assert parse_relative_datetime("2026-12-25", now=NOW) == datetime(2026, 12, 25, 0, 0, 0)
+
+
+@pytest.mark.parametrize("expr,expected", [
+    ("tomorrow 09:00", datetime(2026, 10, 10, 9, 0, 0)),
+    ("mañana a las 9", datetime(2026, 10, 10, 9, 0, 0)),
+    ("next monday 14:30", datetime(2026, 10, 12, 14, 30, 0)),
+    ("today+7d@08:00", datetime(2026, 10, 16, 8, 0, 0)),
+    ("tomorrow 9pm", datetime(2026, 10, 10, 21, 0, 0)),
+    ("tomorrow 9:30 pm", datetime(2026, 10, 10, 21, 30, 0)),
+    ("tomorrow 12am", datetime(2026, 10, 10, 0, 0, 0)),
+    ("tomorrow 12pm", datetime(2026, 10, 10, 12, 0, 0)),
+    ("tomorrow", datetime(2026, 10, 10, 0, 0, 0)),
+    ("9:30", datetime(2026, 10, 9, 9, 30, 0)),
+    ("14:05:30", datetime(2026, 10, 9, 14, 5, 30)),
+])
+def test_datetime_relative_forms(expr, expected):
+    assert parse_relative_datetime(expr, now=NOW) == expected
+
+
+@pytest.mark.parametrize("expr", [
+    "someday",
+    "tomorrow 25:00",
+    "tomorrow 13pm",
+    "tomorrow 09:75",
+    "next tuesday-ish",
+    "",
+])
+def test_datetime_invalid_input_raises_value_error(expr):
+    with pytest.raises(ValueError):
+        parse_relative_datetime(expr, now=NOW)
+
+
+def test_datetime_error_message_is_model_readable():
+    with pytest.raises(ValueError) as excinfo:
+        parse_relative_datetime("tomorrow 25:00", now=NOW)
+    assert "tomorrow 25:00" in str(excinfo.value)
     assert "YYYY-MM-DD" in str(excinfo.value)

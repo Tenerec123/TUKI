@@ -14,6 +14,18 @@ Language (case-insensitive; internal whitespace collapsed; spaces around
 Spanish aliases: hoy -> today, mañana -> tomorrow, ayer -> yesterday.
 ISO passthrough: a bare ``YYYY-MM-DD`` is parsed as-is.
 
+Datetime addition (``parse_relative_datetime``; the date grammar above plus a
+time)::
+
+    datetime-expr := [ date-expr ] [ sep time ]
+    sep           := " " | "T" | "@" | " at " | " a las " | " a la "
+    time          := HOUR [ ":" MINUTE [ ":" SECOND ] ] [ "am" | "pm" ]
+
+An ISO datetime (``YYYY-MM-DDTHH:MM[:SS]``, a space separator is accepted)
+passes through as-is; a bare ``YYYY-MM-DD`` becomes that day at 00:00. A
+relative date with no time also lands at 00:00. Results are naive local time
+with seconds and microseconds at 0.
+
 Semantics:
 - today / now -> today; tomorrow -> +1 day; yesterday -> -1 day.
 - next <wd> -> the weekday STRICTLY after today (today IS <wd> -> +7 days).
@@ -34,15 +46,26 @@ Anything unparseable raises ``ValueError`` with a model-readable message.
 """
 
 import calendar
+import os
 import re
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
 
 from dateutil.relativedelta import relativedelta
 
 from ...logic.routines import current_date
 
 _ISO_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_ISO_DATETIME_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}[ t]\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?$",
+    re.IGNORECASE,
+)
 _OFFSET_RE = re.compile(r"([+-])(\d+)([dwmy]?)")
+_TIME_SUFFIX_RE = re.compile(
+    r"(?:(?P<sep>\s+at\s+|\s+a\s+las\s+|\s+a\s+la\s+|\s+|t|@))?"
+    r"(?P<hour>\d{1,2})(?::(?P<minute>\d{2}))?(?::(?P<second>\d{2}))?"
+    r"\s*(?P<meridiem>am|pm)?$"
+)
 
 _WEEKDAYS = {
     "monday": 0, "mon": 0,
@@ -85,6 +108,95 @@ def parse_relative_date(value: str, today: date | None = None) -> date:
     anchor_text, offsets_text = _split_offsets(normalized)
     base = _resolve_anchor(anchor_text, today, value)
     return _apply_offsets(base, offsets_text, value)
+
+
+def parse_relative_datetime(value: str, now: datetime | None = None) -> datetime:
+    """Resolve a relative datetime expression to a concrete naive local datetime.
+
+    Accepts an ISO-8601 datetime (``YYYY-MM-DDTHH:MM[:SS]``, also with a space
+    separator), a bare ISO date (``YYYY-MM-DD`` -> midnight), or a relative date
+    expression (resolved by :func:`parse_relative_date`) optionally followed by a
+    time::
+
+        "tomorrow 09:00"   "mañana a las 9"   "next monday 14:30"
+        "today+7d@08:00"   "tomorrow 9pm"     "9:30"
+
+    ``now`` defaults to the user's timezone now (same source as
+    ``GetCurrentTime``); injecting it makes callers and tests deterministic. The
+    result is always naive local time with seconds/microseconds defaulting to 0.
+    """
+    if now is None:
+        now = _now()
+
+    normalized = _normalize(value)
+    if not normalized:
+        raise _invalid_datetime(value)
+
+    if _ISO_DATETIME_RE.match(normalized):
+        iso = normalized.replace(" ", "T").replace("t", "T")
+        try:
+            return datetime.fromisoformat(iso)
+        except ValueError:
+            raise _invalid_datetime(value)
+
+    if _ISO_RE.match(normalized):
+        return datetime.combine(date.fromisoformat(normalized), time.min)
+
+    match = _TIME_SUFFIX_RE.search(normalized)
+    if match is not None and _is_explicit_time(match):
+        date_part = normalized[: match.start()].strip()
+        moment = _parse_time(match, value)
+    else:
+        date_part = normalized
+        moment = time.min
+
+    base_date = (
+        parse_relative_date(date_part, today=now.date())
+        if date_part
+        else now.date()
+    )
+    return datetime.combine(base_date, moment)
+
+
+def _now() -> datetime:
+    """Current datetime in the user's timezone (mirrors ``GetCurrentTime``)."""
+    try:
+        return datetime.now(ZoneInfo(os.environ.get("TIMEZONE") or "Europe/Madrid"))
+    except Exception as e:  # no tzdata installed, unknown TZ name, ...
+        print(f"[dates] Falling back to the server datetime, TIMEZONE unusable: {e}")
+        return datetime.now()
+
+
+def _is_explicit_time(match: re.Match) -> bool:
+    """A bare hour only counts as a time when a separator, minute or meridiem marks it."""
+    return bool(
+        match.group("minute") is not None
+        or match.group("second") is not None
+        or match.group("meridiem") is not None
+        or match.group("sep") is not None
+    )
+
+
+def _parse_time(match: re.Match, original: str) -> time:
+    """Build a ``time`` from a time regex match, applying 12h meridiem rules."""
+    hour = int(match.group("hour"))
+    minute = int(match.group("minute") or 0)
+    second = int(match.group("second") or 0)
+    if minute > 59 or second > 59:
+        raise _invalid_datetime(original)
+
+    meridiem = match.group("meridiem")
+    if meridiem is None:
+        if hour > 23:
+            raise _invalid_datetime(original)
+    elif not 1 <= hour <= 12:
+        raise _invalid_datetime(original)
+    elif meridiem == "am":
+        hour = 0 if hour == 12 else hour
+    else:  # meridiem == "pm"
+        hour = 12 if hour == 12 else hour + 12
+
+    return time(hour, minute, second)
 
 
 def _normalize(value: str) -> str:
@@ -178,4 +290,13 @@ def _invalid(value: str) -> ValueError:
     return ValueError(
         f"invalid date expression '{value}'; use YYYY-MM-DD or relative forms "
         f"like today, tomorrow, next monday, today+7d"
+    )
+
+
+def _invalid_datetime(value: str) -> ValueError:
+    """Build the model-readable error for an unparseable datetime expression."""
+    return ValueError(
+        f"invalid datetime expression '{value}'; use an ISO-8601 datetime "
+        f"(YYYY-MM-DDTHH:MM) or a relative form like 'tomorrow 09:00', "
+        f"'next monday 14:30' or 'today+7d@08:00'"
     )

@@ -1,4 +1,3 @@
-from datetime import datetime
 from fastapi import HTTPException
 from pydantic import ValidationError
 from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate, EventCreate, EventUpdate
@@ -9,7 +8,7 @@ from ...logic.routines import create_routine_logic, delete_routine_logic, update
 from ...logic.events import create_event_logic, delete_event_logic, update_event_logic
 from ...logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
 from ._helpers import _icon_fallback, _resolve_project
-from .dates import parse_relative_date
+from .dates import parse_relative_date, parse_relative_datetime
 
 
 def CreateTask(name: str, priority: int, deadline: str, description: str = None, project_id: int = None, project_name: str = None):
@@ -263,13 +262,14 @@ def DraftUpdateNote(note_id:int, title:str = None, content:str = None):
 def CreateEvent(name: str, start_time: str, end_time: str, description: str = None):
     '''
     Creates a scheduled event (meeting, appointment or other timed commitment).
-    Datetimes are ISO-8601 naive LOCAL time, e.g. 2026-09-15T09:00:00 (no timezone offset).
+    Datetimes are naive LOCAL time, e.g. 2026-09-15T09:00:00 (no timezone offset).
+    start_time and end_time accept relative forms such as "tomorrow 09:00" or
+    "next monday 14:30", or an absolute ISO-8601 local datetime.
     end_time must not precede start_time; start_time == end_time (zero duration) is allowed.
-    Use GetCurrentTime first to resolve relative dates such as "tomorrow".
     Args:
         name: Short title of the event.
-        start_time: Start datetime, ISO-8601 naive local (e.g. 2026-09-15T09:00:00).
-        end_time: End datetime, ISO-8601 naive local (e.g. 2026-09-15T10:00:00).
+        start_time: Start datetime, relative (e.g. "tomorrow 09:00") or ISO-8601 naive local (e.g. 2026-09-15T09:00:00).
+        end_time: End datetime, relative (e.g. "tomorrow 10:00") or ISO-8601 naive local (e.g. 2026-09-15T10:00:00).
         description: Longer details (optional). null/empty = event without description.
     '''
     try:
@@ -278,8 +278,8 @@ def CreateEvent(name: str, start_time: str, end_time: str, description: str = No
                 event=EventCreate(
                     name=name,
                     description=description,
-                    start_time=datetime.fromisoformat(start_time),
-                    end_time=datetime.fromisoformat(end_time),
+                    start_time=parse_relative_datetime(start_time),
+                    end_time=parse_relative_datetime(end_time),
                 ),
                 db=db)
             return f"Event {new_event.name} with id {new_event.id} successfully created"
@@ -290,14 +290,16 @@ def CreateEvent(name: str, start_time: str, end_time: str, description: str = No
 def UpdateEvent(event_id: int, name: str = None, description: str = None, start_time: str = None, end_time: str = None):
     '''
     Only provided fields are modified. null/absent fields are left unchanged.
-    Datetimes are ISO-8601 naive LOCAL time, e.g. 2026-09-15T09:00:00 (no timezone offset).
+    Datetimes are naive LOCAL time, e.g. 2026-09-15T09:00:00 (no timezone offset).
+    start_time and end_time accept relative forms such as "tomorrow 09:00" or
+    "next monday 14:30", or an absolute ISO-8601 local datetime.
     end_time must not precede start_time; start_time == end_time (zero duration) is allowed.
     Args:
         event_id: ID of the event to update.
         name: New name (optional).
         description: New description (optional).
-        start_time: New start datetime, ISO-8601 naive local (optional).
-        end_time: New end datetime, ISO-8601 naive local (optional).
+        start_time: New start datetime, relative (e.g. "tomorrow 09:00") or ISO-8601 naive local (optional).
+        end_time: New end datetime, relative (e.g. "tomorrow 10:00") or ISO-8601 naive local (optional).
     '''
     try:
         with SessionLocal() as db:
@@ -306,8 +308,8 @@ def UpdateEvent(event_id: int, name: str = None, description: str = None, start_
                 updated_event=EventUpdate(
                     name=name,
                     description=description,
-                    start_time=None if start_time is None else datetime.fromisoformat(start_time),
-                    end_time=None if end_time is None else datetime.fromisoformat(end_time),
+                    start_time=None if start_time is None else parse_relative_datetime(start_time),
+                    end_time=None if end_time is None else parse_relative_datetime(end_time),
                 ),
                 db=db)
             return f"Event {event_id} successfully updated"

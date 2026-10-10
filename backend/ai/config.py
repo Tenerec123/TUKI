@@ -14,7 +14,9 @@ Tool Calls:
 -- Don't use it if tool B call depends on tool A result.
 -- If you have all the info to respond or you've executed the order, don't use any tool and respond with text
 -- You can return text in the tool calling inferences if necessary
--- Date args take a relative expression (today, tomorrow, next monday, end_of_month, today+7d; d/w/m/y) or an absolute YYYY-MM-DD if the user gives one. Don't compute it: call GetCurrentTime only to report the time. NEVER INVENT DATES
+-- Use relative dates/datetimes instead of GetCurrentTime if possible: today, tomorrow, next monday, end_of_month, today+7d (d/w/m/y); events add a time (tomorrow 09:00).
+-- Absolute YYYY-MM-DD only if the user gives one. NEVER INVENT DATES.
+-- GetCurrentTime only when it's needed and relative dates are not enough.
 -- Update tools only change the fields you send. null or absent = leave unchanged. There is NO way to unassign a project from a task/routine.
 '''
 
