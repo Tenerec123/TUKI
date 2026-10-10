@@ -139,6 +139,12 @@ def _stub_streaming_pipeline(monkeypatch, va, audio_items, sample_rate=24000):
         yield  # unreachable: without a yield this would be a coroutine, not an async generator
     monkeypatch.setattr(va, "openai_agent", fake_openai_agent)
 
+    # The Jev fast-path router would make a real HTTPS call when
+    # OPENROUTER_API_KEY is set; keep these unit tests hermetic.
+    async def fake_route_fast_path(transcript, info=None):
+        return None
+    monkeypatch.setattr(va, "route_fast_path", fake_route_fast_path)
+
     class FakeTTSProvider:
         def session(self):
             session = FakeStreamingSession(audio_items)
@@ -210,7 +216,7 @@ def test_voice_ws_dispatches_frames_by_proto(monkeypatch):
     wav_payload = b"RIFF\x24\x00\x00\x00WAVEfmt"
     pcm_payload = b"\x01\x00\x02\x00"
 
-    async def fake_logic(stream, streaming_path=False):
+    async def fake_logic(stream, streaming_path=False, client_meta=None):
         if streaming_path:
             yield {"type": "pcm_start", "sample_rate": 24000}
             yield pcm_payload

@@ -174,3 +174,83 @@ def test_route_fast_path_weather_returns_prefab(monkeypatch):
 def test_route_fast_path_other_returns_none(monkeypatch):
     monkeypatch.setattr(vr, "_classify", lambda transcript, info=None: "other")
     assert asyncio.run(vr.route_fast_path("cuenta me un chiste")) is None
+
+
+# --- empty transcript short-circuit in voice_agent ---------------------------
+
+
+class _FakePCMStream:
+    async def __anext__(self):
+        raise StopAsyncIteration
+
+    def __aiter__(self):
+        return self
+
+
+def test_empty_transcript_yields_end_and_no_audio(monkeypatch):
+    from backend.ai import voice_agent as va
+
+    async def fake_transcribe_stream(stream):
+        return ""
+
+    monkeypatch.setattr(
+        va, "get_stt_provider",
+        lambda name=None: type("P", (), {"transcribe_stream": staticmethod(fake_transcribe_stream)})(),
+    )
+
+    # The TTS socket now opens BEFORE STT, so the empty turn must close it.
+    closed: list[bool] = []
+
+    class _Session:
+        async def start(self):
+            pass
+
+        async def close(self):
+            closed.append(True)
+
+    class _Provider:
+        def session(self):
+            return _Session()
+
+    monkeypatch.setattr(va, "get_tts_provider", lambda: _Provider())
+
+    async def collect():
+        return [item async for item in va.voice_agent_logic(_FakePCMStream(), streaming_path=True)]
+
+    res = asyncio.run(asyncio.wait_for(collect(), timeout=5.0))
+    assert res == [{"type": "end"}]
+    assert not any(isinstance(item, bytes) for item in res)
+    assert closed, "the session opened before STT must be closed on an empty turn"
+
+
+# --- _strip_wake_word (defense in depth) -------------------------------------
+
+
+def test_strip_wake_word_removes_leading_token():
+    from backend.ai.voice_agent import _strip_wake_word
+
+    assert _strip_wake_word("alexa que hora es") == "que hora es"
+    assert _strip_wake_word("Alexa, pon una tarea") == "pon una tarea"
+    assert _strip_wake_word("rexa que tiempo hace") == "que tiempo hace"
+
+
+def test_strip_wake_word_handles_punctuation_and_case():
+    from backend.ai.voice_agent import _strip_wake_word
+
+    assert _strip_wake_word("¡Alexa! sube el volumen") == "sube el volumen"
+    assert _strip_wake_word("¿Rexa? apaga la luz") == "apaga la luz"
+
+
+def test_strip_wake_word_leaves_other_text_untouched():
+    from backend.ai.voice_agent import _strip_wake_word
+
+    assert _strip_wake_word("pon una tarea para mañana") == "pon una tarea para mañana"
+    # A wake word NOT at the start is part of the sentence, not a prefix.
+    assert _strip_wake_word("llama a alexa por favor") == "llama a alexa por favor"
+
+
+def test_strip_wake_word_only_token_becomes_empty():
+    from backend.ai.voice_agent import _strip_wake_word
+
+    assert _strip_wake_word("Alexa") == ""
+    assert _strip_wake_word("  alexa  ") == ""

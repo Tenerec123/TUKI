@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 import time
@@ -5,7 +6,9 @@ from typing import AsyncIterator
 from urllib.parse import urlencode
 
 import websockets
+from websockets.exceptions import ConnectionClosed
 
+from .. import voicelog
 from .base import STTProvider
 
 DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen"
@@ -84,7 +87,19 @@ class DeepgramSTTProvider(STTProvider):
             "model": "nova-2",
             "language": language,
             "interim_results": "true",
-            "endpointing": "300",
+            # Silence required before Deepgram finalizes a segment. Set ABOVE
+            # the typical pause between the wake word and the command
+            # ("alexa ... que hora es", <600ms) so the wake word is not split
+            # into its own segment. A separate finalize for the wake segment
+            # wedged Deepgram ~1s behind the live audio and the command's
+            # final result arrived after the session closed (truncation).
+            # This does NOT need to stay under the client's VAD trailing
+            # silence (VAD_STOP_FRAMES in wake_script.js): when the client's
+            # end frame arrives the router sends CloseStream, which flushes
+            # whatever Deepgram still holds whether or not endpointing fired,
+            # so the final lands either way. The wake-pause bound above is the
+            # only constraint that matters.
+            "endpointing": "600",
             "smart_format": "true",
         }
         if raw_pcm:
@@ -94,15 +109,15 @@ class DeepgramSTTProvider(STTProvider):
                 "channels": "1",
             })
         url = f"{DEEPGRAM_WS_URL}?{urlencode(params)}"
-        print(f"[deepgram] connecting to {url}")
+        voicelog.debug(f"connecting {url}", source="stt")
 
         t_start = time.perf_counter()
         transcript = ""
+        self.timing = {}
 
         async with websockets.connect(url, additional_headers=headers) as ws:
             t_conn = time.perf_counter()
-            print("[deepgram] connected to Deepgram WS")
-            print(f"[PERF] stt: connect={(t_conn - t_start) * 1000:.1f}ms")
+            voicelog.debug(f"connected  connect={(t_conn - t_start) * 1000:.1f}ms", source="stt")
 
             # Forward each incoming chunk to the socket as it arrives.
             chunk_count = 0
@@ -114,14 +129,14 @@ class DeepgramSTTProvider(STTProvider):
                     total_bytes += len(chunk)
             # Anchor for finalization: the instant the last audio frame left.
             t_fwd_end = time.perf_counter()
-            print(f"[deepgram] forwarded {chunk_count} chunks / {total_bytes} bytes to Deepgram")
-            print(f"[PERF] stt: forward took={(t_fwd_end - t_conn) * 1000:.1f}ms "
-                  f"chunks={chunk_count} bytes={total_bytes}")
+            voicelog.debug(
+                f"forwarded {chunk_count} chunks / {total_bytes} bytes", source="stt"
+            )
 
             # Signal that no more audio will be sent. Deepgram's documented
             # close message is CloseStream (not "Close").
             await ws.send(json.dumps({"type": "CloseStream"}))
-            print("[deepgram] CloseStream sent, collecting results")
+            voicelog.debug("CloseStream sent", source="stt")
 
             # Collect results until the connection closes. Deepgram may
             # finalize a segment mid-utterance (endpointing fires on a
@@ -129,17 +144,43 @@ class DeepgramSTTProvider(STTProvider):
             # talking. The full transcription is the CONCATENATION of all
             # final segments, not the last one (that bug lost "Créame una
             # tarea..." from multi-segment utterances).
+            #
+            # After CloseStream, Deepgram flushes the queued results (possibly
+            # several: mid-pause segment finals + the final one). The LAST
+            # final lands only after Deepgram's ASR pipeline has processed its
+            # tail buffer. If the client bursts audio (a ~1s pre-roll dumped
+            # at once), that tail grows to ~1s and the final arrives late; a
+            # fixed settle below the backlog then returns "" — measured live.
+            # The client now replays its pre-roll at realtime pace, so the
+            # backlog stays small (~0.1-0.3s) and one quiet window is enough.
+            # Earlier gate variants broke multi-segment utterances (speech_final
+            # fires on EVERY segment boundary), so the settle is unconditional.
+            # Any result after CloseStream is the last word regardless; waiting
+            # on server-close used to cost the full backlog (~1s) every turn.
+            SETTLE_S = 0.5
             final_segments: list[str] = []
             last_interim = ""
             t_first_final = None
-            async for message in ws:
+            while True:
+                try:
+                    message = await asyncio.wait_for(ws.recv(), timeout=SETTLE_S)
+                except asyncio.TimeoutError:
+                    break  # results settled: no more text is coming
+                except ConnectionClosed:
+                    break  # server closed the connection
                 data = json.loads(message)
                 msg_type = data.get("type")
                 if msg_type == "Error":
-                    print(f"[deepgram] ERROR from Deepgram: variant={data.get('variant')} "
-                          f"description={data.get('description')}")
+                    voicelog.log(
+                        f"stt ! Deepgram error variant={data.get('variant')} "
+                        f"description={data.get('description')}"
+                    )
                     continue
-                print(f"[deepgram] recv type={msg_type} is_final={data.get('is_final')}")
+                voicelog.debug(
+                    f"recv type={msg_type} is_final={data.get('is_final')} "
+                    f"speech_final={data.get('speech_final')}",
+                    source="stt",
+                )
                 if msg_type not in ("Results", "Transcript"):
                     continue
                 alternatives = data.get("channel", {}).get("alternatives", [])
@@ -151,31 +192,32 @@ class DeepgramSTTProvider(STTProvider):
                 if data.get("is_final"):
                     if t_first_final is None:
                         t_first_final = time.perf_counter()
-                        print(f"[PERF] stt: first_final=+{(t_first_final - t_fwd_end) * 1000:.1f}ms "
-                              f"after last frame (endpointing fired early)")
+                        voicelog.debug(
+                            f"first_final +{(t_first_final - t_fwd_end) * 1000:.1f}ms after last frame",
+                            source="stt",
+                        )
                     final_segments.append(text)
                     transcript = " ".join(final_segments)
                 else:
                     last_interim = text
-                print(f"[deepgram] transcript={transcript!r}")
+                voicelog.debug(f"transcript={transcript!r}", source="stt")
             t_results_end = time.perf_counter()
 
         # Fall back to the last interim hypothesis when no final was received.
         if not final_segments and last_interim:
             transcript = last_interim
         # Phase costs, not a single latency: Deepgram transcribes while the user
-        # speaks, so ``forward`` spans the utterance and ``wall_ms`` is mostly
-        # that same time. What the user actually waits on is ``connect`` plus
-        # ``finalize``.
-        t_end = time.perf_counter()
-        first_final_ms = (t_first_final - t_fwd_end) * 1000 if t_first_final else -1.0
-        print(
-            f"[PERF] stt: SUMMARY connect={(t_conn - t_start) * 1000:.1f}ms "
-            f"forward={(t_fwd_end - t_conn) * 1000:.1f}ms "
-            f"finalize={(t_results_end - t_fwd_end) * 1000:.1f}ms "
-            f"first_final={first_final_ms:.1f}ms "
-            f"wall_ms={(t_end - t_start) * 1000:.1f}ms "
-            f"chunks={chunk_count} bytes={total_bytes} finals={len(final_segments)}"
+        # speaks, so ``listen`` spans the utterance. What the user actually waits
+        # on is ``connect`` plus ``finalize``; the caller reads these from here.
+        self.timing = {
+            "connect": (t_conn - t_start) * 1000,
+            "listen": (t_fwd_end - t_conn) * 1000,
+            "finalize": (t_results_end - t_fwd_end) * 1000,
+            "wall": (time.perf_counter() - t_start) * 1000,
+        }
+        voicelog.debug(
+            f"session closed  chunks={chunk_count} bytes={total_bytes} "
+            f"finals={len(final_segments)} transcript={transcript!r}",
+            source="stt",
         )
-        print(f"[deepgram] session closed, returning transcript={transcript!r}")
         return transcript

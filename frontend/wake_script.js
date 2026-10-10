@@ -51,6 +51,11 @@ const VAD_STOP_FRAMES = 12;
 // even if the VAD never reports silence.
 const MAX_CAPTURE_DURATION = 20;
 
+// Duration of one mic frame in ms (1280 samples @ 16 kHz). The worklet posts
+// one frame per callback, so this is both the capture granularity and the
+// pacing tick used to replay queued audio at realtime speed.
+const FRAME_MS = 80;
+
 // Pre-roll: keep the last PREROLL_FRAMES mic frames (~1 s) so a detection
 // can rewind past the wake word. The model only crosses the threshold AFTER
 // the wake word has been said, so starting the capture at the detection
@@ -74,8 +79,10 @@ let confirmationAudioContext = null; // Web Audio context for the detection tone
 
 // Streaming voice agent state (wake detected -> utterance end):
 let ws = null;                 // WebSocket to /api/ai/voice-agent-ws
+let voiceSocketGen = 0;        // bumped per socket: stale onclose must not clear the current queue
 let streaming = false;         // true between wake detection and utterance end
 let bytesStreamed = 0;         // audio bytes actually sent to the server
+let liveSentFrames = 0;        // frames sent live AFTER the flush (diagnostic)
 let bytesReceived = 0;         // audio bytes received from server (PCM or WAV)
 let firstPcmReceived = false;  // first frame received for this reply
 let pcmAudioCtx = null;
@@ -91,8 +98,22 @@ let resampleFrac = 0;          // fractional read position carried across frames
 // Pre-roll ring — always rotating, even while idle.
 let ringFrames = [];
 // Pre-roll snapshot plus the frames that arrive while the socket is still
-// CONNECTING; flushed in one batch on open, then dropped.
+// CONNECTING; moved into sendQueue (paced) once the socket opens.
 let pendingFrames = null;
+// Paced send queue: frames go out at their ORIGINAL cadence (80ms apart)
+// instead of a burst. Flooding Deepgram with ~1s of audio at once makes it
+// process a second behind the live stream, so the final transcript lands ~1s
+// after the end frame and truncates. Realtime pacing keeps it caught up.
+let sendQueue = [];             // {frame: Int16Array, dueAt: performance.now() ms}
+let queueBytes = 0;             // bytes currently queued but not yet sent
+let sendTimer = null;           // setTimeout id for the paced pump
+let endRequested = false;       // "end" frame waits until the queue drains
+// Monotonic send schedule (ms on the performance.now() base). Every frame —
+// pre-roll ring first, then live — gets dueAt = sendSchedule and advances it
+// by FRAME_MS, keeping the WHOLE stream at the original capture cadence.
+// Giving live frames dueAt=now caused a catch-up BURST the moment the ring
+// finished (all waited frames dumped at once) — the same backlog as before.
+let sendSchedule = 0;           // next frame's dueAt; 0 = not yet started
 
 // The server applies ONE uniform treatment to every phrase (tail fade + short
 // inter-phrase silence) and cannot know which phrase ends the reply, so the
@@ -232,12 +253,62 @@ function pushRing(frame) {
   if (ringFrames.length > PREROLL_FRAMES) ringFrames.shift();
 }
 
-// Send the held pre-roll as soon as the socket can take it.
+// Diagnostic: rough RMS of an Int16 frame (samples every 4th value) to tell
+// whether a frame holds speech or silence at freeze time.
+function frameRms(frame) {
+  if (!frame || !frame.length) return 0;
+  let sum = 0;
+  for (let i = 0; i < frame.length; i += 4) sum += frame[i] * frame[i];
+  return Math.sqrt(sum / Math.ceil(frame.length / 4));
+}
+
+// Move the held frames (pre-roll ring + frames captured while the socket was
+// CONNECTING) into the paced send queue, then kick the pump.
 function flushPending() {
   if (!pendingFrames || !ws || ws.readyState !== WebSocket.OPEN) return;
   const frames = pendingFrames;
   pendingFrames = null;
-  for (const frame of frames) sendFrame(frame);
+  // Replay at the original 80ms cadence: the LAST ring frame leaves ~1s
+  // after the first, keeping Deepgram's pipeline caught up with the live
+  // stream (see sendQueue comment).
+  const now = performance.now();
+  if (!sendSchedule) sendSchedule = now;
+  for (let i = 0; i < frames.length; i++) {
+    sendQueue.push({ frame: frames[i], dueAt: sendSchedule });
+    sendSchedule += FRAME_MS;
+    queueBytes += frames[i].byteLength;
+  }
+  log(`Enqueued ${frames.length} pre-roll frames (${(frames.length * FRAME_MS / 1000).toFixed(2)}s) paced at realtime`);
+  pumpSendQueue();
+}
+
+// Paced pump: send every frame whose due time has passed (in FIFO order, so
+// live frames never overtake queued pre-roll), then schedule the next tick.
+// When the utterance has ended and the queue is empty, the "end" frame goes
+// out so the backend/Deepgram sees a complete, ordered stream.
+function pumpSendQueue() {
+  if (sendTimer || !ws || ws.readyState !== WebSocket.OPEN) return;
+  const tick = () => {
+    sendTimer = null;
+    const now = performance.now();
+    while (sendQueue.length && sendQueue[0].dueAt <= now) {
+      const item = sendQueue.shift();
+      queueBytes -= item.frame.byteLength;
+      sendFrame(item.frame);
+    }
+    if (endRequested && sendQueue.length === 0) {
+      endRequested = false;
+      sendEndFrame();
+    } else if (sendQueue.length) {
+      sendTimer = setTimeout(tick, Math.max(0, sendQueue[0].dueAt - performance.now()));
+    }
+  };
+  sendTimer = setTimeout(tick, 0);
+}
+
+function sendEndFrame() {
+  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  ws.send(JSON.stringify({ type: "end" }));
 }
 
 // ---------------------------------------------------------------------------
@@ -246,11 +317,12 @@ function flushPending() {
 // Deepgram's WebSocket in real time, so transcription starts while the user
 // is still speaking.
 //
-// Flow: wake word detected -> the ring is frozen into pendingFrames at the
-// wake word's onset and startVoiceStream() opens the socket; frames keep
-// joining pendingFrames until the socket is OPEN, then the whole batch goes
-// out and live frames follow via pushAudioFrame(); VAD end ->
-// finishVoiceStream() sends {"type":"end"} so the backend can answer. The
+// Flow: wake word detected -> startVoiceStream() opens the socket; frames
+// arriving while it CONNECTS (the first instants of the command) join the
+// pre-roll in pendingFrames; on open they are replayed at realtime pace via
+// sendQueue, then live frames follow FIFO; VAD end ->
+// finishVoiceStream() marks endRequested, which sends {"type":"end"} once the
+// queue drains, so the backend can answer. The
 // reply arrives either as a JSON pcm_start preamble followed by raw PCM16
 // frames (?proto=2, played by the Web Audio PCM player) or as one binary WAV
 // per sentence (legacy, queued for sequential <audio> playback).
@@ -265,6 +337,13 @@ function startVoiceStream() {
 
   ws = new WebSocket(WS_URL);
   ws.binaryType = "arraybuffer";
+  const wsGen = ++voiceSocketGen;  // stale handlers must not touch the new stream
+  liveSentFrames = 0;
+  sendQueue = [];
+  queueBytes = 0;
+  endRequested = false;
+  sendSchedule = 0;
+  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
 
   ws.onopen = () => {
     // Socket is up: release the pre-roll held while it was CONNECTING.
@@ -344,7 +423,13 @@ function startVoiceStream() {
   };
 
   ws.onclose = () => {
+    if (wsGen !== voiceSocketGen) return;  // old socket closing after a restart
     ws = null;
+    if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+    sendQueue = [];
+    queueBytes = 0;
+    endRequested = false;
+    sendSchedule = 0;
     if (streaming) {
       // Socket closed mid-utterance (server went away before "end") — bail.
       streaming = false;
@@ -384,8 +469,16 @@ function sendFrame(frame) {
 function pushAudioFrame(frame) {
   if (!streaming || !ws) return;
   // CONNECTING frames never reach here: pendingFrames holds them until
-  // ws.onopen flushes the batch.
-  if (ws.readyState === WebSocket.OPEN) sendFrame(frame);
+  // ws.onopen runs flushPending(). Live frames go FIFO behind any still-
+  // queued pre-roll so Deepgram always sees chronological audio.
+  if (ws.readyState === WebSocket.OPEN) {
+    if (!sendSchedule) sendSchedule = performance.now();
+    sendQueue.push({ frame, dueAt: sendSchedule });
+    sendSchedule += FRAME_MS;
+    queueBytes += frame.byteLength;
+    liveSentFrames++;
+    pumpSendQueue();
+  }
 }
 
 async function finishVoiceStream(label) {
@@ -396,20 +489,26 @@ async function finishVoiceStream(label) {
   flushPending();
   pendingFrames = null;
 
-  log(`Utterance streamed (${label}): ${(bytesStreamed / 2 / 16000).toFixed(1)} s of audio`);
-  if (bytesStreamed === 0) {
+  const totalSeconds = (bytesStreamed + queueBytes) / 2 / 16000;
+  log(`Utterance streamed (${label}): ${totalSeconds.toFixed(2)} s of audio (${liveSentFrames} live frames after flush)`);
+  if (totalSeconds === 0) {
     log("Empty utterance captured — skipping request.", "info");
+    if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+    sendQueue = [];
+    queueBytes = 0;
+    sendSchedule = 0;
     ws?.close();
     ws = null;
     if (running) setStatus("LISTENING");
     return;
   }
 
-  // Tell the backend the utterance is complete; it answers with the WAV as a
-  // binary frame handled by ws.onmessage.
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "end" }));
-  }
+  // Tell the backend the utterance is complete, but only once the paced
+  // queue has drained — otherwise "end" would cut the stream while the tail
+  // of the pre-roll is still being replayed. The backend answers with the
+  // WAV as a binary frame handled by ws.onmessage.
+  endRequested = true;
+  pumpSendQueue();
 }
 
 // ---------------------------------------------------------------------------
@@ -702,14 +801,19 @@ async function startEngine() {
       setStatus("WAKE WORD DETECTED");
       log(`DETECTED "${label}" score=${score.toFixed(3)} — streaming command...`, "detection");
       // Freeze the pre-roll: the whole ring ships with this utterance.
-      // Frames arriving while the socket connects join the same batch.
+      // Dropping it lost the first frames of FAST commands — the command
+      // often starts inside the ring, before the classifier fires. The wake
+      // word inside the ring is handled server-side: Deepgram's endpointing
+      // is set above the typical wake-pause so it does not segment "alexa"
+      // off, and the router strips a leading wake token from the transcript.
       pendingFrames = ringFrames.slice();
-      log(`Pre-roll: ${pendingFrames.length}/${PREROLL_FRAMES} frames`);
+      log(`Ring: ${pendingFrames.length} frames held (${(pendingFrames.length * FRAME_MS / 1000).toFixed(2)}s), tail RMS ${frameRms(pendingFrames[pendingFrames.length - 1]).toFixed(0)}`);
       playConfirmationTone();
       startVoiceStream();
     },
     onUtterance: async ({ label }) => {
       if (!running) return;
+      log(`VAD utterance end: ${engine?._captureBuffer?.length ?? 0} frames since detection`);
       await finishVoiceStream(label);
     },
   });
@@ -747,6 +851,12 @@ async function stopEngine() {
   // Abort any in-flight voice stream.
   streaming = false;
   pendingFrames = null;
+  voiceSocketGen++;  // invalidate the in-flight socket's handlers
+  if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
+  sendQueue = [];
+  queueBytes = 0;
+  endRequested = false;
+  sendSchedule = 0;
   ws?.close();
   ws = null;
   bytesStreamed = 0;

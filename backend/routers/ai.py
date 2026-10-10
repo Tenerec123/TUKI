@@ -10,6 +10,7 @@ from ..ai.config import get_model_config, AUDIO_SYSTEM_PROMPT
 from ..ai.tools.discovery import ALL_TOOL_SCHEMAS
 import asyncio
 import json
+import time
 from typing import AsyncIterator
 
 router = APIRouter(
@@ -66,6 +67,11 @@ async def voice_agent_ws(websocket: WebSocket):
     query_params = websocket.query_params
     use_proto2 = query_params.get("proto") == "2"
 
+    # The end frame marks when the CLIENT stopped talking (after its VAD
+    # trailing silence) - the anchor the user actually feels. Passed down so the
+    # turn log measures the perceived timeline, not just the server-side one.
+    client_meta: dict = {}
+
     async def audio_chunks() -> AsyncIterator[bytes]:
         """Yield incoming binary audio frames until the utterance ends."""
         chunk_count = 0
@@ -85,11 +91,12 @@ async def voice_agent_ws(websocket: WebSocket):
                 except json.JSONDecodeError:
                     continue
                 if data.get("type") == "end":
+                    client_meta["t_client_stop"] = time.perf_counter()
                     print(f"[voice-agent-ws] end frame -> received {chunk_count} chunks / {total_bytes} bytes")
                     return
 
     try:
-        async for item in voice_agent_logic(audio_chunks(), streaming_path=use_proto2):
+        async for item in voice_agent_logic(audio_chunks(), streaming_path=use_proto2, client_meta=client_meta):
             if isinstance(item, dict):
                 await websocket.send_json(item)
             elif isinstance(item, bytes):
