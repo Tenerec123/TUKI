@@ -25,6 +25,7 @@ from urllib.parse import urlencode
 
 import websockets
 
+from .. import voicelog
 from .base import TTSSession, TTSProvider, TTSTurnEnd
 
 DEEPGRAM_TTS_WS_URL = "wss://api.deepgram.com/v1/speak"
@@ -121,13 +122,16 @@ class DeepgramTTTSession(TTSSession):
         }
         url = f"{DEEPGRAM_TTS_WS_URL}?{urlencode(params)}"
         headers = {"Authorization": f"Token {api_key}"}
-        print(f"[deepgram-tts] connecting to {url}")
+        voicelog.debug(f"connecting {url}", source="tts")
 
         t0 = time.perf_counter()
         self._ws = await websockets.connect(url, additional_headers=headers)
         self.connect_ms = (time.perf_counter() - t0) * 1000
-        print(f"[deepgram-tts] connected voice={self._voice} "
-              f"rate={self._sample_rate} connect={self.connect_ms:.1f}ms")
+        voicelog.debug(
+            f"connected voice={self._voice} rate={self._sample_rate} "
+            f"connect={self.connect_ms:.1f}ms",
+            source="tts",
+        )
         self._pump = asyncio.create_task(self._read())
 
     async def close(self) -> None:
@@ -141,15 +145,15 @@ class DeepgramTTTSession(TTSSession):
                 try:
                     await asyncio.wait_for(asyncio.shield(self._pump), timeout=10.0)
                 except asyncio.TimeoutError:
-                    print(
-                        "[deepgram-tts] close timed out with audio still buffered; "
+                    voicelog.log(
+                        "tts ! close timed out with audio still buffered; "
                         "the tail of the reply may be truncated"
                     )
         except asyncio.CancelledError:
             # A client disconnect cancels mid-close; the teardown below still has to run or the socket leaks.
             raise
         except Exception as exc:
-            print(f"[deepgram-tts] close error: {type(exc).__name__}: {exc}")
+            voicelog.log(f"tts ! close error: {type(exc).__name__}: {exc}")
         finally:
             if self._ws is not None:
                 try:
@@ -197,8 +201,8 @@ class DeepgramTTTSession(TTSSession):
         if len(self._flush_windows) >= FLUSH_LIMIT_PER_WINDOW:
             if not self._flush_defer_logged:
                 self._flush_defer_logged = True
-                print(
-                    f"[deepgram-tts] flush budget spent "
+                voicelog.log(
+                    f"tts ! flush budget spent "
                     f"({FLUSH_LIMIT_PER_WINDOW} per {_FLUSH_LIMIT_SECONDS:.0f}s); "
                     f"holding the flush until the window resets"
                 )
@@ -229,7 +233,7 @@ class DeepgramTTTSession(TTSSession):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"[deepgram-tts] held flush failed: {type(exc).__name__}: {exc}")
+            voicelog.log(f"tts ! held flush failed: {type(exc).__name__}: {exc}")
 
     async def audio(self) -> AsyncIterator[bytes | TTSTurnEnd]:
         while True:
@@ -252,23 +256,13 @@ class DeepgramTTTSession(TTSSession):
         return sum(chars for _, chars in self._send_windows)
 
     def report(self) -> None:
+        """Surface only the problems: throughput over cap and Deepgram warnings."""
         rate = self.chars_per_minute()
         cap = THROUGHPUT_LIMIT_CHARS_PER_MIN
-        pct = 100.0 * rate / cap if cap else 0.0
-        over = " OVER-CAP" if rate > cap else ""
-        ttfb = -1.0
-        if self.first_audio_s is not None and self.t_first_push is not None:
-            ttfb = (self.first_audio_s - self.t_first_push) * 1000
-        print(
-            f"[PERF] tts_deepgram: connect={self.connect_ms:.1f}ms "
-            f"ttfb={ttfb:.1f}ms turns={self.turns} flushes={self.flushes} "
-            f"chars_sent={self.chars_sent} model={self.model_version} "
-            f"chars_min={rate}/{cap} ({pct:.0f}%){over} "
-            f"bytes={self.bytes_audio} "
-            f"audio_ms={self.bytes_audio / 2 / self._sample_rate * 1000:.1f}"
-        )
+        if rate > cap:
+            voicelog.log(f"tts ! throughput {rate}/{cap} chars/min OVER CAP")
         for warning in self.warnings:
-            print(f"[deepgram-tts] Warning event: {warning}")
+            voicelog.log(f"tts ! warning {warning}")
 
     # --- socket reader ------------------------------------------------------
 
@@ -286,7 +280,7 @@ class DeepgramTTTSession(TTSSession):
         except asyncio.CancelledError:
             raise
         except Exception as exc:
-            print(f"[deepgram-tts] read error: {exc}")
+            voicelog.log(f"tts ! read error: {exc}")
         finally:
             await self._queue.put(None)
 
@@ -294,7 +288,7 @@ class DeepgramTTTSession(TTSSession):
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            print(f"[deepgram-tts] non-JSON text frame: {raw[:120]!r}")
+            voicelog.debug(f"non-JSON text frame: {raw[:120]!r}", source="tts")
             return
         msg_type = data.get("type")
 
@@ -302,8 +296,11 @@ class DeepgramTTTSession(TTSSession):
             # CONNECTION-LEVEL, not per turn: MEASURED on Aura v1, it fires once after the socket opens with only request_id and model name/version/UUID -- no audio_duration_ms, no character counts. Emitting a turn here would collapse the whole reply into one turn, the exact batching this swap removes.
             self.request_id = data.get("request_id")
             self.model_version = data.get("model_version")
-            print(f"[deepgram-tts] Metadata request_id={self.request_id} "
-                  f"model={data.get('model_name')}@{self.model_version}")
+            voicelog.debug(
+                f"Metadata request_id={self.request_id} "
+                f"model={data.get('model_name')}@{self.model_version}",
+                source="tts",
+            )
             return
 
         if msg_type == "Flushed":
@@ -311,9 +308,9 @@ class DeepgramTTTSession(TTSSession):
             self.turns += 1
             audio_ms = self._turn_bytes / 2 / self._sample_rate * 1000
             self._turn_bytes = 0
-            print(
-                f"[deepgram-tts] turn={self.turns} seq={data.get('sequence_id')} "
-                f"audio_ms={audio_ms:.0f}"
+            voicelog.debug(
+                f"turn={self.turns} seq={data.get('sequence_id')} audio_ms={audio_ms:.0f}",
+                source="tts",
             )
             await self._queue.put(TTSTurnEnd(
                 index=self.turns,
@@ -327,11 +324,11 @@ class DeepgramTTTSession(TTSSession):
             # Barge-in ack. The discarded text produced no audio, so no turn boundary is emitted and the buffer resets.
             self._turn_bytes = 0
             self._turn_chars = 0
-            print("[deepgram-tts] Cleared (buffered text discarded)")
+            voicelog.debug("Cleared (buffered text discarded)", source="tts")
             return
 
         if msg_type == "Close":
-            print("[deepgram-tts] server Close")
+            voicelog.debug("server Close", source="tts")
             return
 
         if msg_type == "Warning":
@@ -341,16 +338,16 @@ class DeepgramTTTSession(TTSSession):
                 f"msg={data.get('warn_msg')} desc={data.get('description')}"
             )
             self.warnings.append(detail)
-            print(f"[deepgram-tts] WARNING {detail}")
+            voicelog.log(f"tts ! warning {detail}")
             return
 
         if msg_type == "Error":
             detail = f"{data.get('description')} ({data.get('variant')})"
             self.warnings.append(f"Error {detail}")
-            print(f"[deepgram-tts] ERROR {detail}")
+            voicelog.log(f"tts ! error {detail}")
             return
 
-        print(f"[deepgram-tts] unhandled event type={msg_type}")
+        voicelog.debug(f"unhandled event type={msg_type}", source="tts")
 
 
 class DeepgramTTSProvider(TTSProvider):

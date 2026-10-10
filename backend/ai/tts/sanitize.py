@@ -14,6 +14,8 @@ pronounces them), and Spanish punctuation is never dropped (``¿``/``¡`` surviv
 import re
 import unicodedata
 
+from .. import voicelog
+
 # --- block-level constructs (only ever match at the start of a line) ---------
 
 # Heading, blockquote, bullet, ordered item. The trailing space is required so "1." mid-sentence and "-5 grados" keep their meaning.
@@ -478,10 +480,11 @@ def sanitize_stream_report(sanitizer: MarkdownSanitizer, label: str = "tts") -> 
     if sanitizer.chars_in <= 0:
         return
     pct = 100.0 * sanitizer.saved_chars / sanitizer.chars_in
-    print(
-        f"[PERF] {label}_sanitize: chars_in={sanitizer.chars_in} "
+    voicelog.debug(
+        f"{label}_sanitize: chars_in={sanitizer.chars_in} "
         f"chars_out={sanitizer.chars_out} saved={sanitizer.saved_chars} "
-        f"({pct:.1f}%) waits={sanitizer.waits} held={sanitizer.held_chars}"
+        f"({pct:.1f}%) waits={sanitizer.waits} held={sanitizer.held_chars}",
+        source="sanitize",
     )
 
 
@@ -510,9 +513,10 @@ def sanitize_chunk_report(
     held = sanitizer.held_chars
     sanitizer._reported_in = sanitizer.chars_in
     sanitizer._reported_out = sanitizer.chars_out
-    print(
-        f"[PERF] {label}_sanitize_chunk: in={delta_in} out={delta_out} "
-        f"held={held} held_pct={100.0 * held / delta_in if delta_in else 0.0:.0f}%"
+    voicelog.debug(
+        f"{label}_sanitize_chunk: in={delta_in} out={delta_out} "
+        f"held={held} held_pct={100.0 * held / delta_in if delta_in else 0.0:.0f}%",
+        source="sanitize",
     )
 
 
