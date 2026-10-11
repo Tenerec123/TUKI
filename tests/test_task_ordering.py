@@ -1,9 +1,14 @@
 """Tests for ``get_all_tasks_logic`` ordering.
 
 Order contract: unfinished tasks first, then priority ascending (1=critical
-first), then deadline ascending. The tests run on an in-memory SQLite
-database seeded with raw SQL, so the ORM embedding hooks never fire and no
-Postgres or embedding model is required.
+first), then deadline ascending. Each test seeds its own in-memory SQLite
+database with raw SQL, so the ORM embedding hooks never fire and no embedding
+model is required.
+
+Postgres must still be reachable for collection to succeed: importing
+``backend.models`` runs ``Base.metadata.create_all(engine)`` against
+``DATABASE_URL`` at module level. That is the same constraint the rest of the
+suite has (see ``tests/conftest.py``).
 """
 
 import sys
@@ -17,8 +22,9 @@ if str(REPO_ROOT) not in sys.path:
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-# Importing models registers Task on Base.metadata; the real engine built in
-# backend.database is created from .env but never connected during this test.
+# Importing backend.models registers the tables on Base.metadata AND runs
+# Base.metadata.create_all(engine) against the live DATABASE_URL, so Postgres
+# must be up even though the assertions below run on an in-memory SQLite DB.
 from backend.logic.tasks import get_all_tasks_logic
 from backend.models import Task
 
