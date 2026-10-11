@@ -15,7 +15,6 @@ def CreateTask(name: str, priority: int, deadline: str, description: str = None,
     '''
     Args:
         name: Short title of the task.
-        priority: Priority 1-64.
         deadline: When the task is due.
         description: Longer details (optional). null/empty = task without description.
         project_id: Project ID (preferred). Leave empty if unsure.
@@ -50,7 +49,6 @@ def UpdateTask(task_id: int, name: str = None, description: str = None, priority
     Args:
         name: New name (optional).
         description: New description (optional).
-        priority: New priority 1-64 (optional).
         deadline: New deadline (optional).
         finished: True/False (optional).
         project_id: Project ID to reassign (optional). null/absent = keep current project.
@@ -76,7 +74,6 @@ def CreateRoutine(name: str, priority: int, frequency: str, description: str = N
     Frequency in RRULE syntax (e.g. FREQ=WEEKLY;BYDAY=MO,WE,FR).
     Args:
         name: Short title of the routine.
-        priority: Priority 1-64.
         frequency: RRULE frequency syntax.
         description: Longer details (optional). null/empty = routine without description.
         init_date: Start date (optional). null = today.

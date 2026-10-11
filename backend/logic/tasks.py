@@ -9,11 +9,10 @@ def get_task_logic(id:int, db: Session):
     return db_task
 
 def get_all_tasks_logic(first_n:int, db: Session):
-    if first_n is None:
-        db_task = db.query(Task).order_by(Task.deadline).all()
-        return db_task
-    db_task = db.query(Task).limit(first_n).order_by(Task.deadline).all()
-    return db_task
+    query = db.query(Task).order_by(Task.finished, Task.priority, Task.deadline)
+    if first_n is not None:
+        query = query.limit(first_n)
+    return query.all()
     
 def create_task_logic(task: TaskCreate, db: Session):
     db_task = Task(

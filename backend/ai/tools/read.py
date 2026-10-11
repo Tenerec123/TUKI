@@ -32,7 +32,7 @@ def GetCurrentTime():
 
 def GetAllTasks():
     '''
-    Returns all tasks.
+    Returns all tasks, ordered by unfinished first, then priority (critical first), then deadline.
 '''
     with SessionLocal() as db:
         tasks = get_all_tasks_logic(first_n=None, db=db)
