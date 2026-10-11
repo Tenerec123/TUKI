@@ -51,37 +51,43 @@ def _intent_payload(choice, confidence=None) -> dict:
 
 
 # --- _classify: parsing ------------------------------------------------------
+#
+# These exercise the Jev network path, so they must use a transcript the local
+# pre-classifier (_quick_intent) leaves alone -- otherwise it short-circuits
+# before the request and the parsing assertions never run.
+
+_JEVPATH_PHRASE = "cuenta me un chiste"
 
 
 def test_classify_time_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("time", 0.9))
-    assert vr._classify("que hora es") == "time"
+    assert vr._classify(_JEVPATH_PHRASE) == "time"
 
 
 def test_classify_weather_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("weather", 0.99))
-    assert vr._classify("que tiempo hace") == "weather"
+    assert vr._classify(_JEVPATH_PHRASE) == "weather"
 
 
 def test_classify_other_key(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("other", 0.9))
-    assert vr._classify("cuenta me un chiste") == "other"
+    assert vr._classify(_JEVPATH_PHRASE) == "other"
 
 
 def test_classify_accepts_index_form(monkeypatch):
     # Jev may answer with the criteria index instead of the key string.
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload(1, 0.9))
-    assert vr._classify("que tiempo hace") == "weather"
+    assert vr._classify(_JEVPATH_PHRASE) == "weather"
 
 
 def test_classify_accepts_string_digit_index(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("0", 0.9))
-    assert vr._classify("que hora es") == "time"
+    assert vr._classify(_JEVPATH_PHRASE) == "time"
 
 
 def test_classify_low_confidence_falls_back_to_other(monkeypatch):
@@ -93,7 +99,7 @@ def test_classify_low_confidence_falls_back_to_other(monkeypatch):
 def test_classify_missing_confidence_is_accepted(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("time"))
-    assert vr._classify("que hora es") == "time"
+    assert vr._classify(_JEVPATH_PHRASE) == "time"
 
 
 def test_classify_network_error_returns_other(monkeypatch):
@@ -103,18 +109,150 @@ def test_classify_network_error_returns_other(monkeypatch):
         raise OSError("timed out")
 
     monkeypatch.setattr(vr.urllib.request, "urlopen", boom)
-    assert vr._classify("que hora es") == "other"
+    assert vr._classify(_JEVPATH_PHRASE) == "other"
 
 
 def test_classify_missing_api_key_returns_other(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    assert vr._classify("que hora es") == "other"
+    assert vr._classify(_JEVPATH_PHRASE) == "other"
 
 
 def test_classify_malformed_response_returns_other(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, {"unexpected": "shape"})
-    assert vr._classify("que hora es") == "other"
+    assert vr._classify(_JEVPATH_PHRASE) == "other"
+
+
+# --- _quick_intent: local pre-classifier -------------------------------------
+
+_TIME_MATCH_PHRASES = [
+    "que hora es",
+    "que hora son",
+    "me dices la hora",
+    "dime la hora",
+    "decime la hora",
+    "la hora",
+    "que hora tenes",
+    "what time is it",
+    "what's the time",
+    "current time",
+]
+
+_WEATHER_MATCH_PHRASES = [
+    "que tiempo hace",
+    "como esta el tiempo",
+    "que tiempo va a hacer",
+    "el clima",
+    "como esta el clima",
+    "va a llover",
+    "temperatura",
+    "cuantos grados hace",
+    "how's the weather",
+    "the weather",
+    "forecast",
+]
+
+_NON_MATCH_PHRASES = [
+    "cuanto tiempo falta para fin de mes",
+    "cuanto tiempo queda",
+    "cuanto tiempo tarda",
+    "no tengo tiempo",
+    "me falta tiempo",
+    "a que hora es la reunion",
+    "que hora te viene mejor",
+    "que hora es la reunion con Ana",
+    "como hago una tarea",
+    "ponme una tarea",
+    "que tareas tengo",
+]
+
+
+@pytest.mark.parametrize("phrase", _TIME_MATCH_PHRASES)
+def test_quick_intent_matches_time(phrase):
+    assert vr._quick_intent(phrase) == "time"
+
+
+@pytest.mark.parametrize("phrase", _WEATHER_MATCH_PHRASES)
+def test_quick_intent_matches_weather(phrase):
+    assert vr._quick_intent(phrase) == "weather"
+
+
+@pytest.mark.parametrize("phrase", _NON_MATCH_PHRASES)
+def test_quick_intent_returns_none_for_ambiguous(phrase):
+    assert vr._quick_intent(phrase) is None
+
+
+def test_quick_intent_accent_variants_both_match_time():
+    # "qu\u00e9" (with accent) and "que" must classify identically.
+    assert vr._quick_intent("qu\u00e9 hora es") == "time"
+    assert vr._quick_intent("que hora es") == "time"
+
+
+def test_quick_intent_weather_accent_variants_match():
+    assert vr._quick_intent("qu\u00e9 tiempo hace") == "weather"
+    assert vr._quick_intent("c\u00f3mo est\u00e1 el tiempo") == "weather"
+
+
+def test_quick_intent_trailing_punctuation_still_matches():
+    assert vr._quick_intent("  \u00bfQue hora es?  ") == "time"
+
+
+def test_quick_intent_empty_returns_none():
+    assert vr._quick_intent("") is None
+
+
+# --- _classify: local short-circuit ------------------------------------------
+
+
+def test_classify_short_circuits_before_network(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    def boom(request, timeout=None):
+        raise AssertionError("urlopen must NOT be called for a quick intent")
+
+    monkeypatch.setattr(vr.urllib.request, "urlopen", boom)
+    info: dict = {}
+    assert vr._classify("que hora es", info) == "time"
+    assert info["intent"] == "time"
+    assert info["confidence"] == 1.0
+
+
+def test_classify_short_circuits_weather_before_network(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    def boom(request, timeout=None):
+        raise AssertionError("urlopen must NOT be called for a quick intent")
+
+    monkeypatch.setattr(vr.urllib.request, "urlopen", boom)
+    info: dict = {}
+    assert vr._classify("que tiempo hace", info) == "weather"
+    assert info["intent"] == "weather"
+    assert info["confidence"] == 1.0
+
+
+def test_classify_calls_network_for_non_matching(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    called: list[bool] = []
+
+    def fake(request, timeout=None):
+        called.append(True)
+        return _FakeJevResponse(_intent_payload("other", 0.9))
+
+    monkeypatch.setattr(vr.urllib.request, "urlopen", fake)
+    assert vr._classify("cuenta me un chiste") == "other"
+    assert called, "a non-matching transcript must still reach Jev"
+
+
+def test_classify_never_raises_on_network_error_non_matching(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+
+    def boom(request, timeout=None):
+        raise OSError("timed out")
+
+    monkeypatch.setattr(vr.urllib.request, "urlopen", boom)
+    info: dict = {}
+    assert vr._classify("cuenta me un chiste", info) == "other"
+    assert info["intent"] == "other"
 
 
 # --- prefabs -----------------------------------------------------------------
