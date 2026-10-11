@@ -13,7 +13,7 @@ class ModelConfig(BaseModel):
 class BaseItem(BaseModel):
     name: str = Field(..., max_length=512, description='Name of the todo')
     description: Optional[str] = Field(None, max_length=512, description='Description of the todo')
-    priority: int = Field(default=0, ge=0, le=64, description="Priority of the todo")
+    priority: int = Field(default=3, ge=1, le=4, description="Priority of the todo")
     model_config = ConfigDict(from_attributes=True)
 
 # Task Classes
@@ -29,7 +29,7 @@ class TaskSchema(TaskCreate):
 class TaskUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=512, description='Name of the task')
     description: Optional[str] = Field(None, max_length=512, description='Description of the task')
-    priority: Optional[int] = Field(None, ge=0, le=64, description="Priority of the task")
+    priority: Optional[int] = Field(None, ge=1, le=4, description="Priority of the task")
     deadline: Optional[date] = Field(default=None, description="Latest day in which the task must/should be done (depending on the priority)")
     finished: Optional[bool] = Field(default=None, description="True if is the task is done and false if not")
     project_id:Optional[int] = Field(None)
@@ -52,7 +52,7 @@ class RoutineSchema(RoutineCreate):
 class RoutineUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=512)
     description: Optional[str] = Field(None, max_length=512)
-    priority: Optional[int] = Field(None, ge=0, le=64)
+    priority: Optional[int] = Field(None, ge=1, le=4)
     frequency: Optional[str] = Field(None)
     project_id:Optional[int] = Field(None)
     init_date:Optional[date] = Field(None)
@@ -130,7 +130,7 @@ ProjectSchema.model_rebuild()
 class ProjectUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=512)
     description: Optional[str] = Field(None, max_length=512)
-    priority: Optional[int] = Field(None, ge=0, le=64)
+    priority: Optional[int] = Field(None, ge=1, le=4)
     parent_id: Optional[int] = Field(None)
 
 
