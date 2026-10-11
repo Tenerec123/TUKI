@@ -464,6 +464,10 @@ TABLE DATA COLUMNS
     font-size: 1.4rem;
     text-align: center;
 }
+.priority-critical { color: var(--neon-red); }
+.priority-high { color: #ffa500; }
+.priority-normal { color: var(--neon-yellow); }
+.priority-low { color: #808080; }
 .deadline{
     font-family: monospace;
     padding: 0;

@@ -18,6 +18,21 @@ function getIcon(iconName) {
     return (content && content !== 'none') ? iconName : 'person-walking';
 }
 
+const PRIORITY_META = {
+    1: { label: 'Critical', cls: 'priority-critical' },
+    2: { label: 'High', cls: 'priority-high' },
+    3: { label: 'Normal', cls: 'priority-normal' },
+    4: { label: 'Low', cls: 'priority-low' },
+};
+
+// Render a task/project/routine priority as an English label with a color
+// class. Out-of-range or missing values fall back to Normal.
+function setPriority(td, priority) {
+    const meta = PRIORITY_META[priority] || PRIORITY_META[3];
+    td.textContent = meta.label;
+    td.classList.add(meta.cls);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     // Default date inputs to today instead of a hardcoded (stale) date.
     const today = new Date().toISOString().split('T')[0];
@@ -79,7 +94,7 @@ async function LoadTasks() {
 
             const priorityTd = document.createElement('td');
             priorityTd.className = 'priority';
-            priorityTd.textContent = task.priority;
+            setPriority(priorityTd, task.priority);
 
             const deadlineTd = document.createElement('td');
             deadlineTd.className = 'deadline';
@@ -126,7 +141,7 @@ async function LoadProjects() {
 
         const priorityTd = document.createElement('td');
         priorityTd.className = 'priority';
-        priorityTd.textContent = project.priority;
+        setPriority(priorityTd, project.priority);
 
         const deleteTd = document.createElement('td');
         deleteTd.className = 'delete';
@@ -174,7 +189,7 @@ async function LoadRoutines() {
 
       const priorityTd = document.createElement('td');
       priorityTd.className = 'priority';
-      priorityTd.textContent = routine.priority;
+      setPriority(priorityTd, routine.priority);
 
       const frequencyTd = document.createElement('td');
       frequencyTd.className = 'description';
