@@ -92,6 +92,12 @@ async def voice_agent_ws(websocket: WebSocket):
                     continue
                 if data.get("type") == "end":
                     client_meta["t_client_stop"] = time.perf_counter()
+                    try:
+                        lag = data.get("client_lag_ms")
+                        if lag is not None:
+                            client_meta["client_lag_ms"] = float(lag)
+                    except (TypeError, ValueError):
+                        pass
                     print(f"[voice-agent-ws] end frame -> received {chunk_count} chunks / {total_bytes} bytes")
                     return
 

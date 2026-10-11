@@ -115,6 +115,10 @@ let endRequested = false;       // "end" frame waits until the queue drains
 // finished (all waited frames dumped at once) — the same backlog as before.
 let sendSchedule = 0;           // next frame's dueAt; 0 = not yet started
 
+// Client-side timing to compute honest lag
+let utterance_end_ms = 0;        // When onUtterance fires (utterance end detected)
+let clientLagMs = 0;             // Computed client lag in ms
+
 // The server applies ONE uniform treatment to every phrase (tail fade + short
 // inter-phrase silence) and cannot know which phrase ends the reply, so the
 // longer closing tail is applied here — the client is what knows the stream is
@@ -308,7 +312,12 @@ function pumpSendQueue() {
 
 function sendEndFrame() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ type: "end" }));
+  // Record when the end frame is actually sent
+  const end_frame_sent_ms = performance.now();
+  // Compute client-side lag: time from true end of speech (onUtterance) to end frame sent
+  // plus adjustment for VAD trailing silence that happened before onUtterance fired
+  clientLagMs = (end_frame_sent_ms - utterance_end_ms) + VAD_STOP_FRAMES * FRAME_MS;
+  ws.send(JSON.stringify({ type: "end", client_lag_ms: Number(clientLagMs) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +352,8 @@ function startVoiceStream() {
   queueBytes = 0;
   endRequested = false;
   sendSchedule = 0;
+  utterance_end_ms = 0;
+  clientLagMs = 0;
   if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
 
   ws.onopen = () => {
@@ -430,6 +441,8 @@ function startVoiceStream() {
     queueBytes = 0;
     endRequested = false;
     sendSchedule = 0;
+    utterance_end_ms = 0;
+    clientLagMs = 0;
     if (streaming) {
       // Socket closed mid-utterance (server went away before "end") — bail.
       streaming = false;
@@ -813,6 +826,7 @@ async function startEngine() {
     },
     onUtterance: async ({ label }) => {
       if (!running) return;
+      utterance_end_ms = performance.now();
       log(`VAD utterance end: ${engine?._captureBuffer?.length ?? 0} frames since detection`);
       await finishVoiceStream(label);
     },
@@ -857,6 +871,8 @@ async function stopEngine() {
   queueBytes = 0;
   endRequested = false;
   sendSchedule = 0;
+  utterance_end_ms = 0;
+  clientLagMs = 0;
   ws?.close();
   ws = null;
   bytesStreamed = 0;

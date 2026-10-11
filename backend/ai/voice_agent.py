@@ -48,11 +48,30 @@ def _strip_wake_word(transcript: str) -> str:
     return transcript
 
 
+def _perceived_anchor(perf: dict) -> float:
+    t_client_stop = perf.get("t_client_stop")
+    if t_client_stop is not None:
+        lag_s = perf.get("client_lag_ms", 0) or 0
+        try:
+            lag_s = float(lag_s) / 1000.0
+        except (TypeError, ValueError):
+            lag_s = 0.0
+        return t_client_stop - lag_s
+    return perf["t_req"]
+
+
 def _print_empty_turn(perf: dict) -> None:
     """One-line block for a turn that produced no speech."""
-    anchor = perf.get("t_client_stop") or perf["t_req"]
+    anchor = _perceived_anchor(perf)
+    lag_ms = perf.get("client_lag_ms", 0) or 0
+    try:
+        lag_s = float(lag_ms) / 1000.0
+    except (TypeError, ValueError):
+        lag_s = 0.0
     voicelog.log("---- turn ----")
     voicelog.log('heard    ""')
+    if lag_s:
+        voicelog.log(f"vad      client wait {lag_s:.2f}s  [silence + queue drain]")
     voicelog.log(f"total    {time.perf_counter() - anchor:.2f}s  (empty transcript)")
 
 
@@ -66,13 +85,21 @@ def _print_voice_summary(perf: dict, stats: dict, session: TTSSession) -> None:
     """
     t_end = time.perf_counter()
     first = stats.get("first_audio")
-    anchor = perf.get("t_client_stop") or perf["t_req"]
+    anchor = _perceived_anchor(perf)
     speech_to_audio = (first - anchor) if first is not None else None
     timing = perf.get("stt_timing", {})
     hidden = "yes" if perf.get("connect_overlapped") else "no"
 
+    lag_ms = perf.get("client_lag_ms", 0) or 0
+    try:
+        lag_s = float(lag_ms) / 1000.0
+    except (TypeError, ValueError):
+        lag_s = 0.0
+
     voicelog.log("---- turn ----")
     voicelog.log(f'heard    "{perf.get("transcript", "")}"')
+    if lag_s:
+        voicelog.log(f"vad      client wait {lag_s:.2f}s  [silence + queue drain]")
     voicelog.log(
         f"stt      {perf['stt'] / 1000:.2f}s  "
         f"[connect {timing.get('connect', 0.0) / 1000:.2f} | "
@@ -126,8 +153,9 @@ async def voice_agent_logic(
 
     ``client_meta`` optionally carries the timestamp (perf_counter) at which the
     client stopped talking (the router records it when the end frame arrives,
-    after the client's VAD trailing silence). When present, the turn log's
-    ``total``/``speech->audio`` measure the perceived timeline from that moment.
+    after the client's VAD trailing silence) and the client-reported lag. When
+    present, the turn log's ``total``/``speech->audio`` measure the perceived
+    timeline as ``t_client_stop - client_lag_ms/1000`` (true end of speech).
 
     Paths:
     - Legacy (streaming_path=False): yields bytes as WAV per turn via iter_wav_turns.
@@ -157,10 +185,11 @@ async def voice_agent_logic(
     perf["stt_timing"] = dict(getattr(provider, "timing", {}) or {})
     # The handshake overlapped STT if it finished before the user stopped talking.
     perf["connect_overlapped"] = connect_task.done()
-    # Perceived timeline: anchor at the moment the client stopped talking. The
-    # router fills it when the end frame arrives, i.e. VAD trailing + upload
-    # after the user stops; missing meta falls back to the server-side start.
-    perf["t_client_stop"] = (client_meta or {}).get("t_client_stop")
+    # Perceived timeline: anchor at t_client_stop minus client-reported lag
+    # (true end of speech). The router fills it when the end frame arrives.
+    meta = client_meta or {}
+    perf["t_client_stop"] = meta.get("t_client_stop")
+    perf["client_lag_ms"] = meta.get("client_lag_ms", 0)
 
     if not transcription.strip():
         # The socket was opened before STT; an empty turn must tear it down or it leaks.
