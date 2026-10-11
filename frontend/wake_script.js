@@ -45,8 +45,8 @@ const INPUT_GAIN = 3.0;
 
 // Utterance-end tuning (1 frame = 1280 samples @ 16 kHz = 80 ms).
 // The engine waits for this many CONSECUTIVE silent VAD frames before
-// calling onUtterance; 12 frames = ~960 ms of silence.
-const VAD_STOP_FRAMES = 12;
+// calling onUtterance; 6 frames = ~480 ms of silence (~0.5 s).
+const VAD_STOP_FRAMES = 6;
 // Hard cap on capture duration: never buffer longer than this (seconds),
 // even if the VAD never reports silence.
 const MAX_CAPTURE_DURATION = 20;
