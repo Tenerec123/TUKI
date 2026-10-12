@@ -1,11 +1,12 @@
 from fastapi import HTTPException
 from pydantic import ValidationError
-from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate, EventCreate, EventUpdate
+from ...schemas import TaskCreate, TaskUpdate, RoutineCreate, RoutineUpdate, ProjectCreate, ProjectUpdate, NoteMetaCreate, NoteMetaUpdate, EventCreate, EventUpdate, BlockCreate, BlockUpdate, BlockExceptionCreate
 from ...database import SessionLocal
 from ...logic.tasks import create_task_logic, delete_task_logic, update_task_logic
 from ...logic.projects import create_project_logic, delete_project_logic, update_project_logic
 from ...logic.routines import create_routine_logic, delete_routine_logic, update_routine_logic, set_routine_check_logic, current_date
 from ...logic.events import create_event_logic, delete_event_logic, update_event_logic
+from ...logic.blocks import create_block_logic, delete_block_logic, update_block_logic, create_block_exception_logic, delete_block_exception_logic
 from ...logic.notes import create_note_logic, create_folder_logic, delete_note_logic, delete_folder_logic, update_note_logic
 from ._helpers import _icon_fallback, _resolve_project
 from .dates import parse_relative_date, parse_relative_datetime
@@ -326,3 +327,125 @@ def DeleteEvent(event_id: int):
             return f"Event {deleted_event.name} with id {deleted_event.id} successfully deleted"
     except HTTPException as e:
         return f"Error deleting event: {e}"
+
+
+def CreateBlock(name: str, start_time: str, end_time: str, rrule: str, description: str = None) -> str:
+    '''
+    Creates a recurring time block using an iCalendar RRULE.
+    Datetimes are naive local time and accept relative forms such as "tomorrow 09:00"
+    or ISO-8601 local datetimes. The end time may equal the start time.
+    Args:
+        name: Short title of the recurring block.
+        start_time: First occurrence start, relative or ISO-8601 naive local datetime.
+        end_time: First occurrence end, relative or ISO-8601 naive local datetime.
+        rrule: Recurrence rule in RFC 5545 syntax (for example FREQ=WEEKLY;BYDAY=MO).
+        description: Longer details (optional).
+    '''
+    try:
+        with SessionLocal() as db:
+            block = create_block_logic(
+                block=BlockCreate(
+                    name=name,
+                    description=description,
+                    start_time=parse_relative_datetime(start_time),
+                    end_time=parse_relative_datetime(end_time),
+                    rrule=rrule,
+                ),
+                db=db,
+            )
+            return f"Block {block.name} with id {block.id} successfully created"
+    except (HTTPException, ValidationError, ValueError) as error:
+        detail = error.detail if isinstance(error, HTTPException) else error
+        return f"Error creating block: {detail}"
+
+
+def UpdateBlock(block_id: int, name: str = None, description: str = None, start_time: str = None, end_time: str = None, rrule: str = None) -> str:
+    '''
+    Updates only the provided fields of a recurring block.
+    Datetimes are naive local time and accept relative forms such as "tomorrow 09:00"
+    or ISO-8601 local datetimes.
+    Args:
+        block_id: ID of the block to update.
+        name: New title (optional).
+        description: New details (optional).
+        start_time: New first occurrence start (optional).
+        end_time: New first occurrence end (optional).
+        rrule: New RFC 5545 recurrence rule (optional).
+    '''
+    try:
+        with SessionLocal() as db:
+            update_block_logic(
+                id=block_id,
+                updated_block=BlockUpdate(
+                    name=name,
+                    description=description,
+                    start_time=None if start_time is None else parse_relative_datetime(start_time),
+                    end_time=None if end_time is None else parse_relative_datetime(end_time),
+                    rrule=rrule,
+                ),
+                db=db,
+            )
+            return f"Block {block_id} successfully updated"
+    except (HTTPException, ValidationError, ValueError) as error:
+        detail = error.detail if isinstance(error, HTTPException) else error
+        return f"Error updating block: {detail}"
+
+
+def DeleteBlock(block_id: int) -> str:
+    '''
+    Deletes a recurring block and its exceptions. Irreversible.
+    Args:
+        block_id: ID of the block to delete.
+    '''
+    try:
+        with SessionLocal() as db:
+            block = delete_block_logic(id=block_id, db=db)
+            return f"Block {block.name} with id {block.id} successfully deleted"
+    except HTTPException as error:
+        return f"Error deleting block: {error.detail}"
+
+
+def CreateBlockException(block_id: int, is_add: bool, start_time: str, end_time: str = None) -> str:
+    '''
+    Adds an extra occurrence at a start not generated by the rule, or removes a
+    rule-generated occurrence. To move an occurrence, create a removal for its
+    generated start and a separate addition at the new time.
+    Datetimes are naive local time and accept relative forms such as "tomorrow 09:00"
+    or ISO-8601 local datetimes. An addition requires end_time; a removal must omit it.
+    Args:
+        block_id: ID of the block.
+        is_add: True to add an extra occurrence; false to remove a rule-generated occurrence.
+        start_time: Start of the added occurrence or generated occurrence to remove.
+        end_time: Required for an addition; omit for a removal.
+    '''
+    try:
+        with SessionLocal() as db:
+            exception = create_block_exception_logic(
+                id=block_id,
+                data=BlockExceptionCreate(
+                    is_add=is_add,
+                    start_time=parse_relative_datetime(start_time),
+                    end_time=None if end_time is None else parse_relative_datetime(end_time),
+                ),
+                db=db,
+            )
+            action = "added" if exception.is_add else "removed"
+            return f"Block exception {exception.id} successfully created; occurrence {action}"
+    except (HTTPException, ValidationError, ValueError) as error:
+        detail = error.detail if isinstance(error, HTTPException) else error
+        return f"Error creating block exception: {detail}"
+
+
+def DeleteBlockException(block_id: int, exception_id: int) -> str:
+    '''
+    Deletes a block exception, restoring the rule-generated occurrence for removals.
+    Args:
+        block_id: ID of the block.
+        exception_id: ID of the exception to delete.
+    '''
+    try:
+        with SessionLocal() as db:
+            exception = delete_block_exception_logic(id=block_id, exception_id=exception_id, db=db)
+            return f"Block exception {exception.id} successfully deleted"
+    except HTTPException as error:
+        return f"Error deleting block exception: {error.detail}"

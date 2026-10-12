@@ -1,12 +1,13 @@
 import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from ...schemas import TaskSchema, ProjectSchema, RoutineSchema, EventSchema
+from ...schemas import TaskSchema, ProjectSchema, RoutineSchema, EventSchema, BlockRead, BlockExceptionRead, BlockOccurrenceRead
 from ...database import SessionLocal
 from ...logic.tasks import get_all_tasks_logic, search_tasks_logic
 from ...logic.projects import get_all_project_logic, search_projects_logic
 from ...logic.routines import get_all_routine_logic, search_routines_logic
 from ...logic.events import get_all_events_logic, search_events_logic
+from ...logic.blocks import get_all_blocks_logic, search_blocks_logic, get_block_exceptions_logic, get_block_occurrences_logic
 from ...logic.notes import get_note_logic, search_notes_logic
 import urllib.request
 import json
@@ -14,7 +15,9 @@ import urllib.parse
 import imaplib
 import email as email_lib
 from .websearch import fetch_page
+from .dates import parse_relative_datetime
 import yfinance as yf
+from fastapi import HTTPException
 
 
 def GetCurrentTime():
@@ -106,6 +109,78 @@ def SearchEvents(text: str, limit: int = 5):
     with SessionLocal() as db:
         events = search_events_logic(text=text, limit=limit, db=db)
         return [EventSchema.model_validate(e).model_dump() for e in events]
+
+
+def GetAllBlocks(first_n: int = None) -> list[dict]:
+    '''
+    Returns recurring time blocks ordered by their start time.
+    Args:
+        first_n: Maximum number of blocks to return. null/absent returns all blocks.
+    '''
+    with SessionLocal() as db:
+        blocks = get_all_blocks_logic(first_n=first_n, db=db)
+        return [BlockRead.model_validate(block).model_dump() for block in blocks]
+
+
+def SearchBlocks(text: str, limit: int = 5) -> list[dict]:
+    '''
+    Semantic search over recurring time blocks. Returns the most relevant results.
+    Args:
+        text: Search query describing the block to find.
+        limit: Maximum number of blocks to return (default 5).
+    '''
+    with SessionLocal() as db:
+        blocks = search_blocks_logic(text=text, limit=limit, db=db)
+        return [BlockRead.model_validate(block).model_dump() for block in blocks]
+
+
+def GetBlockOccurrences(block_id: int, from_datetime: str = None, to_datetime: str = None) -> list[dict] | str:
+    '''
+    Expands a recurring block into concrete occurrences. Defaults to the next year.
+    Datetimes are naive local time and accept relative forms such as "tomorrow 09:00"
+    or ISO-8601 local datetimes.
+    Args:
+        block_id: ID of the block.
+        from_datetime: Inclusive start of the window (optional).
+        to_datetime: Inclusive end of the window (optional).
+    '''
+    def parse_bound(value: str, name: str) -> datetime:
+        try:
+            iso_bound = datetime.fromisoformat(value)
+        except ValueError:
+            iso_bound = None
+        if iso_bound is not None and iso_bound.tzinfo is not None:
+            raise ValueError(f"{name} must be naive local time (no offset)")
+
+        bound = parse_relative_datetime(value)
+        if bound.tzinfo is not None:
+            raise ValueError(f"{name} must be naive local time (no offset)")
+        return bound
+
+    try:
+        start = None if from_datetime is None else parse_bound(from_datetime, "from")
+        end = None if to_datetime is None else parse_bound(to_datetime, "to")
+        with SessionLocal() as db:
+            occurrences = get_block_occurrences_logic(
+                id=block_id,
+                window_start=start,
+                window_end=end,
+                db=db,
+            )
+            return [item.model_dump() for item in occurrences]
+    except (ValueError, HTTPException) as error:
+        return f"Error getting block occurrences: {error}"
+
+
+def GetBlockExceptions(block_id: int) -> list[dict]:
+    '''
+    Returns the exceptions configured for a recurring block.
+    Args:
+        block_id: ID of the block.
+    '''
+    with SessionLocal() as db:
+        exceptions = get_block_exceptions_logic(id=block_id, db=db)
+        return [BlockExceptionRead.model_validate(item).model_dump() for item in exceptions]
 
 
 def Weather(city: str = None):

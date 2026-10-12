@@ -8,7 +8,7 @@ from dateutil.rrule import rrule, rrulestr
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from ..models import Block, BlockException
+from ..models import Block, BlockException, get_embedding_model
 from ..schemas import BlockCreate, BlockUpdate, BlockExceptionCreate, BlockOccurrenceRead
 from .routines import current_date
 
@@ -124,6 +124,8 @@ def _resolve_window(
         window_start = datetime.combine(current_date(), time.min)
     if window_end is None:
         window_end = window_start + timedelta(days=DEFAULT_WINDOW_DAYS)
+    if window_end < window_start:
+        raise ValueError("Occurrence window end must not precede start")
     if window_end - window_start > timedelta(days=MAX_WINDOW_DAYS):
         raise ValueError(
             f"Occurrence window too wide: at most {MAX_WINDOW_DAYS} days are allowed"
@@ -140,22 +142,29 @@ def expand_block_occurrences(
     """Expand a block's RRULE into concrete ``(start, end)`` occurrences.
 
     Rule-generated starts inside ``[window_start, window_end]`` keep the block's
-    duration (``end_time - start_time``). Exceptions are then applied: an
-    ``is_add`` exception inserts ``(start_time, end_time)``, and a removal
-    (``is_add`` False) drops the generated occurrence with a matching start
-    (ignored when absent). Results are sorted by start. ``ValueError`` is raised
-    when the bounded scan of ``_collect_starts`` is exceeded.
+    duration (``end_time - start_time``). An in-window ``is_add`` exception
+    inserts an extra occurrence, but raises ``ValueError`` if its start already
+    exists in the rule. A removal (``is_add`` False) drops the generated
+    occurrence with a matching start (ignored when absent). Results are sorted
+    by start. ``ValueError`` is raised when the bounded scan of ``_collect_starts``
+    is exceeded.
     """
     duration: timedelta = block.end_time - block.start_time
     rule = _build_rule(block)
     generated_starts = _collect_starts(rule, window_start, window_end)
+    generated_start_set = set(generated_starts)
 
     # Keyed by occurrence start so an exception can add or remove deterministically.
     occurrences = {start: (start, start + duration) for start in generated_starts}
 
     for exception in exceptions:
         if exception.is_add:
-            occurrences[exception.start_time] = (exception.start_time, exception.end_time)
+            if window_start <= exception.start_time <= window_end:
+                if exception.start_time in generated_start_set:
+                    raise ValueError(
+                        "is_add=True requires start_time not to match a rule-generated occurrence"
+                    )
+                occurrences[exception.start_time] = (exception.start_time, exception.end_time)
         else:
             occurrences.pop(exception.start_time, None)
 
@@ -174,6 +183,11 @@ def validate_exception(block: Block, data: BlockExceptionCreate) -> None:
             raise ValueError("end_time is required when is_add is True")
         if data.end_time <= data.start_time:
             raise ValueError("end_time must be after start_time")
+        rule = _build_rule(block)
+        if _rule_contains(rule, data.start_time):
+            raise ValueError(
+                "is_add=True requires start_time not to match a rule-generated occurrence"
+            )
         return
 
     if data.end_time is not None:
@@ -195,6 +209,12 @@ def get_all_blocks_logic(first_n: int, db: Session):
     if first_n is None:
         return db.query(Block).order_by(Block.start_time, Block.id).all()
     return db.query(Block).order_by(Block.start_time, Block.id).limit(first_n).all()
+
+
+def search_blocks_logic(text: str, limit: int, db: Session) -> List[Block]:
+    model = get_embedding_model()
+    embedding = list(model.encode(text))
+    return db.query(Block).order_by(Block.embedding.cosine_distance(embedding)).limit(limit).all()
 
 
 def create_block_logic(block: BlockCreate, db: Session):

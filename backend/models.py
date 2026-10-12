@@ -124,7 +124,7 @@ class BlockException(Base):
     block_id: Mapped[int] = mapped_column(
         ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # True: add an extra occurrence; False: remove a rule-generated occurrence
+    # True: add an extra occurrence at a non-generated start; False: remove a generated occurrence
     is_add: Mapped[bool] = mapped_column(nullable=False)
     start_time: Mapped[datetime] = mapped_column(nullable=False)  # naive local time
     # Required when is_add is True, must be NULL when is_add is False

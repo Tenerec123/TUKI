@@ -133,6 +133,47 @@ def test_addition_inserts_extra_occurrence_sorted_by_start():
     ]
 
 
+def test_addition_cannot_replace_a_rule_generated_occurrence():
+    block = _weekly_block()
+    generated_start = datetime(2026, 1, 12, 9, 0)
+    data = BlockExceptionCreate(
+        is_add=True,
+        start_time=generated_start,
+        end_time=datetime(2026, 1, 12, 11, 0),
+    )
+
+    with pytest.raises(ValueError, match="not to match a rule-generated occurrence"):
+        validate_exception(block, data)
+
+    with pytest.raises(ValueError, match="not to match a rule-generated occurrence"):
+        expand_block_occurrences(
+            block,
+            [_add(generated_start, datetime(2026, 1, 12, 11, 0))],
+            WINDOW_START,
+            WINDOW_END,
+        )
+
+
+def test_addition_exceptions_are_limited_to_the_occurrence_window():
+    exceptions = [
+        _add(datetime(2026, 1, 5, 15, 0), datetime(2026, 1, 5, 16, 0)),
+        _add(datetime(2026, 1, 7, 15, 0), datetime(2026, 1, 7, 16, 0)),
+        _add(datetime(2026, 1, 14, 15, 0), datetime(2026, 1, 14, 16, 0)),
+    ]
+
+    occurrences = expand_block_occurrences(
+        _weekly_block(),
+        exceptions,
+        datetime(2026, 1, 6, 0, 0),
+        datetime(2026, 1, 13, 23, 59),
+    )
+
+    assert occurrences == [
+        (datetime(2026, 1, 7, 15, 0), datetime(2026, 1, 7, 16, 0)),
+        (datetime(2026, 1, 12, 9, 0), datetime(2026, 1, 12, 10, 0)),
+    ]
+
+
 def test_removal_plus_addition_moves_an_occurrence():
     exceptions = [
         _remove(datetime(2026, 1, 12, 9, 0)),
@@ -294,6 +335,18 @@ def test_occurrences_rejects_timezone_aware_bounds(client):
     assert response.status_code == 400
 
 
+def test_occurrences_rejects_reversed_bounds(client):
+    block = _create_block(client)
+
+    response = client.get(
+        f"{API}/{block['id']}/occurrences",
+        params={"from": "2026-01-31T00:00:00", "to": "2026-01-01T00:00:00"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Occurrence window end must not precede start"
+
+
 def test_removal_exception_matching_generated_start_returns_200(client):
     block = _create_block(client)
 
@@ -335,6 +388,24 @@ def test_addition_exception_returns_200(client):
     )
 
     assert response.status_code == 200
+
+
+def test_addition_exception_matching_generated_start_returns_400(client):
+    block = _create_block(client)
+
+    response = client.post(
+        f"{API}/{block['id']}/exceptions",
+        json={
+            "is_add": True,
+            "start_time": "2026-01-12T09:00:00",
+            "end_time": "2026-01-12T11:00:00",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == (
+        "is_add=True requires start_time not to match a rule-generated occurrence"
+    )
 
 
 def test_addition_exception_with_end_before_start_returns_400(client):
