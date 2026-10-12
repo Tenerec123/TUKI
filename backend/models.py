@@ -1,5 +1,5 @@
 from backend.database import Base, engine
-from sqlalchemy import Integer, String, ForeignKey, Numeric, JSON
+from sqlalchemy import Integer, String, ForeignKey, Numeric, JSON, UniqueConstraint, CheckConstraint
 from typing import List, Optional
 from decimal import Decimal
 from datetime import date,datetime
@@ -106,6 +106,38 @@ class Event(Base):
     end_time: Mapped[datetime] = mapped_column(nullable=False)    # naive local time
     embedding = mapped_column(VECTOR(384))
 
+class Block(Base):
+    """A recurring event: one Event-like span repeated by an RRULE."""
+    __tablename__ = "blocks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(512), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(512))
+    start_time: Mapped[datetime] = mapped_column(nullable=False)  # naive local time
+    end_time: Mapped[datetime] = mapped_column(nullable=False)    # naive local time
+    rrule: Mapped[str] = mapped_column(String(512), nullable=False)  # RFC 5545 RRULE
+    embedding = mapped_column(VECTOR(384))
+
+class BlockException(Base):
+    """Exception to a block's rule: cancel a generated occurrence or add an extra one."""
+    __tablename__ = "block_exceptions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    block_id: Mapped[int] = mapped_column(
+        ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # True: add an extra occurrence; False: remove a rule-generated occurrence
+    is_add: Mapped[bool] = mapped_column(nullable=False)
+    start_time: Mapped[datetime] = mapped_column(nullable=False)  # naive local time
+    # Required when is_add is True, must be NULL when is_add is False
+    end_time: Mapped[Optional[datetime]] = mapped_column(nullable=True)  # naive local time
+
+    __table_args__ = (
+        UniqueConstraint("block_id", "start_time", name="uq_block_exception_block_start"),
+        CheckConstraint(
+            "(NOT is_add AND end_time IS NULL) OR (is_add AND end_time IS NOT NULL)",
+            name="ck_block_exception_kind_times",
+        ),
+    )
+
 class Conversation(Base):
     __tablename__="conversations"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -139,6 +171,8 @@ class RoutineCheck(Base):
 @event.listens_for(Routine, 'before_update')
 @event.listens_for(Event, 'before_insert')
 @event.listens_for(Event, 'before_update')
+@event.listens_for(Block, 'before_insert')
+@event.listens_for(Block, 'before_update')
 def handle_project_embeddings(mapper, connection, target):
     state = inspect(target)
     

@@ -106,6 +106,75 @@ class EventUpdate(BaseModel):
             raise ValueError("end_time must not precede start_time")
         return self
 
+# Block Classes
+class BlockCreate(BaseModel):
+    name: str = Field(..., max_length=512, description='Name of the block')
+    description: Optional[str] = Field(None, max_length=512, description='Description of the block')
+    start_time: datetime = Field(..., description='Block start datetime, naive local time (no timezone offset)')
+    end_time: datetime = Field(..., description='Block end datetime, naive local time (no timezone offset)')
+    rrule: str = Field(..., description='Recurrence rule in iCalendar RRULE syntax (RFC 5545)')
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _reject_aware(cls, v: datetime) -> datetime:
+        if v.tzinfo is not None:
+            raise ValueError("Datetimes must be naive local time (no offset)")
+        return v
+
+    @model_validator(mode="after")
+    def _end_not_before_start(self):
+        if self.end_time and self.start_time and self.end_time < self.start_time:
+            raise ValueError("end_time must not precede start_time")
+        return self
+
+class BlockRead(BlockCreate):
+    id: int = Field(..., description="Unique identifier of the block")
+    model_config = ConfigDict(from_attributes=True)
+
+class BlockUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=512, description='Name of the block')
+    description: Optional[str] = Field(None, max_length=512, description='Description of the block')
+    start_time: Optional[datetime] = Field(None, description='Block start datetime, naive local time (no timezone offset)')
+    end_time: Optional[datetime] = Field(None, description='Block end datetime, naive local time (no timezone offset)')
+    rrule: Optional[str] = Field(None, description='Recurrence rule in iCalendar RRULE syntax (RFC 5545)')
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _reject_aware(cls, v: datetime) -> datetime:
+        if v is not None and v.tzinfo is not None:
+            raise ValueError("Datetimes must be naive local time (no offset)")
+        return v
+
+    @model_validator(mode="after")
+    def _end_not_before_start(self):
+        if self.end_time and self.start_time and self.end_time < self.start_time:
+            raise ValueError("end_time must not precede start_time")
+        return self
+
+class BlockExceptionCreate(BaseModel):
+    is_add: bool = Field(..., description='True adds an extra occurrence (end_time required); False removes a rule-generated occurrence')
+    start_time: datetime = Field(..., description='Naive local time (no timezone offset)')
+    end_time: Optional[datetime] = Field(None, description='Required when is_add is True; must be NULL when is_add is False')
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _reject_aware(cls, v: datetime) -> datetime:
+        if v is not None and v.tzinfo is not None:
+            raise ValueError("Datetimes must be naive local time (no offset)")
+        return v
+
+class BlockExceptionRead(BaseModel):
+    id: int = Field(..., description="Unique identifier of the exception")
+    block_id: int = Field(..., description="Block this exception belongs to")
+    is_add: bool = Field(..., description='True adds an extra occurrence; False removes a rule-generated occurrence')
+    start_time: datetime = Field(..., description='Naive local time (no timezone offset)')
+    end_time: Optional[datetime] = Field(None, description='Set only when is_add is True')
+    model_config = ConfigDict(from_attributes=True)
+
+class BlockOccurrenceRead(BaseModel):
+    start_time: datetime = Field(..., description='Expanded occurrence start, naive local time')
+    end_time: datetime = Field(..., description='Expanded occurrence end, naive local time')
+
 # Project Classes
 
 class ProjectCreate(BaseItem):
