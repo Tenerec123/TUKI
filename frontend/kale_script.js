@@ -1,18 +1,20 @@
-const Rselector = document.getElementById('routine-selector');
-let obj_selected = null;
-
-function getIcon(iconName) {
-    if (!iconName) return 'person-walking';
-    const el = document.createElement('i');
-    el.className = `bi bi-${iconName}`;
-    el.style.cssText = 'position:absolute;visibility:hidden';
-    document.body.appendChild(el);
-    const content = getComputedStyle(el, '::before').getPropertyValue('content');
-    document.body.removeChild(el);
-    return (content && content !== 'none') ? iconName : 'person-walking';
-}
-
 async function LoadCalendar(){
+    const calendarPage = document.querySelector('.kale-page');
+    const header = document.querySelector('header');
+    let calendar;
+    const resizeCalendarPage = () => {
+        const viewportHeight = window.visualViewport?.height - 50;
+        const availableHeight = Math.max(0, viewportHeight - header.getBoundingClientRect().height - 2);
+        calendarPage.style.height = `${availableHeight}px`;
+        calendar?.updateSize();
+    };
+
+    resizeCalendarPage();
+    window.addEventListener('resize', resizeCalendarPage);
+    if ('ResizeObserver' in window) {
+        new ResizeObserver(resizeCalendarPage).observe(header);
+    }
+
     const tasks = []
     const events = []
     let blocks = []
@@ -61,7 +63,12 @@ async function LoadCalendar(){
     blocks = await blocksPromise
 
     var calendarEl = document.getElementById('calendar');
-    var calendar = new FullCalendar.Calendar(calendarEl, {
+    calendar = new FullCalendar.Calendar(calendarEl, {
+        height: '100%',
+        expandRows: true,
+        views: {
+            dayGridMonth: { dayMaxEventRows: true }
+        },
         initialView: 'dayGridMonth',
         firstDay:1,
         locale: 'en',
@@ -112,6 +119,7 @@ async function LoadCalendar(){
       ]
     });
     calendar.render();
+    resizeCalendarPage();
 }
 
 function formatNaiveLocalDateTime(date) {
@@ -120,122 +128,6 @@ function formatNaiveLocalDateTime(date) {
         + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
-async function LoadRoutineSelector(){
-    await fetch(`/api/routines/`)
-    .then(response => response.json())
-    .then(data => {
-        let first = true;
-        data.forEach(async routine => {
-            
-            let rout_obj = document.createElement('div');
-            rout_obj.classList.add('routine-card');
-            rout_obj.addEventListener('click', () => {
-                if (obj_selected == rout_obj){return}
-              
-                if (obj_selected){obj_selected.classList.remove('active');}
-                obj_selected = rout_obj
-                rout_obj.classList.add('active');
-                LoadHeatmap(routine.id);
-            })
-            
-            response = await fetch(`/api/routines/accuracy/${routine.id}`)
-            const textData = await response.text();
-            const accuracy = parseFloat(textData);
-            console.log(accuracy == 'NaN')
-            rout_obj.innerHTML = `
-                <div class="card-icon">
-                    <i class="bi bi-${getIcon(routine.icon)}"></i>
-                </div>
-                <div class="card-content">
-                    <span class="routine-title">${routine.name} Acc: ${Number.isNaN(accuracy)?'Unstarted':(accuracy*100).toFixed(2)}</span>
-                        <span class="routine-desc">Indexación y consolidación de bloques</span>
-                </div>
-            `
-            Rselector.appendChild(rout_obj)
-            if (first){
-                LoadHeatmap(routine.id);
-                rout_obj.classList.add('active');
-                first=false;
-            }
-        });
-    });    
-}
-
-async function LoadHeatmap(id) {
-    document.getElementById('cal-heatmap').innerHTML = ''
-    var checkData = {};
-    await fetch(`/api/routines/stats/${id}`)
-    .then(response => response.json())
-    .then(data => {
-        data.forEach(check => {
-            const [dia, mes, año] = check.check_date.split('/');
-            const unix = `${Math.floor(+new Date(`${año}-${mes}-${dia}`) / 1000)}`;
-            checkData[unix] = 1
-        });
-    });
-
-    const isMobile = window.innerWidth <= 768;
-
-    // One heatmap for both modes: full last year (54 weeks), exactly as
-    // before. Only the cell size changes — small screens get tiny cells
-    // (they are just little lights) so the whole year fits the width.
-    const range = 54;
-    let cellSize = 12; // desktop default
-    if (isMobile) {
-        // Cells are tiny lights — 3px keeps the whole year nicely on screen.
-        cellSize = 3;
-    }
-
-    var initDate = moment().subtract(1, 'years').startOf('week').toDate();
-    var lowLimit = moment().subtract(1, 'years').startOf('day');
-    var upLimit = moment().startOf('day');
-
-    var cal = new CalHeatMap();
-
-    cal.init({
-        itemSelector: "#cal-heatmap",
-        domain: "week",
-        subDomain: "day",
-        rowLimit: 7,
-        range: range, 
-        cellSize: cellSize,
-        cellPadding: 2,
-        start: initDate, 
-        data: checkData,
-        displayLegend: false,
-        legend: [1],
-        legendColors: ["#1f1f1f", "#ffff00"], 
-        onComplete: function() {
-        d3.selectAll("#cal-heatmap svg.graph-subdomain-group g")
-            .filter(function(d) {
-                if (d && d.t) {
-                    return d.t <= lowLimit || d.t > upLimit;
-                }
-                return false;
-            })
-            .remove();
-        },
-
-        tooltip: true,
-        subDomainTitleFormat: {
-            empty: "{date}",
-            filled: "{date}"
-        },
-        subDomainDateFormat: function(date) {
-            return moment(date).format("LL");
-        },
-
-        domainLabelFormat: function(date) {
-            var m = moment(date);
-            if (m.date() <= 7) {
-                return m.format("MMM");
-            }
-            return "";
-        }
-    });
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
     LoadCalendar();
-    LoadRoutineSelector();
 });

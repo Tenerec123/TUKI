@@ -5,9 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>T.U.K.I. TODO</title>
   <link rel="icon" type="image/svg" href="TUKI.svg">
-  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="stylesheet" href="/frontend/style.css?v=20261024-ui4">
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cal-heatmap/3.3.10/cal-heatmap.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.17/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/moment@2.29.4/moment.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cal-heatmap/3.3.10/cal-heatmap.min.js"></script>
 </head>
 <body>
   <header>
@@ -19,132 +23,114 @@
       <a href="wake">WAKE</a>
     </div>
   </header>
-  
+  <main class="todo-page">
+    <section class="todo-section today-routines-section" aria-labelledby="today-routines-heading">
+      <h1 class="todo-section-title" id="today-routines-heading">Today's routines</h1>
+      <div id="today-routine-list"></div>
+    </section>
 
-    <div id="today-routine-list">
-        
-    </div>
+    <section class="todo-section tracker-section" aria-labelledby="routine-trackers-heading">
+      <div class="todo-section-heading">
+        <h2 class="todo-section-title" id="routine-trackers-heading">Routine trackers</h2>
+        <span class="todo-section-note">Last 12 months</span>
+      </div>
+      <details id="routine-trackers-details" class="routine-trackers-details">
+        <summary>Details</summary>
+        <div id="routine-trackers" class="routine-trackers"></div>
+      </details>
+    </section>
 
-  <form id="task-creator"></form>
-  <form id="project-creator"></form>
-  <form id="routine-creator"></form>
+    <form id="task-creator"></form>
+    <form id="routine-creator"></form>
 
-  <div class="table-scroll">
-  <table class="todo-table">
-    <thead>
-      <tr id="table-headers">
-        <th>Project</th>
-        <th>Description</th>
-        <th class="priority-header">Priority</th>
-        <th>...</th>
-      </tr>
-      <tr>
-        
-        <td class="form-name">
-          <input form="project-creator" type="text" name="name">
-        </td>
-        <td class="form-description">
-          <input form="project-creator" type="text" name="description">
-        </td>
-        <td class="form-priority">
-          <input form="project-creator" type="number" name="priority" min="1" max="4" value="3">
-        </td>
-        <td class="form-submit">
-          <input form="project-creator" type="submit" value="Create">
-        </td>
-      </tr>
-    </thead>
-    <tbody id="project-container">
-    </tbody>
-  </table>
-  </div>
+    <section class="todo-section" aria-labelledby="tasks-heading">
+      <h2 class="todo-section-title" id="tasks-heading">Tasks</h2>
+      <div class="table-scroll">
+        <table class="todo-table task-table">
+          <thead>
+            <tr>
+              <th>Check</th>
+              <th>Task</th>
+              <th>Description</th>
+              <th>Priority</th>
+              <th>Deadline</th>
+              <th>...</th>
+            </tr>
+            <tr>
+              <td class="form-check">
+                <button id="check-create-button" type="button" onclick="CheckClick(this, -1)" aria-label="Task completion status">☐</button>
+              </td>
+              <td class="form-name">
+                <input form="task-creator" type="text" name="name" placeholder="Task">
+              </td>
+              <td class="form-description">
+                <input form="task-creator" type="text" name="description" placeholder="Description">
+              </td>
+              <td class="form-priority">
+                <input form="task-creator" type="number" name="priority" min="1" max="4" value="3" aria-label="Priority">
+              </td>
+              <td class="form-deadline">
+                <div class="date-container">
+                  <input type="text" class="custom-date iso-date-text" readonly tabindex="-1" aria-hidden="true">
+                  <input form="task-creator" name="deadline" type="date" class="custom-date iso-date-native" aria-label="Deadline">
+                </div>
+              </td>
+              <td class="form-submit">
+                <input form="task-creator" type="submit" value="Create">
+              </td>
+            </tr>
+          </thead>
+          <tbody id="task-container"></tbody>
+        </table>
+      </div>
+    </section>
 
-  <br><br><br>
-  <div class="table-scroll">
-	<table class="task-table">
-    <thead>
-      <tr id="table-headers">
-        <th>Check</th>
-        <th>Task</th>
-        <th>Description</th>
-        <th>Priority</th>
-        <th>Deadline</th>
-        <th>...</th>
-      </tr>
-      <tr>
-        <td class="form-check">
-          <button id="check-create-button" onclick="CheckClick(this, -1)">☐</button>
-        </td>
-        <td class="form-name">
-          <input form="task-creator" type="text" name="name">
-        </td>
-        <td class="form-description">
-          <input form="task-creator" type="text" name="description">
-        </td>
-        <td class="form-priority">
-          <input form="task-creator" type="number" name="priority" min="1" max="4" value="3">
-        </td>
-        <td class="form-deadline">
-          <div class="date-container">
-            <input type="text" class="custom-date iso-date-text" value="2026-04-14" readonly tabindex="-1">
-            <input form="task-creator" name="deadline" type="date" class="custom-date iso-date-native" value="2026-04-14">
-          </div>
-        </td>
-        <td class="form-submit">
-          <input form="task-creator" type="submit" value="Create">
-        </td>
-     </tr>
-    </thead>
-    <tbody id="task-container">
-    </tbody>
-  </table>
-  </div>
-
-  <br><br><br>
-
-  <div class="table-scroll">
-  <table class="routine-table">
-    <thead>
-      <tr id="table-headers">
-        <th>Icon</th>
-        <th>Routine</th>
-        <th>Description</th>
-        <th>Priority</th>
-        <th>Frequency</th>
-        <th>Init Date</th>
-        <th>...</th>
-      </tr>
-      <tr>
-        <td class="form-icon">
-          <input form="routine-creator" type="text" name="icon" placeholder="auto">
-        </td>
-        <td class="form-name">
-          <input form="routine-creator" type="text" name="name">
-        </td>
-        <td class="form-description">
-          <input form="routine-creator" type="text" name="description">
-        </td>
-        <td class="form-priority">
-          <input form="routine-creator" type="number" name="priority" min="1" max="4" value="3">
-        </td>
-        <td class="form-description">
-          <input form="routine-creator" type="text" name="frequency">
-        </td>
-        <td class="form-deadline">
-          <div class="date-container">
-            <input type="text" class="custom-date iso-date-text" value="2026-04-14" readonly tabindex="-1">
-            <input form="routine-creator" name="init_date" type="date" class="custom-date iso-date-native" value="2026-04-14">
-          </div>
-        </td>
-        <td class="form-submit">
-          <input form="routine-creator" type="submit" value="Create">
-        </td>
-      </tr>
-    </thead>
-    <tbody id="routine-container">
-    </tbody>
-  </table>
-  </div>
-<script src="/frontend/todo_script.js"></script>
+    <section class="todo-section" aria-labelledby="routines-heading">
+      <h2 class="todo-section-title" id="routines-heading">Routines</h2>
+      <div class="table-scroll">
+        <table class="todo-table routine-table">
+          <thead>
+            <tr>
+              <th>Icon</th>
+              <th>Routine</th>
+              <th>Description</th>
+              <th>Priority</th>
+              <th>Frequency</th>
+              <th>Init Date</th>
+              <th>...</th>
+            </tr>
+            <tr>
+              <td class="form-icon">
+                <input form="routine-creator" type="text" name="icon" placeholder="auto" aria-label="Icon">
+              </td>
+              <td class="form-name">
+                <input form="routine-creator" type="text" name="name" placeholder="Routine">
+              </td>
+              <td class="form-description">
+                <input form="routine-creator" type="text" name="description" placeholder="Description">
+              </td>
+              <td class="form-priority">
+                <input form="routine-creator" type="number" name="priority" min="1" max="4" value="3" aria-label="Priority">
+              </td>
+              <td class="form-description">
+                <input form="routine-creator" type="text" name="frequency" placeholder="Frequency">
+              </td>
+              <td class="form-deadline">
+                <div class="date-container">
+                  <input type="text" class="custom-date iso-date-text" readonly tabindex="-1" aria-hidden="true">
+                  <input form="routine-creator" name="init_date" type="date" class="custom-date iso-date-native" aria-label="Initial date">
+                </div>
+              </td>
+              <td class="form-submit">
+                <input form="routine-creator" type="submit" value="Create">
+              </td>
+            </tr>
+          </thead>
+          <tbody id="routine-container"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+<script src="/frontend/todo_script.js?v=20261024-ui3"></script>
 </body>
 </html>

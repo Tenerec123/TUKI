@@ -1,11 +1,12 @@
 const TaskCreator = document.getElementById('task-creator');
-const ProjectCreator = document.getElementById('project-creator');
 const RoutineCreator = document.getElementById('routine-creator')
 const TaskContainer = document.getElementById('task-container');
-const ProjectContainer = document.getElementById('project-container');
 const RoutinesContainer = document.getElementById('routine-container');
+const RoutineTrackers = document.getElementById('routine-trackers');
+const RoutineTrackersDetails = document.getElementById('routine-trackers-details');
 const CheckCreateButton = document.getElementById('check-create-button');
 const TodayRoutines = document.getElementById('today-routine-list')
+let CurrentRoutineTrackers = [];
 
 function getIcon(iconName) {
     if (!iconName) return 'person-walking';
@@ -25,7 +26,7 @@ const PRIORITY_META = {
     4: { label: 'Low', cls: 'priority-low' },
 };
 
-// Render a task/project/routine priority as an English label with a color
+// Render a task or routine priority as an English label with a color
 // class. Out-of-range or missing values fall back to Normal.
 function setPriority(td, priority) {
     const meta = PRIORITY_META[priority] || PRIORITY_META[3];
@@ -48,7 +49,6 @@ document.addEventListener('DOMContentLoaded', () => {
         native.addEventListener('change', () => syncIsoDateText(native));
     });
     LoadTasks();
-    LoadProjects();
     LoadRoutines();
     LoadTodayRoutines();
 });
@@ -105,7 +105,7 @@ async function LoadTasks() {
             const deleteBtn = document.createElement('button');
             deleteBtn.textContent = '🗑️';
             deleteBtn.addEventListener('click', () => {
-                Delete('tasks', deleteBtn, task.id);
+                Delete('tasks', task.id);
             });
             deleteTd.appendChild(deleteBtn);
 
@@ -123,50 +123,122 @@ async function LoadTasks() {
     .catch(error => console.error("Error al obtener datos:", error));
 }
 
-async function LoadProjects() {
-    await fetch(`/api/projects/`)
-    .then(response => response.json())
-    .then(data => {
-    ProjectContainer.innerHTML = '';
-    data.forEach(project => {
-        const divProject = document.createElement('tr');
+function LoadRoutineTrackers(routines, loadDetails = RoutineTrackersDetails.open) {
+    CurrentRoutineTrackers = routines;
+    RoutineTrackers.replaceChildren();
+    if (routines.length === 0) {
+        const emptyState = document.createElement('p');
+        emptyState.className = 'routine-trackers-empty';
+        emptyState.textContent = 'No routines yet.';
+        RoutineTrackers.appendChild(emptyState);
+        return;
+    }
 
-        const nameTd = document.createElement('td');
-        nameTd.className = 'name';
-        nameTd.textContent = project.name;
+    routines.forEach(routine => {
+        const tracker = document.createElement('article');
+        tracker.className = 'routine-tracker';
+        tracker.dataset.routineId = routine.id;
 
-        const descTd = document.createElement('td');
-        descTd.className = 'description';
-        descTd.textContent = project.description;
+        const identity = document.createElement('div');
+        identity.className = 'routine-tracker-identity';
 
-        const priorityTd = document.createElement('td');
-        priorityTd.className = 'priority';
-        setPriority(priorityTd, project.priority);
+        const icon = document.createElement('i');
+        icon.className = `bi bi-${getIcon(routine.icon)}`;
+        icon.setAttribute('aria-hidden', 'true');
 
-        const deleteTd = document.createElement('td');
-        deleteTd.className = 'delete';
-        const deleteBtn = document.createElement('button');
-        deleteBtn.textContent = '🗑️';
-        deleteBtn.addEventListener('click', () => {
-            Delete('projects', deleteBtn, project.id);
-        });
-        deleteTd.appendChild(deleteBtn);
+        const name = document.createElement('span');
+        name.className = 'routine-tracker-name';
+        name.textContent = routine.name;
 
-        divProject.appendChild(nameTd);
-        divProject.appendChild(descTd);
-        divProject.appendChild(priorityTd);
-        divProject.appendChild(deleteTd);
+        const heatmap = document.createElement('div');
+        heatmap.className = 'routine-tracker-heatmap';
+        heatmap.id = `routine-heatmap-${routine.id}`;
+        heatmap.setAttribute('role', 'img');
+        heatmap.setAttribute('aria-label', `${routine.name} tracker for the last 12 months`);
 
-        ProjectContainer.appendChild(divProject);
+        identity.append(icon, name);
+        tracker.append(identity, heatmap);
+        RoutineTrackers.appendChild(tracker);
     });
-    })
-    .catch(error => console.error("Error al obtener datos:", error));
+
+    if (loadDetails && routines.length > 0) {
+        LoadRoutineHeatmaps(routines);
+    }
 }
+
+function LoadRoutineHeatmaps(routines) {
+    routines.forEach(routine => {
+        const heatmap = document.getElementById(`routine-heatmap-${routine.id}`);
+        if (heatmap) LoadRoutineHeatmap(routine.id, heatmap);
+    });
+}
+
+async function LoadRoutineHeatmap(id, heatmapElement) {
+    try {
+        heatmapElement.replaceChildren();
+        const response = await fetch(`/api/routines/stats/${id}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const checks = await response.json();
+        const checkData = {};
+
+        checks.forEach(check => {
+            const [year, month, day] = check.check_date.split('-').map(Number);
+            const timestamp = Math.floor(new Date(year, month - 1, day).getTime() / 1000);
+            checkData[timestamp] = 1;
+        });
+
+        const isMobile = window.innerWidth <= 768;
+        const initDate = moment().subtract(1, 'years').startOf('week').toDate();
+        const lowLimit = moment().subtract(1, 'years').startOf('day');
+        const upLimit = moment().startOf('day');
+
+        new CalHeatMap().init({
+            itemSelector: `#${heatmapElement.id}`,
+            domain: 'week',
+            subDomain: 'day',
+            rowLimit: 7,
+            range: 54,
+            cellSize: isMobile ? 3 : 12,
+            cellPadding: 2,
+            start: initDate,
+            data: checkData,
+            displayLegend: false,
+            legend: [1],
+            legendColors: ['#1f1f1f', '#ffff00'],
+            onComplete: function() {
+                d3.select(heatmapElement).selectAll('svg.graph-subdomain-group g')
+                    .filter(function(d) {
+                        return d && d.t && (d.t <= lowLimit || d.t > upLimit);
+                    })
+                    .remove();
+            },
+            tooltip: true,
+            subDomainTitleFormat: {
+                empty: '{date}',
+                filled: '{date}'
+            },
+            subDomainDateFormat: date => moment(date).format('LL'),
+            domainLabelFormat: date => moment(date).date() <= 7 ? moment(date).format('MMM') : ''
+        });
+    } catch (error) {
+        console.error(`Error loading tracker for routine ${id}:`, error);
+        heatmapElement.textContent = 'Tracker unavailable';
+        heatmapElement.classList.add('routine-tracker-error');
+    }
+}
+
+RoutineTrackersDetails.addEventListener('toggle', () => {
+    if (RoutineTrackersDetails.open) {
+        LoadRoutineHeatmaps(CurrentRoutineTrackers);
+    }
+});
+
 async function LoadRoutines() {
+  const detailsAreOpen = RoutineTrackersDetails.open;
   await fetch(`/api/routines/`)
   .then(response => response.json())
   .then(data => {
-    
+    LoadRoutineTrackers(data, detailsAreOpen);
     RoutinesContainer.innerHTML = '';
     data.forEach(routine => {
       const divRoutine = document.createElement('tr');
@@ -204,7 +276,7 @@ async function LoadRoutines() {
       const deleteBtn = document.createElement('button');
       deleteBtn.textContent = '🗑️';
       deleteBtn.addEventListener('click', () => {
-        Delete('routines', deleteBtn, routine.id);
+        Delete('routines', routine.id);
       });
       deleteTd.appendChild(deleteBtn);
 
@@ -222,47 +294,58 @@ async function LoadRoutines() {
   .catch(error => console.error("Error al obtener datos:", error));
 }
 async function CheckClick(element, id){
-  Checked_str = "false"
-  if (element.textContent == "☑"){
-    element.innerText  = "☐";
-  }else{
-    if (id != -1) {element.parentElement.parentElement.remove()}
-    else{
-        element.innerText  = "☑";
-    }
-    Checked_str = "true"
+  if (id === -1) {
+    element.textContent = element.textContent === '☑' ? '☐' : '☑';
+    return;
   }
-  if (id == -1){return}
-  const response = await fetch(`/api/tasks/${id}`, {
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
-        },
-        body: `{"finished":${Checked_str}}` // Convertimos el objeto a texto JSON
+
+  const finished = element.textContent !== '☑';
+  try {
+    const response = await fetch(`/api/tasks/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ finished })
     });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    console.error(`Error updating task ${id}:`, error);
+  }
+  await LoadTasks();
 }
 async function LoadTodayRoutines() {
-   const response = await fetch(`/api/routines/today`)
-   .then(response => response.json())
-   .then(data => {
+   try {
+    const response = await fetch(`/api/routines/today`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    TodayRoutines.replaceChildren();
     data.forEach(routine=>{
         const newRoutine = document.createElement('div');
         newRoutine.classList.add('routine-item');
         if (routine.checked){newRoutine.classList.add('checked')}
         newRoutine.addEventListener('click', async (e) => {
-            if (newRoutine.classList.contains('checked')){
-                await fetch(`/api/routines/uncheck/${routine.id}`, {method:'DELETE'})
+            const wasChecked = newRoutine.classList.contains('checked');
+            const url = wasChecked
+                ? `/api/routines/uncheck/${routine.id}`
+                : `/api/routines/check/${routine.id}`;
+            try {
+                const updateResponse = await fetch(url, { method: wasChecked ? 'DELETE' : 'POST' });
+                if (!updateResponse.ok) throw new Error(`HTTP ${updateResponse.status}`);
+            } catch (error) {
+                console.error(`Error updating routine ${routine.id}:`, error);
             }
-            else{
-                await fetch(`/api/routines/check/${routine.id}`, {method:'POST'})
-            }
-            newRoutine.classList.toggle('checked')
+            await RefreshRoutineUI();
         });
         newRoutine.setAttribute('data-name', routine.name);
         newRoutine.innerHTML = `<i class="bi bi-${getIcon(routine.icon)}"></i>`;
         TodayRoutines.appendChild(newRoutine);
     })  
-   });
+   } catch (error) {
+    console.error('Error loading today routines:', error);
+   }
+}
+
+async function RefreshRoutineUI() {
+    await Promise.all([LoadRoutines(), LoadTodayRoutines()]);
 }
 TaskCreator.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -287,29 +370,7 @@ TaskCreator.addEventListener('submit', async (e) => {
         console.log("TUKI: Tarea guardada con éxito");
         TaskCreator.reset(); // Limpia el formulario
         CheckCreateButton.textContent = "☐"
-        LoadTasks();
-    }
-   
-});
-ProjectCreator.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const formData = new FormData(ProjectCreator);
-    const data = Object.fromEntries(formData.entries());
-    console.log(data)
-    const response = await fetch(`/api/projects/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
-        },
-        body: JSON.stringify(data) // Convertimos el objeto a texto JSON
-    });
-
-    if (response.ok) {
-        console.log("TUKI: Proyecto guardada con éxito");
-        ProjectCreator.reset(); // Limpia el formulario
-        LoadProjects();
-        LoadTasks();
-        LoadRoutines();
+        await LoadTasks();
     }
    
 });
@@ -328,18 +389,20 @@ RoutineCreator.addEventListener('submit', async (e) => {
     if (response.ok) {
         console.log("TUKI: Rutina guardada con éxito");
         RoutineCreator.reset(); // Limpia el formulario
-        LoadRoutines();
+        await RefreshRoutineUI();
     }
    
 });
-async function Delete(type, object, id){
-  object.parentElement.parentElement.remove()
-  const resp = await fetch(`/api/${type}/${id}`,{
-        method: 'DELETE',
-        headers: {
-            'Content-Type': 'application/json' // Le decimos a la API: "Va un JSON"
-        },
-    });
+async function Delete(type, id){
+  try {
+    const response = await fetch(`/api/${type}/${id}`, { method: 'DELETE' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  } catch (error) {
+    console.error(`Error deleting ${type.slice(0, -1)} ${id}:`, error);
+  }
+
+  if (type === 'tasks') await LoadTasks();
+  if (type === 'routines') await RefreshRoutineUI();
 }
 
 // Este script va a "gritar" el error en la pantalla del móvil

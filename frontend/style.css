@@ -744,31 +744,6 @@ SELECT CALENDAR
     z-index: 2;
 }
 
-.graph-domain {
-    overflow: visible !important;
-}
-.calendar-wrapper {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    min-width: 0;
-    overflow: hidden;
-}
-
-#cal-heatmap-yaxislabels {
-    margin-right: 8px;
-    padding-top: 0px; 
-}
-
-#cal-heatmap-yaxislabels > div {
-    height: 14px;
-    line-height: 14px;
-    font-size: 10px;
-    color: #8b949e;
-    user-select: none;
-}
-
 #today-routine-list {
     
     display: flex;
@@ -835,27 +810,6 @@ SELECT CALENDAR
 TABLE SCROLL WRAPPER (mobile horizontal scroll)
 */
 .table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    width: 100%;
-}
-
-/*
-KALE LAYOUT
-*/
-#stats-container {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    gap: 16px;
-}
-
-#routine-selector {
-    width: 340px;
-    flex-shrink: 0;
-}
-
-#cal-heatmap-wrapper {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     width: 100%;
@@ -1069,6 +1023,323 @@ TUKI THINKING INDICATOR
     to { transform: rotate(360deg); }
 }
 
+/* ── TODO PAGE ── */
+.todo-page {
+    --todo-accent: #e4dc59;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    width: min(100%, 1480px);
+    margin: 0 auto;
+    padding: 24px clamp(16px, 3vw, 40px) 48px;
+    color: #d8dee7;
+}
+
+.todo-section {
+    min-width: 0;
+}
+
+.todo-section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.todo-section-title {
+    margin: 0 0 12px;
+    color: var(--todo-accent);
+    font-size: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.todo-section-note {
+    color: #7d8996;
+    font-size: 0.75rem;
+}
+
+.todo-page #today-routine-list {
+    min-height: 64px;
+    margin: 0;
+    padding: 10px 14px;
+    border: 1px solid #303842;
+    border-radius: 8px;
+    background: #171b20;
+}
+
+.todo-page .routine-item {
+    width: 42px;
+    height: 42px;
+    margin: 0 5px;
+    border-width: 1px;
+    border-radius: 6px;
+    font-size: 1.1rem;
+}
+
+.routine-trackers {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.routine-trackers-details {
+    padding: 10px 12px;
+    border: 1px solid rgb(255 255 0 / 24%);
+    border-radius: 8px;
+    background: #171b20;
+}
+
+.routine-trackers-details > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    color: var(--todo-accent);
+    cursor: pointer;
+    font-size: 0.82rem;
+    font-weight: 600;
+    list-style: none;
+}
+
+.routine-trackers-details > summary::-webkit-details-marker {
+    display: none;
+}
+
+.routine-trackers-details > summary::after {
+    content: '+';
+    color: var(--todo-accent);
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.routine-trackers-details[open] > summary::after {
+    content: '−';
+}
+
+.routine-trackers-details > summary:focus-visible {
+    outline: 2px solid var(--todo-accent);
+    outline-offset: 3px;
+}
+
+.routine-trackers-details[open] > .routine-trackers {
+    margin-top: 12px;
+}
+
+.routine-tracker {
+    display: grid;
+    grid-template-columns: minmax(150px, 220px) minmax(0, 1fr);
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+    padding: 9px 12px;
+    border: 1px solid #2d353e;
+    border-radius: 8px;
+    background: #171b20;
+}
+
+.routine-tracker-identity {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    color: #c9d1d9;
+}
+
+.routine-tracker-identity i {
+    flex: 0 0 22px;
+    color: var(--todo-accent);
+    font-size: 1.1rem;
+    text-align: center;
+}
+
+.routine-tracker-name {
+    overflow: hidden;
+    font-size: 0.85rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.routine-tracker-heatmap {
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.routine-tracker-heatmap .graph {
+    overflow: visible;
+}
+
+.routine-tracker-heatmap .graph-domain {
+    overflow: visible !important;
+}
+
+.routine-tracker-error,
+.routine-trackers-empty {
+    color: #89939e;
+    font-size: 0.8rem;
+}
+
+.routine-trackers-empty {
+    margin: 0;
+    padding: 14px 16px;
+    border: 1px solid #2d353e;
+    border-radius: 8px;
+    background: #171b20;
+}
+
+.kale-body {
+    min-height: 100vh;
+}
+
+.kale-page {
+    min-height: 0;
+    padding: 8px 10px;
+}
+
+.kale-page #calendar {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+}
+
+.todo-page .table-scroll {
+    border: 1px solid rgb(255 255 0 / 26%);
+    border-radius: 8px;
+    background: #171b20;
+}
+
+.todo-page table {
+    border-collapse: separate;
+    border-spacing: 0;
+    color: #c9d1d9;
+}
+
+.todo-page th,
+.todo-page td {
+    height: 44px;
+    padding: 7px 10px;
+    border: 0;
+    border-bottom: 1px solid #2a3139;
+}
+
+.todo-page th {
+    background: #20262d;
+    color: var(--todo-accent);
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-align: left;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border-bottom-color: rgb(255 255 0 / 30%);
+}
+
+.todo-page td {
+    background: #171b20;
+    color: #c9d1d9;
+}
+
+.todo-page tbody tr:hover td {
+    background: #1e252c;
+}
+
+.todo-page tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.todo-page .name {
+    font-size: 0.95rem;
+}
+
+.todo-page .description {
+    color: #9ba7b3;
+    font-size: 0.82rem;
+}
+
+.todo-page .priority {
+    width: auto;
+    font-size: 0.85rem;
+}
+
+.todo-page .priority-critical { color: #f47067; }
+.todo-page .priority-high { color: #d29922; }
+.todo-page .priority-normal { color: var(--todo-accent); }
+.todo-page .priority-low { color: #6e7681; }
+
+.todo-page .deadline {
+    font-size: 0.85rem;
+}
+
+.todo-page .form-name input,
+.todo-page .form-description input,
+.todo-page .form-priority input,
+.todo-page .form-icon input {
+    width: 100%;
+    min-width: 64px;
+    padding: 7px 8px;
+    border: 1px solid #343d47;
+    border-radius: 4px;
+    background: #12161a;
+    color: #e6edf3;
+    font: inherit;
+}
+
+.todo-page .form-name input:focus,
+.todo-page .form-description input:focus,
+.todo-page .form-priority input:focus,
+.todo-page .form-icon input:focus {
+    border-color: var(--neon-yellow);
+    outline: 2px solid rgb(255 255 0 / 18%);
+}
+
+.todo-page .form-deadline .date-container {
+    min-width: 120px;
+    height: 34px;
+}
+
+.todo-page .form-deadline .custom-date {
+    color: #c9d1d9;
+    font-size: 0.8rem;
+}
+
+.todo-page .form-check button,
+.todo-page .check button {
+    color: var(--todo-accent);
+    font-size: 1.5rem;
+}
+
+.todo-page .form-submit {
+    min-width: 76px;
+}
+
+.todo-page .form-submit input {
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid rgb(255 255 0 / 36%);
+    border-radius: 4px;
+    background: #252c33;
+    color: var(--todo-accent);
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 500;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.todo-page .form-submit input:hover {
+    border-color: var(--neon-yellow);
+    background: rgb(255 255 0 / 8%);
+    color: #fff;
+    box-shadow: none;
+}
+
+.todo-page .delete button {
+    color: #9ba7b3;
+    font-size: 1.2rem;
+}
+
 /* 
 ═══════════════════════════════════════════════════════════════════
 MOBILE — MUST STAY AT THE END OF THE FILE
@@ -1280,48 +1551,37 @@ All base rules above must win the cascade; this block overrides them.
         max-width: 200px;
     }
 
-    /* ── KALE: routines on top (full-width, vertical scroll), heatmap below ── */
-    #stats-container {
-        flex-direction: column;
-        align-items: stretch;
+    .todo-page {
+        gap: 18px;
+        padding: 16px 10px 32px;
     }
 
-    /* Routines block: full width, vertical scroll of its own (short — leaves
-       room for the heatmap and the big calendar below) */
-    #routine-selector {
-        width: 100% !important;
-        max-width: 100%;
-        flex-shrink: 0;
-        max-height: 16vh;
-        overflow-y: auto;
-        overflow-x: hidden;
-        margin-bottom: 8px;
+    .todo-section-title {
+        font-size: 0.95rem;
     }
 
-    .calendar-wrapper {
-        flex-direction: column;
-        align-items: stretch;
-        min-width: 0;
-        overflow: hidden;
+    .routine-tracker {
+        grid-template-columns: minmax(92px, 120px) minmax(0, 1fr);
+        gap: 8px;
+        padding: 8px;
     }
 
-    #cal-heatmap-yaxislabels {
-        display: none;
+    .routine-tracker-identity {
+        gap: 6px;
     }
 
-    /* Heatmap: let the SVG render at its natural pixel size (small cells in
-       mobile make it fit); flex centers it, small margin above/below */
-    #cal-heatmap-wrapper {
-        width: 100% !important;
-        max-width: 100%;
-        display: flex;
-        justify-content: center;
-        padding: 8px 0;
+    .routine-tracker-name {
+        font-size: 0.72rem;
     }
 
-    /* FullCalendar: shorter on mobile so the page fits the viewport */
-    #calendar {
-        height: 45vh;
+    .todo-page th,
+    .todo-page td {
+        padding: 6px 8px;
+    }
+
+    /* Keep the calendar close to the viewport edges on small screens. */
+    .kale-page {
+        padding: 6px;
     }
 
     /* ── CHAT MODEL DROPDOWN ── */
