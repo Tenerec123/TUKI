@@ -13,8 +13,19 @@ function getIcon(iconName) {
 }
 
 async function LoadCalendar(){
-    tasks = []
-    events = []
+    const tasks = []
+    const events = []
+    let blocks = []
+    const blocksPromise = fetch(`/api/blocks/`)
+        .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`)
+            return response.json()
+        })
+        .catch(error => {
+            console.error("Error loading blocks:", error)
+            return []
+        })
+
     await Promise.all([
         fetch(`/api/tasks/`),
         fetch(`/api/events/`)
@@ -47,6 +58,8 @@ async function LoadCalendar(){
         });
     })
     .catch(error => console.error("Error al obtener datos:", error));
+    blocks = await blocksPromise
+
     var calendarEl = document.getElementById('calendar');
     var calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
@@ -57,11 +70,54 @@ async function LoadCalendar(){
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridDay'
       },
+      // The Block source returns no events in month view; refetch when switching
+      // views or navigating so a cached month result cannot hide week/day Blocks.
+      lazyFetching: false,
       eventTimeFormat: { hour: 'numeric', minute: '2-digit', hour12: false },
       slotLabelFormat: { hour: 'numeric', minute: '2-digit', hour12: false },
-      events: tasks.concat(events)
+      eventSources: [
+        tasks.concat(events),
+        {
+            events: (fetchInfo, successCallback) => {
+                const visibleViews = ['timeGridWeek', 'timeGridDay']
+                const currentViewType = calendar?.view?.type
+                if (!visibleViews.includes(currentViewType) || blocks.length === 0) {
+                    successCallback([])
+                    return
+                }
+
+                const params = new URLSearchParams({
+                    from: formatNaiveLocalDateTime(fetchInfo.start),
+                    to: formatNaiveLocalDateTime(fetchInfo.end)
+                })
+
+                Promise.all(blocks.map(async block => {
+                    try {
+                        const response = await fetch(`/api/blocks/${block.id}/occurrences?${params}`)
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+                        const occurrences = await response.json()
+                        return occurrences.map(occurrence => ({
+                            title: block.name,
+                            start: occurrence.start_time,
+                            end: occurrence.end_time,
+                            className: 'cal-block'
+                        }))
+                    } catch (error) {
+                        console.error(`Error loading occurrences for block ${block.id}:`, error)
+                        return []
+                    }
+                })).then(blockEvents => successCallback(blockEvents.flat()))
+            }
+        }
+      ]
     });
     calendar.render();
+}
+
+function formatNaiveLocalDateTime(date) {
+    const pad = value => String(value).padStart(2, '0')
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+        + `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
 }
 
 async function LoadRoutineSelector(){

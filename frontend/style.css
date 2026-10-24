@@ -619,6 +619,17 @@ BIG CALENDAR
     color: var(--neon-yellow) !important;
 }
 
+.cal-block {
+    background-color: #164e63 !important;
+    border: 1px solid #22d3ee !important;
+    color: #ecfeff !important;
+}
+
+.cal-block .fc-event-title,
+.cal-block .fc-event-main {
+    color: #ecfeff !important;
+}
+
 .fc-event {
     transition: transform .15s;
 }
