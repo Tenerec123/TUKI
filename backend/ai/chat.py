@@ -1,7 +1,7 @@
 from ..schemas import ConversationSchema, Prompt, ConversationUpdate, MessageBase
 from ..database import SessionLocal
 from ..models import Conversation, Message
-from ..routers.conversations import edit_conversation_logic
+from ..logic.conversations import edit_conversation_logic
 from .agent import openai_agent
 from . import cost_tracker
 from .stream_manager import stream_manager
