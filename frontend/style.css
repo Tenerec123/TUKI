@@ -1163,8 +1163,7 @@ TUKI THINKING INDICATOR
 
 .routine-tracker-heatmap {
     min-width: 0;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    overflow: visible;
 }
 
 .routine-tracker-heatmap .graph {
@@ -1338,6 +1337,13 @@ TUKI THINKING INDICATOR
 .todo-page .delete button {
     color: #9ba7b3;
     font-size: 1.2rem;
+}
+
+@media (max-width: 1100px) {
+    .routine-tracker {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 8px;
+    }
 }
 
 /* 
@@ -1561,7 +1567,7 @@ All base rules above must win the cascade; this block overrides them.
     }
 
     .routine-tracker {
-        grid-template-columns: minmax(92px, 120px) minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         gap: 8px;
         padding: 8px;
     }

@@ -187,7 +187,10 @@ async function LoadRoutineHeatmap(id, heatmapElement) {
             checkData[timestamp] = 1;
         });
 
-        const isMobile = window.innerWidth <= 768;
+        const cellPadding = 2;
+        const domainGutter = 0;
+        const availableWidth = heatmapElement.getBoundingClientRect().width || window.innerWidth;
+        const cellSize = Math.max(1, Math.min(12, Math.floor(availableWidth / 54) - cellPadding - domainGutter));
         const initDate = moment().subtract(1, 'years').startOf('week').toDate();
         const lowLimit = moment().subtract(1, 'years').startOf('day');
         const upLimit = moment().startOf('day');
@@ -198,8 +201,9 @@ async function LoadRoutineHeatmap(id, heatmapElement) {
             subDomain: 'day',
             rowLimit: 7,
             range: 54,
-            cellSize: isMobile ? 3 : 12,
-            cellPadding: 2,
+            cellSize,
+            cellPadding,
+            domainGutter,
             start: initDate,
             data: checkData,
             displayLegend: false,
