@@ -630,6 +630,62 @@ BIG CALENDAR
     color: #ecfeff !important;
 }
 
+/* Keep Block bars as compact as possible in the time grid while staying
+   legible: tight padding/font and a single-line title by default. */
+.fc-timegrid-event.cal-block {
+    padding: 1px 4px !important;
+    font-size: 0.75rem !important;
+    line-height: 1.15 !important;
+}
+.fc-timegrid-event.cal-block .fc-event-title {
+    font-size: 0.75rem !important;
+    line-height: 1.15 !important;
+}
+
+.cal-block-expanded-overlay {
+    position: fixed !important;
+    display: block !important;
+    z-index: 10000 !important;
+    height: auto !important;
+    overflow: auto !important;
+    transform: none !important;
+    transition: none !important;
+    min-height: 40px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 45%);
+    white-space: normal !important;
+    box-sizing: border-box !important;
+}
+
+.cal-block-expanded-overlay .fc-event-time {
+    display: block !important;
+}
+
+.cal-block-expanded-overlay .fc-event-main,
+.cal-block-expanded-overlay .fc-event-main-frame,
+.cal-block-expanded-overlay .fc-event-title-container {
+    width: 100%;
+    min-width: 0;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+}
+
+.cal-block-expanded-overlay .fc-event-main-frame {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.cal-block-expanded-overlay .fc-event-title {
+    display: block !important;
+    overflow: visible !important;
+    overflow-wrap: anywhere;
+    text-overflow: clip !important;
+    white-space: normal !important;
+}
+
 .fc-event {
     transition: transform .15s;
 }
@@ -1520,9 +1576,9 @@ All base rules above must win the cascade; this block overrides them.
         width: auto;
     }
 
-    /* Oculta la columna de descripción en móvil para ganar espacio */
-    table th:nth-child(3),
-    table td:nth-child(3) {
+    /* Hide Todo's description column without touching FullCalendar's weekdays. */
+    .todo-page table th:nth-child(3),
+    .todo-page table td:nth-child(3) {
         display: none;
     }
 
@@ -1588,6 +1644,71 @@ All base rules above must win the cascade; this block overrides them.
     /* Keep the calendar close to the viewport edges on small screens. */
     .kale-page {
         padding: 6px;
+    }
+
+    .kale-page #calendar .cal-block .fc-event-time {
+        display: none;
+    }
+
+    /* Extra-compact Block bars on mobile week/day views. */
+    .kale-page #calendar .fc-timegrid-event.cal-block {
+        padding: 0 3px !important;
+        font-size: 0.7rem !important;
+        line-height: 1.1 !important;
+        min-height: 0 !important;
+    }
+    .kale-page #calendar .fc-timegrid-event.cal-block .fc-event-title {
+        font-size: 0.7rem !important;
+        line-height: 1.1 !important;
+    }
+
+    .kale-page #calendar .cal-block:not(.cal-block-expanded) .fc-event-title {
+        display: block;
+        overflow: hidden !important;
+        text-overflow: ellipsis;
+        white-space: nowrap !important;
+    }
+
+    .kale-page #calendar .cal-block:not(.cal-block-expanded):hover {
+        transform: none !important;
+    }
+
+    .kale-page #calendar .cal-block:not(.cal-block-expanded):hover .fc-event-title {
+        overflow: hidden !important;
+        text-overflow: ellipsis;
+        white-space: nowrap !important;
+    }
+
+    /* Generic collapsed truncation for every event type on mobile so taps can
+       expand long titles instead of overflowing the cell/bar. */
+    .kale-page #calendar .fc-event:not(.cal-block-expanded) .fc-event-title {
+        display: block;
+        overflow: hidden !important;
+        text-overflow: ellipsis;
+        white-space: nowrap !important;
+    }
+
+    .kale-page #calendar .cal-block-expanded .fc-event-time {
+        display: block;
+    }
+
+    .kale-page #calendar .cal-block-expanded .fc-event-title {
+        overflow: visible !important;
+        overflow-wrap: anywhere;
+        text-overflow: clip;
+        white-space: normal !important;
+    }
+
+    .kale-page #calendar .cal-block-expanded .fc-event-main {
+        height: auto !important;
+        min-height: 100% !important;
+        overflow: visible !important;
+    }
+
+    .kale-page #calendar .cal-block-expanded {
+        z-index: 100 !important;
+        transform: scale(var(--cal-block-expanded-scale, 1.12));
+        white-space: normal;
     }
 
     /* ── CHAT MODEL DROPDOWN ── */
