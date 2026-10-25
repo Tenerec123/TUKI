@@ -8,6 +8,7 @@ from ..schemas import (
     BlockUpdate,
     BlockExceptionCreate,
     BlockExceptionRead,
+    BlockCalendarOccurrenceRead,
     BlockOccurrenceRead,
 )
 from ..database import get_db
@@ -21,12 +22,27 @@ from ..logic.blocks import (
     create_block_exception_logic,
     delete_block_exception_logic,
     get_block_occurrences_logic,
+    get_all_block_occurrences_logic,
 )
 
 router = APIRouter(
     prefix="/api/blocks",
     tags=["blocks"]
 )
+
+@router.get("/occurrences", response_model=List[BlockCalendarOccurrenceRead])
+def get_all_block_occurrences(
+    from_: datetime = Query(None, alias="from"),
+    to: datetime = Query(None),
+    db: Session = Depends(get_db),
+):
+    for name, value in (("from", from_), ("to", to)):
+        if value is not None and value.tzinfo is not None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{name} must be naive local time (no offset)",
+            )
+    return get_all_block_occurrences_logic(window_start=from_, window_end=to, db=db)
 
 @router.get("/{id}", response_model=BlockRead)
 def get_block(id: int, db: Session = Depends(get_db)):

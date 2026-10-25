@@ -17,17 +17,6 @@ async function LoadCalendar(){
 
     const tasks = []
     const events = []
-    let blocks = []
-    const blocksPromise = fetch(`/api/blocks/`)
-        .then(response => {
-            if (!response.ok) throw new Error(`HTTP ${response.status}`)
-            return response.json()
-        })
-        .catch(error => {
-            console.error("Error loading blocks:", error)
-            return []
-        })
-
     await Promise.all([
         fetch(`/api/tasks/`),
         fetch(`/api/events/`)
@@ -60,7 +49,31 @@ async function LoadCalendar(){
         });
     })
     .catch(error => console.error("Error al obtener datos:", error));
-    blocks = await blocksPromise
+    const blockEventSource = {
+        id: 'block-occurrences',
+        events: (fetchInfo, successCallback) => {
+            const params = new URLSearchParams({
+                from: formatNaiveLocalDateTime(fetchInfo.start),
+                to: formatNaiveLocalDateTime(fetchInfo.end)
+            })
+
+            fetch(`/api/blocks/occurrences?${params}`)
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+                    return response.json()
+                })
+                .then(occurrences => successCallback(occurrences.map(occurrence => ({
+                    title: occurrence.block_name,
+                    start: occurrence.start_time,
+                    end: occurrence.end_time,
+                    className: 'cal-block'
+                }))))
+                .catch(error => {
+                    console.error("Error loading Block occurrences:", error)
+                    successCallback([])
+                })
+        }
+    }
 
     var calendarEl = document.getElementById('calendar');
     calendar = new FullCalendar.Calendar(calendarEl, {
@@ -72,51 +85,28 @@ async function LoadCalendar(){
         initialView: 'dayGridMonth',
         firstDay:1,
         locale: 'en',
-        headerToolbar: {
+      headerToolbar: {
         left: 'prev,next today',
         center: 'title',
         right: 'dayGridMonth,timeGridWeek,timeGridDay'
       },
+      datesSet: (dateInfo) => {
+          const blocksSource = calendar.getEventSourceById('block-occurrences')
+          const showBlocks = ['timeGridWeek', 'timeGridDay'].includes(dateInfo.view.type)
+
+          if (showBlocks && !blocksSource) {
+              calendar.addEventSource(blockEventSource)
+          } else if (!showBlocks && blocksSource) {
+              blocksSource.remove()
+          }
+      },
       // The Block source returns no events in month view; refetch when switching
-      // views or navigating so a cached month result cannot hide week/day Blocks.
+      // dates. Keeping the source out of month view also prevents cached Blocks
+      // from leaking into that view.
       lazyFetching: false,
       eventTimeFormat: { hour: 'numeric', minute: '2-digit', hour12: false },
       slotLabelFormat: { hour: 'numeric', minute: '2-digit', hour12: false },
-      eventSources: [
-        tasks.concat(events),
-        {
-            events: (fetchInfo, successCallback) => {
-                const visibleViews = ['timeGridWeek', 'timeGridDay']
-                const currentViewType = calendar?.view?.type
-                if (!visibleViews.includes(currentViewType) || blocks.length === 0) {
-                    successCallback([])
-                    return
-                }
-
-                const params = new URLSearchParams({
-                    from: formatNaiveLocalDateTime(fetchInfo.start),
-                    to: formatNaiveLocalDateTime(fetchInfo.end)
-                })
-
-                Promise.all(blocks.map(async block => {
-                    try {
-                        const response = await fetch(`/api/blocks/${block.id}/occurrences?${params}`)
-                        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-                        const occurrences = await response.json()
-                        return occurrences.map(occurrence => ({
-                            title: block.name,
-                            start: occurrence.start_time,
-                            end: occurrence.end_time,
-                            className: 'cal-block'
-                        }))
-                    } catch (error) {
-                        console.error(`Error loading occurrences for block ${block.id}:`, error)
-                        return []
-                    }
-                })).then(blockEvents => successCallback(blockEvents.flat()))
-            }
-        }
-      ]
+      eventSources: [tasks.concat(events)]
     });
     calendar.render();
     resizeCalendarPage();

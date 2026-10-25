@@ -175,6 +175,10 @@ class BlockOccurrenceRead(BaseModel):
     start_time: datetime = Field(..., description='Expanded occurrence start, naive local time')
     end_time: datetime = Field(..., description='Expanded occurrence end, naive local time')
 
+class BlockCalendarOccurrenceRead(BlockOccurrenceRead):
+    block_id: int = Field(..., description='Block this occurrence belongs to')
+    block_name: str = Field(..., description='Name of the block')
+
 # Project Classes
 
 class ProjectCreate(BaseItem):

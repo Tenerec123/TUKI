@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from datetime import datetime, time, timedelta, timezone
@@ -9,8 +10,16 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from ..models import Block, BlockException, get_embedding_model
-from ..schemas import BlockCreate, BlockUpdate, BlockExceptionCreate, BlockOccurrenceRead
+from ..schemas import (
+    BlockCalendarOccurrenceRead,
+    BlockCreate,
+    BlockUpdate,
+    BlockExceptionCreate,
+    BlockOccurrenceRead,
+)
 from .routines import current_date
+
+logger = logging.getLogger(__name__)
 
 # Default expansion window when the caller does not provide explicit bounds.
 DEFAULT_WINDOW_DAYS = 365
@@ -321,3 +330,58 @@ def get_block_occurrences_logic(
         # client-visible data errors, never a 500 (see logic/routines.py).
         raise HTTPException(status_code=400, detail=str(error))
     return [BlockOccurrenceRead(start_time=start, end_time=end) for start, end in expanded]
+
+
+def get_all_block_occurrences_logic(
+    window_start: datetime,
+    window_end: datetime,
+    db: Session,
+) -> List[BlockCalendarOccurrenceRead]:
+    try:
+        window_start, window_end = _resolve_window(window_start, window_end)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error))
+
+    blocks = get_all_blocks_logic(first_n=None, db=db)
+    if not blocks:
+        return []
+
+    block_ids = [block.id for block in blocks]
+    exceptions_by_block: dict[int, List[BlockException]] = {}
+    exceptions = (
+        db.query(BlockException)
+        .where(BlockException.block_id.in_(block_ids))
+        .order_by(BlockException.block_id, BlockException.start_time, BlockException.id)
+        .all()
+    )
+    for exception in exceptions:
+        exceptions_by_block.setdefault(exception.block_id, []).append(exception)
+
+    occurrences: List[BlockCalendarOccurrenceRead] = []
+    for block in blocks:
+        try:
+            expanded = expand_block_occurrences(
+                block,
+                exceptions_by_block.get(block.id, []),
+                window_start,
+                window_end,
+            )
+        except ValueError as error:
+            # Keep one invalid recurrence from hiding valid Blocks in the combined feed.
+            logger.warning("Skipping occurrences for Block %s: %s", block.id, error)
+            continue
+
+        occurrences.extend(
+            BlockCalendarOccurrenceRead(
+                block_id=block.id,
+                block_name=block.name,
+                start_time=start,
+                end_time=end,
+            )
+            for start, end in expanded
+        )
+
+    return sorted(
+        occurrences,
+        key=lambda occurrence: (occurrence.start_time, occurrence.block_id),
+    )

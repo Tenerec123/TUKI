@@ -324,6 +324,66 @@ def test_occurrences_with_explicit_window(client):
     ]
 
 
+def test_all_occurrences_returns_sorted_events_for_multiple_blocks(client):
+    standup = _create_block(client)
+    focus = _create_block(
+        client,
+        name="Focus",
+        start_time="2026-01-06T13:00:00",
+        end_time="2026-01-06T14:00:00",
+        rrule="FREQ=WEEKLY;BYDAY=TU",
+    )
+    remove_response = client.post(
+        f"{API}/{standup['id']}/exceptions",
+        json={"is_add": False, "start_time": "2026-01-12T09:00:00"},
+    )
+    add_response = client.post(
+        f"{API}/{focus['id']}/exceptions",
+        json={
+            "is_add": True,
+            "start_time": "2026-01-14T15:00:00",
+            "end_time": "2026-01-14T16:00:00",
+        },
+    )
+    assert remove_response.status_code == 200
+    assert add_response.status_code == 200
+
+    response = client.get(f"{API}/occurrences", params=JANUARY)
+
+    assert response.status_code == 200
+    block_ids = {standup["id"], focus["id"]}
+    occurrences = [item for item in response.json() if item["block_id"] in block_ids]
+    assert len(occurrences) == 8
+    assert [(item["start_time"], item["block_id"]) for item in occurrences] == sorted(
+        (item["start_time"], item["block_id"]) for item in occurrences
+    )
+    assert all(item["block_name"] in {"Standup", "Focus"} for item in occurrences)
+    assert "2026-01-12T09:00:00" not in [item["start_time"] for item in occurrences]
+    assert {
+        "block_id": focus["id"],
+        "block_name": "Focus",
+        "start_time": "2026-01-14T15:00:00",
+        "end_time": "2026-01-14T16:00:00",
+    } in occurrences
+
+
+def test_all_occurrences_rejects_aware_and_reversed_bounds(client):
+    aware = client.get(
+        f"{API}/occurrences",
+        params={"from": "2026-01-01T00:00:00+00:00", "to": "2026-01-31T23:59:00"},
+    )
+    reversed_window = client.get(
+        f"{API}/occurrences",
+        params={"from": "2026-01-31T00:00:00", "to": "2026-01-01T00:00:00"},
+    )
+
+    assert aware.status_code == 400
+    assert reversed_window.status_code == 400
+    assert reversed_window.json()["detail"] == (
+        "Occurrence window end must not precede start"
+    )
+
+
 def test_occurrences_rejects_timezone_aware_bounds(client):
     block = _create_block(client)
 
