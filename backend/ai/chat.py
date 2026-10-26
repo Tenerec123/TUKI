@@ -15,7 +15,14 @@ import asyncio
 import json
 from .fake_ai import fake_ai
 
-def _build_messages(conversation: ConversationSchema, base_prompt) -> list:
+def build_messages(conversation: ConversationSchema, base_prompt) -> list:
+    """Replay stored conversation rows as OpenAI-format messages.
+
+    Shared by the chat UI and the voice agent so both rebuild the same
+    conversation shape from the same rows: prompt -> user, tool -> the
+    assistant tool_calls + tool result pair, anything else -> assistant.
+    Blank rows are skipped.
+    """
     msgs = [{'role': 'developer', 'content': base_prompt}]
     for msg in conversation.messages:
         if not (msg.text or '').strip():
@@ -45,6 +52,38 @@ def _build_messages(conversation: ConversationSchema, base_prompt) -> list:
         else:
             msgs.append({'role': 'assistant', 'content': msg.text})
     return msgs
+
+
+def _db_format_new_messages(new_msgs: list) -> list[MessageBase]:
+    """Convert the agent's raw OpenAI-format messages into DB rows.
+
+    Assistant text without tool calls becomes an 'agent' row; tool calls are
+    matched to their results by tool_call_id and stored as one 'tool' row
+    carrying the full JSON record {id, name, args, result}. Row order follows
+    the agent's message order, so replay via build_messages reconstructs the
+    same conversation shape.
+    """
+    db_format_messages = []
+    call_list = []
+    for new_msg in new_msgs:
+        if new_msg['role'] == "assistant":
+            calls = new_msg.get("tool_calls", "")
+            content = new_msg.get('content', '')
+            if calls == "" and content.strip():
+                db_format_messages.append(MessageBase(type="agent", text=content))
+            else:
+                call_list.extend([{'id':tc['id'], 'args':tc['function']['arguments']} for tc in calls])
+        elif new_msg['role'] == "tool":
+            call = next(filter(lambda obj: obj['id'] == new_msg['tool_call_id'], call_list), None)
+            if call is not None:
+                tc_for_db = {
+                    'id':call['id'],
+                    'name':new_msg['name'],
+                    'args':call['args'],
+                    'result':new_msg['content']
+                }
+                db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
+    return db_format_messages
 
 
 async def _generate_title(conv_id: int, user_message: str):
@@ -146,7 +185,7 @@ async def chat_persistence_wrapper(prompt: Prompt):
             )
 
         model_config = get_model_config()
-        messages = _build_messages(conversation, SYSTEM_PROMPT)
+        messages = build_messages(conversation, SYSTEM_PROMPT)
         base_len = len(messages)
         cost_tracker.reset()  # turn total starts at zero
         async for token in openai_agent(
@@ -161,26 +200,7 @@ async def chat_persistence_wrapper(prompt: Prompt):
 
     finally:
         try:
-            db_format_messages = []
-            call_list = []
-            for new_msg in messages[base_len:]:
-                if new_msg['role'] == "assistant":
-                    calls = new_msg.get("tool_calls","")
-                    content = new_msg.get('content', '')
-                    if calls == "" and content.strip():
-                        db_format_messages.append(MessageBase(type="agent", text=content))
-                    else:
-                        call_list.extend([{'id':tc['id'], 'args':tc['function']['arguments']} for tc in calls])
-                elif new_msg['role'] == "tool":
-                    call = next(filter(lambda obj: obj['id'] == new_msg['tool_call_id'], call_list), None)
-                    if call is not None:
-                        tc_for_db = {
-                            'id':call['id'],
-                            'name':new_msg['name'],
-                            'args':call['args'],
-                            'result':new_msg['content']
-                        }
-                        db_format_messages.append(MessageBase(type="tool", text=json.dumps(tc_for_db)))
+            db_format_messages = _db_format_new_messages(messages[base_len:])
             if db_format_messages:
                 await asyncio.to_thread(_db_queries2, prompt, db_format_messages)
             # Persist the turn's accumulated cost and push the NDJSON event
