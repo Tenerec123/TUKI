@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from ..models import Message, Conversation
 from ..schemas import ConversationCreate, ConversationUpdate
+from .memory import get_memory_conversation_id
 from datetime import date, datetime
 
 
@@ -11,8 +12,12 @@ def get_conversation_logic(id: int, db: Session):
 
 
 def get_conversation_names_logic(db: Session):
-    db_conversations = db.query(Conversation).order_by(Conversation.last_used.desc()).all()
-    return db_conversations
+    # The memory conversation is internal state, never user-facing chat list.
+    memory_id = get_memory_conversation_id(db)
+    query = db.query(Conversation)
+    if memory_id is not None:
+        query = query.where(Conversation.id != memory_id)
+    return query.order_by(Conversation.last_used.desc()).all()
 
 
 def create_new_conversation_logic(conversation: ConversationCreate, db: Session):
