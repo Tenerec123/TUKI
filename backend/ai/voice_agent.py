@@ -5,6 +5,11 @@ import time
 import wave
 from typing import AsyncIterable, AsyncIterator
 
+from ..logic.conversations import edit_conversation_logic
+from ..logic.memory import get_or_create_memory_conversation, reset_if_stale
+from ..database import SessionLocal
+from ..schemas import ConversationSchema, ConversationUpdate, MessageBase
+from .chat import _db_format_new_messages, build_messages
 from .stt import get_stt_provider
 from .agent import openai_agent
 from .voice_router import route_fast_path
@@ -141,6 +146,46 @@ def _print_voice_summary(perf: dict, stats: dict, session: TTSSession) -> None:
     with contextlib.suppress(Exception):
         session.report()
 
+def get_history() -> tuple[list[dict], int]:
+    """Load the wake conversation history as OpenAI messages, plus its ID.
+
+    Backed by the singleton memory conversation (logic/memory.py). The replay
+    reuses chat.build_messages, so prompt/agent/tool rows are rebuilt exactly
+    like the chat UI does — one format, one source of truth. If the
+    conversation has been idle for over an hour it is reset first (the hourly
+    renewal), so a session that slept starts fresh. Best-effort: a DB failure
+    degrades to a stateless turn with no session id, never an error.
+    """
+    try:
+        with SessionLocal() as db:
+            conversation = get_or_create_memory_conversation(db)
+            reset_if_stale(conversation, db)
+            schema = ConversationSchema.model_validate(conversation)
+            return build_messages(schema, AUDIO_SYSTEM_PROMPT), conversation.id
+    except Exception as exc:
+        voicelog.log(f"history ! load failed: {exc}")
+        return [], -1
+
+
+def _save_voice_turn(new_rows: list[MessageBase]) -> None:
+    """Persist one voice turn's rows (prompt first) into the wake conversation.
+
+    ``new_rows`` is composed at the call site: the transcript as the first
+    'prompt' row, then the agent's actions in DB format (agent text and
+    tool call/result records, built by chat._db_format_new_messages).
+    Best-effort: a DB failure must never break the audio flow. The append via
+    edit_conversation_logic refreshes last_used, which is exactly the idle
+    clock reset_if_stale reads, so usage keeps the session rolling.
+    """
+    if not new_rows or not new_rows[0].text.strip():
+        return
+    try:
+        with SessionLocal() as db:
+            conversation = get_or_create_memory_conversation(db)
+            edit_conversation_logic(conversation.id, ConversationUpdate(messages=new_rows), db=db)
+    except Exception as exc:
+        voicelog.log(f"history ! save failed: {exc}")
+
 
 async def voice_agent_logic(
     stream: AsyncIterable[bytes],
@@ -202,7 +247,9 @@ async def voice_agent_logic(
         if streaming_path:
             yield {"type": "end"}
         return
-    messages = [{'role': 'developer', 'content': AUDIO_SYSTEM_PROMPT}, {'role': 'user', 'content': transcription}]
+    messages, conv_id = await asyncio.to_thread(get_history)
+    base_len = len(messages)
+    messages.append({'role': 'user', 'content': transcription})
 
     perf["t_route_start"] = time.perf_counter()
     route_task = asyncio.create_task(route_fast_path(transcription, perf))
@@ -239,6 +286,7 @@ async def voice_agent_logic(
                 model=get_model_config()['orchestrator'],
                 max_rounds=10,
                 tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
+                conv_id=conv_id,
             ):
                 if isinstance(token, str):
                     # The agent yields the literal string 'ERROR_TOKEN' on failure.
@@ -339,4 +387,15 @@ async def voice_agent_logic(
             await producer_task
         with contextlib.suppress(Exception):
             await session.close()
+        # Persist the turn even when the stream ended early (error/disconnect):
+        # the transcript is what was said, and messages[base_len:] carries
+        # everything the agent did (text + tool call/result records). The
+        # transform ignores the 'user' row, so base_len may sit before it.
+        if perf.get("fast_path"):
+            say_text = perf.get("say_text", "")
+            agent_rows = [MessageBase(type="agent", text=say_text)] if say_text.strip() else []
+        else:
+            agent_rows = _db_format_new_messages(messages[base_len:])
+        new_rows = [MessageBase(type='prompt', text=transcription), *agent_rows]
+        await asyncio.to_thread(_save_voice_turn, new_rows)
         _print_voice_summary(perf, stats, session)
