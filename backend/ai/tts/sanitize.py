@@ -14,7 +14,7 @@ pronounces them), and Spanish punctuation is never dropped (``¿``/``¡`` surviv
 import re
 import unicodedata
 
-from .. import voicelog
+from ..voice import log as voicelog
 
 # --- block-level constructs (only ever match at the start of a line) ---------
 

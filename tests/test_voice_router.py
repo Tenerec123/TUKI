@@ -19,7 +19,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from backend.ai import voice_router as vr
+from backend.ai.voice import fast_path as vr
 
 
 class _FakeJevResponse:
@@ -326,7 +326,7 @@ class _FakePCMStream:
 
 
 def test_empty_transcript_yields_end_and_no_audio(monkeypatch):
-    from backend.ai import voice_agent as va
+    from backend.ai.voice import agent as va
 
     async def fake_transcribe_stream(stream):
         return ""
@@ -365,7 +365,7 @@ def test_empty_transcript_yields_end_and_no_audio(monkeypatch):
 
 
 def test_strip_wake_word_removes_leading_token():
-    from backend.ai.voice_agent import _strip_wake_word
+    from backend.ai.voice.agent import _strip_wake_word
 
     assert _strip_wake_word("alexa que hora es") == "que hora es"
     assert _strip_wake_word("Alexa, pon una tarea") == "pon una tarea"
@@ -373,14 +373,14 @@ def test_strip_wake_word_removes_leading_token():
 
 
 def test_strip_wake_word_handles_punctuation_and_case():
-    from backend.ai.voice_agent import _strip_wake_word
+    from backend.ai.voice.agent import _strip_wake_word
 
     assert _strip_wake_word("¡Alexa! sube el volumen") == "sube el volumen"
     assert _strip_wake_word("¿Rexa? apaga la luz") == "apaga la luz"
 
 
 def test_strip_wake_word_leaves_other_text_untouched():
-    from backend.ai.voice_agent import _strip_wake_word
+    from backend.ai.voice.agent import _strip_wake_word
 
     assert _strip_wake_word("pon una tarea para mañana") == "pon una tarea para mañana"
     # A wake word NOT at the start is part of the sentence, not a prefix.
@@ -388,7 +388,7 @@ def test_strip_wake_word_leaves_other_text_untouched():
 
 
 def test_strip_wake_word_only_token_becomes_empty():
-    from backend.ai.voice_agent import _strip_wake_word
+    from backend.ai.voice.agent import _strip_wake_word
 
     assert _strip_wake_word("Alexa") == ""
     assert _strip_wake_word("  alexa  ") == ""

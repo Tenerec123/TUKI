@@ -14,7 +14,7 @@ import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from . import voicelog
+from . import log as voicelog
 
 JEV_ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
 JEV_MODEL = "typesafe/jev-1.13"
@@ -168,7 +168,7 @@ def _prefab_time() -> str:
 def _prefab_weather() -> str:
     # Lazy import: tools.read pulls in DB/yfinance at import time.
     try:
-        from .tools.read import Weather
+        from ..tools.read import Weather
 
         data = Weather()
         if not isinstance(data, dict) or "error" in data:

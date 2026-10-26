@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 import websockets
 from websockets.exceptions import ConnectionClosed
 
-from .. import voicelog
+from ..voice import log as voicelog
 from .base import STTProvider
 
 DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen"

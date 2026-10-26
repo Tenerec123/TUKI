@@ -25,7 +25,7 @@ from urllib.parse import urlencode
 
 import websockets
 
-from .. import voicelog
+from ..voice import log as voicelog
 from .base import TTSSession, TTSProvider, TTSTurnEnd
 
 DEEPGRAM_TTS_WS_URL = "wss://api.deepgram.com/v1/speak"

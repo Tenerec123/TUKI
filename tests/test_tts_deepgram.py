@@ -158,7 +158,7 @@ async def _collect_streaming(va):
 
 
 def test_pcm_chunks_forwarded_unbuffered(monkeypatch):
-    from backend.ai import voice_agent as va
+    from backend.ai.voice import agent as va
     chunk = b"\x01\x00\x02\x00"
     _stub_streaming_pipeline(monkeypatch, va, [chunk, TTSTurnEnd(index=1, chars=4, audio_ms=10.0)])
 
@@ -170,7 +170,7 @@ def test_pcm_chunks_forwarded_unbuffered(monkeypatch):
 
 
 def test_pcm_start_carries_session_sample_rate(monkeypatch):
-    from backend.ai import voice_agent as va
+    from backend.ai.voice import agent as va
     _stub_streaming_pipeline(
         monkeypatch, va,
         [b"\x01\x00", TTSTurnEnd(index=1, chars=4, audio_ms=1.0)],
@@ -183,7 +183,7 @@ def test_pcm_start_carries_session_sample_rate(monkeypatch):
 
 def test_pcm_marker_accounting_pins_turns_and_first_audio(monkeypatch):
     """Markers drive turns/p1_audio (C5); payload bytes are counted exactly."""
-    from backend.ai import voice_agent as va
+    from backend.ai.voice import agent as va
     chunk1 = b"\x01\x00" * 10
     chunk2 = b"\x02\x00" * 20
     _stub_streaming_pipeline(monkeypatch, va, [

@@ -5,7 +5,7 @@ from ..ai.stt import get_stt_provider
 from ..ai.stream_manager import stream_manager
 from ..ai.chat import chat_persistence_wrapper
 from ..ai.agent import openai_agent
-from ..ai.voice_agent import voice_agent_logic
+from ..ai.voice.agent import voice_agent_logic
 from ..ai.config import get_model_config, AUDIO_SYSTEM_PROMPT
 from ..ai.tools.discovery import ALL_TOOL_SCHEMAS
 import asyncio
