@@ -1,11 +1,7 @@
 import io
-import os
-from openai import AsyncOpenAI
-
 from .base import STTProvider
-from ..config import get_model_config
-
-_client: AsyncOpenAI | None = None
+from ..config import get_model_config_for
+from ..credentials import create_chat_client
 
 
 class OpenRouterSTTProvider(STTProvider):
@@ -30,22 +26,21 @@ class OpenRouterSTTProvider(STTProvider):
         elif content_type == "audio/mpeg":
             filename = "recording.mp3"
 
-        stt_model = get_model_config().get('stt', 'nvidia/parakeet-tdt-0.6b-v3')
-        client = get_stt_client()
-        result = await client.audio.transcriptions.create(
-            model=stt_model,
-            file=(filename, file, content_type),
-            language=language,
+        stt_config = get_model_config_for('stt')
+        # A Deepgram-selected row contains a Deepgram model id (for example
+        # nova-2), which is not valid for OpenRouter's batch fallback.
+        stt_model = (
+            stt_config[2]
+            if stt_config[1] == 'openrouter'
+            else 'nvidia/parakeet-tdt-0.6b-v3'
         )
+        client = create_chat_client('openrouter')
+        try:
+            result = await client.audio.transcriptions.create(
+                model=stt_model,
+                file=(filename, file, content_type),
+                language=language,
+            )
+        finally:
+            await client.close()
         return result.text
-
-
-def get_stt_client() -> AsyncOpenAI:
-    """Get a lazily-initialized OpenRouter async client."""
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=os.environ['OPENROUTER_API_KEY'],
-        )
-    return _client

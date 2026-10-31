@@ -1,5 +1,7 @@
+from sqlalchemy.orm import Session
+
 from ..database import SessionLocal
-from ..models import Config
+from ..models import AppConfig, ModelConfig
 
 MAX_AGENTIC_ROUNDS = 10
 
@@ -55,58 +57,40 @@ ORCHESTRATOR_PROVIDER_PINS = {
     "z-ai/glm-5.3-flash": "together",
 }
 
-# Config rows that hold a model id rather than a free-form setting.
-MODEL_KEYS = (
-    'orchestrator', 'searcher', 'stt',
-    'exec_tools', 'final_resp', 'get_data', 'general',
-)
-# Keys in the same dict that are NOT models, so they must not be split.
-NON_MODEL_KEYS = ('stt_provider', 'tts_provider')
+# Each default is the same four-field row as ``model_config``:
+# [usage, provider, model name, thinking process]. Keeping these as lists makes
+# defaults use the exact shape the LLMS page posts and the database stores.
+MODEL_DEFAULTS: list[list[str | None]] = [
+    ['orchestrator', 'openrouter', 'openai/gpt-oss-120b', 'minimal'],
+    ['searcher', 'openrouter', 'google/gemini-2.5-flash-lite', None],
+    ['stt', 'deepgram', 'nova-2', None],
+    ['namer', 'openrouter', 'mistralai/mistral-nemo', None],
+]
 
-# Reasoning effort levels OpenRouter accepts. Anything else in a stored value is
-# ignored rather than sent, so a corrupted row degrades to the provider default
-# instead of failing the call.
+MODEL_USAGES = tuple(row[0] for row in MODEL_DEFAULTS)
+KNOWN_PROVIDERS = ('openrouter', 'opencode-go', 'deepgram')
 KNOWN_EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 
-
-def split_model(value: str) -> tuple[str, str | None]:
-    """Split a stored "MODEL_ID EFFORT" value into (model_id, effort or None).
-
-    The effort rides inside the model value, one space, for every model and not
-    just the orchestrator. The frontend computes it from the OpenRouter catalog
-    as the LOWEST effort the model supports: a model whose reasoning is mandatory
-    needs a valid value or it fails, and one without reasoning gets 'none' to
-    disable it outright. Omitting the effort is therefore not the same as
-    sending 'none', and only the frontend knows which one applies.
-    """
-    # A row can be blank (every field of ModelConfig is optional, and a model
-    # is only written when present). Indexing parts[0] blindly would raise and
-    # the whole config read would fall back to defaults, so an empty row yields
-    # an empty model instead of taking the other roles down with it.
-    parts = (value or '').split(maxsplit=1)
-    if not parts:
-        return '', None
-    return parts[0], (parts[1] if len(parts) == 2 else None)
-
-
-def get_model_effort(model: str, cfg: dict) -> str | None:
-    """Return the configured reasoning effort for `model`, or None if it has none.
-
-    None means "not configured", and the provider default then applies, so
-    nothing is sent. Effort is never invented here: it always comes from the
-    per-model config.
-    """
-    base = model.split(":")[0]
-    for key in MODEL_KEYS:
-        if cfg.get(key, '').split(":")[0] == base:
-            effort = cfg.get(f'{key}_effort')
-            # A stored effort that is not a known level is treated as absent
-            # rather than sent: a value the provider rejects would fail the
-            # whole call, while sending nothing just falls back to the default.
-            if effort in KNOWN_EFFORTS:
-                return effort
-            return None
-    return None
+def parse_model_config_row(row: list[str | None]) -> tuple[str, str, str, str | None]:
+    """Validate and normalize a four-field model config list."""
+    if len(row) != 4:
+        raise ValueError('A model config row must contain exactly four fields')
+    usage, provider, model_name, thinking_process = row
+    if usage not in MODEL_USAGES:
+        raise ValueError(f'Unknown model usage: {usage}')
+    if provider not in KNOWN_PROVIDERS:
+        raise ValueError(f'Unknown model provider: {provider}')
+    if not model_name or not model_name.strip():
+        raise ValueError('Model name cannot be empty')
+    if usage == 'stt' and provider == 'opencode-go':
+        raise ValueError('OpenCode Go does not provide a speech transcription model')
+    if usage != 'stt' and provider == 'deepgram':
+        raise ValueError('Deepgram is only supported for speech transcription')
+    if thinking_process not in (None, *KNOWN_EFFORTS):
+        raise ValueError(f'Unknown thinking process: {thinking_process}')
+    if usage == 'stt':
+        thinking_process = None
+    return usage, provider, model_name.strip(), thinking_process
 
 
 def get_orchestrator_provider_pin(model: str) -> str | None:
@@ -120,40 +104,62 @@ def get_orchestrator_provider_pin(model: str) -> str | None:
     return ORCHESTRATOR_PROVIDER_PINS.get(base)
 
 
-def get_model_config() -> dict:
-    defaults = {
-        'orchestrator': 'openai/gpt-oss-120b',
-        'orchestrator_effort': 'none',   # reasoning effort for the orchestrator model
-        'searcher': 'google/gemini-2.5-flash-lite',
-        'stt': 'nvidia/parakeet-tdt-0.6b-v3',
-        'stt_provider': 'openrouter',  # 'openrouter' or 'deepgram'
-        'tts_provider': 'deepgram',
-    }
-    try: 
-        db = SessionLocal()
-        rows = db.query(Config).all()
-        values = {row.key: row.value for row in rows}
-        # Legacy migration: use the old 'general' (chat) value as orchestrator
-        # (a plain model id, no effort).
-        if 'orchestrator' not in values and 'general' in values:
-            values['orchestrator'] = values['general']
-        # Iterate over a snapshot: the loop below may ADD a "<key>_effort" entry
-        # to defaults, and mutating a dict while iterating it raises
-        # "dictionary changed size during iteration".
-        for key in list(defaults):
-            # Any model row may carry a composite "MODEL_ID EFFORT"; the effort
-            # is split out so <key> stays a bare model id and the effort lands in
-            # <key>_effort. Rows written before the composite existed (or a model
-            # with no effort saved) keep their default and send nothing.
-            if key.endswith('_effort') or key in NON_MODEL_KEYS:
-                continue
-            if key in values:
-                model_id, effort = split_model(values[key])
-                defaults[key] = model_id
-                if effort is not None:
-                    defaults[f'{key}_effort'] = effort
-    except Exception as e:
-        print(f"[CONFIG] Error reading model config: {e}")
-    finally:
-        db.close()
-    return defaults 
+def get_model_config(db: Session | None = None) -> list[list[str | None]]:
+    """Return all model config rows, including provider-qualified defaults.
+
+    Used by the LLMS all-roles listing; single-role call sites use
+    ``get_model_config_for`` instead of loading every row.
+    """
+    if db is not None:
+        return _get_model_config(db)
+    with SessionLocal() as session:
+        return _get_model_config(session)
+
+
+def _get_model_config(db: Session) -> list[list[str | None]]:
+    """Build the all-roles listing from the known usages and stored rows."""
+    values = {row.usage: row for row in db.query(ModelConfig).all()}
+    result: list[list[str | None]] = []
+    for default in MODEL_DEFAULTS:
+        row = values.get(default[0])
+        if row is None:
+            result.append(default.copy())
+        else:
+            result.append([
+                row.usage,
+                row.provider,
+                row.model_name,
+                row.thinking_process,
+            ])
+    return result
+
+
+def get_model_config_for(
+    usage: str,
+    db: Session | None = None,
+) -> list[str | None]:
+    """Return one role's four-field config row with a direct per-role query.
+
+    Issues a single ``ModelConfig.usage == usage`` query and falls back to the
+    matching MODEL_DEFAULTS row when the database has no row for this usage.
+    Callers write their own reads through their session via ``db``; runtime
+    consumers omit it and a fresh session is opened here.
+    """
+    if usage not in MODEL_USAGES:
+        raise ValueError(f'Unknown model usage: {usage}')
+    if db is None:
+        with SessionLocal() as session:
+            return get_model_config_for(usage, session)
+    row = db.query(ModelConfig).where(ModelConfig.usage == usage).first()
+    if row is None:
+        return next(
+            default.copy() for default in MODEL_DEFAULTS if default[0] == usage
+        )
+    return [row.usage, row.provider, row.model_name, row.thinking_process]
+
+
+def get_app_setting(key: str, default: str | None = None) -> str | None:
+    """Read an unrelated application setting still stored in ``config``."""
+    with SessionLocal() as db:
+        row = db.query(AppConfig).where(AppConfig.key == key).first()
+        return row.value if row is not None else default

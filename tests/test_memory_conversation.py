@@ -26,14 +26,14 @@ from backend.logic.memory import (
     get_or_create_memory_conversation,
     reset_if_stale,
 )
-from backend.models import Config, Conversation, Message
+from backend.models import AppConfig, Conversation, Message
 
 
 def _seed_db():
     """Create an in-memory SQLite DB with only the config, conversations and messages tables."""
     engine = create_engine("sqlite://")
     Conversation.__table__.create(engine)
-    Config.__table__.create(engine)
+    AppConfig.__table__.create(engine)
     Message.__table__.create(engine)
     return sessionmaker(bind=engine)()
 
@@ -49,7 +49,7 @@ def test_get_or_create_is_idempotent():
 
 def test_stale_config_id_is_repaired():
     db = _seed_db()
-    db.add(Config(key=MEMORY_CONVERSATION_KEY, value="999"))
+    db.add(AppConfig(key=MEMORY_CONVERSATION_KEY, value="999"))
     db.commit()
     conversation = get_or_create_memory_conversation(db)
     assert conversation.id != 999

@@ -1,6 +1,5 @@
 import asyncio
 import json
-import os
 import time
 from typing import AsyncIterator
 from urllib.parse import urlencode
@@ -9,6 +8,8 @@ import websockets
 from websockets.exceptions import ConnectionClosed
 
 from ..voice import log as voicelog
+from ..config import get_model_config_for
+from ..credentials import get_provider_key
 from .base import STTProvider
 
 DEEPGRAM_WS_URL = "wss://api.deepgram.com/v1/listen"
@@ -74,17 +75,16 @@ class DeepgramSTTProvider(STTProvider):
         Returns the final transcript (latest final/interim hypothesis)
         once the socket closes.
         """
-        api_key = os.environ.get('DEEPGRAM_API_KEY')
-        if not api_key:
-            raise ValueError("DEEPGRAM_API_KEY environment variable not set")
-
+        api_key = get_provider_key('deepgram')
+        stt_config = get_model_config_for('stt')
+        stt_model = stt_config[2] if stt_config[1] == 'deepgram' else 'nova-2'
         headers = {"Authorization": f"Token {api_key}"}
 
         # Deepgram v1 streaming config goes in URL query parameters, NOT in a
         # Configure message. Sending {"type":"Configure","config":{...}}
         # makes the API reply with a SchemaError and no transcript.
         params = {
-            "model": "nova-2",
+            "model": stt_model,
             "language": language,
             "interim_results": "true",
             # Silence required before Deepgram finalizes a segment. Set ABOVE
@@ -113,6 +113,7 @@ class DeepgramSTTProvider(STTProvider):
 
         t_start = time.perf_counter()
         transcript = ""
+        error_description: str | None = None
         self.timing = {}
 
         async with websockets.connect(url, additional_headers=headers) as ws:
@@ -171,6 +172,11 @@ class DeepgramSTTProvider(STTProvider):
                 data = json.loads(message)
                 msg_type = data.get("type")
                 if msg_type == "Error":
+                    error_description = (
+                        data.get("description")
+                        or data.get("variant")
+                        or "unknown error"
+                    )
                     voicelog.log(
                         f"stt ! Deepgram error variant={data.get('variant')} "
                         f"description={data.get('description')}"
@@ -202,6 +208,17 @@ class DeepgramSTTProvider(STTProvider):
                     last_interim = text
                 voicelog.debug(f"transcript={transcript!r}", source="stt")
             t_results_end = time.perf_counter()
+
+            # A Deepgram error event with no recovered speech is a FAILED
+            # attempt, not an empty success. Raising here lets the configured
+            # fallback provider try the same audio; returning "" silently
+            # produced empty chat prompts and empty wake replies (S10).
+            if error_description and not final_segments and not last_interim:
+                voicelog.log(f"stt ! failing attempt ({error_description})")
+                raise RuntimeError(
+                    f"Deepgram returned an error instead of a transcript: "
+                    f"{error_description}"
+                )
 
         # Fall back to the last interim hypothesis when no final was received.
         if not final_segments and last_interim:

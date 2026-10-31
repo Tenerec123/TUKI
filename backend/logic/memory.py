@@ -11,23 +11,23 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from ..models import Config, Conversation
+from ..models import AppConfig, Conversation
 
 MEMORY_CONVERSATION_KEY = "memory_conversation_id"
 MEMORY_CONVERSATION_TITLE = "TUKI Memory"
 
 
 def _store_memory_id(db: Session, conversation_id: int) -> None:
-    row = db.query(Config).where(Config.key == MEMORY_CONVERSATION_KEY).first()
+    row = db.query(AppConfig).where(AppConfig.key == MEMORY_CONVERSATION_KEY).first()
     if row is None:
-        db.add(Config(key=MEMORY_CONVERSATION_KEY, value=str(conversation_id)))
+        db.add(AppConfig(key=MEMORY_CONVERSATION_KEY, value=str(conversation_id)))
     else:
         row.value = str(conversation_id)
 
 
 def get_memory_conversation_id(db: Session) -> int | None:
     """Return the configured memory conversation ID, or None when unset."""
-    row = db.query(Config).where(Config.key == MEMORY_CONVERSATION_KEY).first()
+    row = db.query(AppConfig).where(AppConfig.key == MEMORY_CONVERSATION_KEY).first()
     return int(row.value) if row else None
 
 

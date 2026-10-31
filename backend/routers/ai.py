@@ -1,7 +1,7 @@
 from ..schemas import Prompt
-from fastapi import APIRouter, UploadFile, File, Response, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, UploadFile, File, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from ..ai.stt import get_stt_provider
+from ..ai.stt import transcribe_with_fallback
 from ..ai.stream_manager import stream_manager
 from ..ai.chat import chat_persistence_wrapper
 from ..ai.agent import openai_agent
@@ -42,13 +42,21 @@ async def stop_streaming(conv_id: int):
 @router.post('/stt')
 async def stt_conversion(file: UploadFile = File(...)):
     audio_data = await file.read()
-    # Chat mic always uses OpenRouter batch STT, regardless of the global
-    # stt_provider config (that config only drives the voice agent).
-    provider = get_stt_provider("openrouter")
-    result_text = await provider.transcribe(
-        audio_data,
-        content_type=file.content_type or "audio/ogg",
-    )
+    # Browsers upload MediaRecorder blobs as "audio/ogg; codecs=opus": keep
+    # only the base MIME so providers infer the container correctly.
+    content_type = (file.content_type or "audio/ogg").split(";", 1)[0].strip() or "audio/ogg"
+    try:
+        result_text = await transcribe_with_fallback(
+            audio_data,
+            content_type=content_type,
+        )
+    except Exception as exc:
+        # Neither provider produced text: answer a clear non-200 so the
+        # frontend shows a useful error instead of sending an empty prompt.
+        raise HTTPException(
+            status_code=502,
+            detail=f"Audio transcription failed: {exc}",
+        ) from exc
     return result_text
 
 

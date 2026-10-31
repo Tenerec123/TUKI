@@ -1,12 +1,17 @@
-import os
 import asyncio
 import time
+from contextvars import ContextVar
+from collections.abc import AsyncIterator
+from uuid import uuid4
 from datetime import datetime
 from .tools.discovery import execute_tool_call
-from .config import get_model_config, get_model_effort, get_orchestrator_provider_pin
+from .config import get_orchestrator_provider_pin
 from . import cost_tracker
 from openai import AsyncOpenAI
+from .credentials import create_chat_client
 import traceback
+
+_active_conversation_id: ContextVar[int] = ContextVar('active_ai_conversation_id', default=-1)
 def _log(msg: str):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
@@ -30,25 +35,29 @@ def _log_cache_usage(usage, label: str = ""):
     except Exception:
         pass
 
-client = AsyncOpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.environ['OPENROUTER_API_KEY']
-)
-
-async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last: bool = False, session_id: str = "-1", label: str = ""):
-    cfg = get_model_config()
+async def _agentic_round(
+    client: AsyncOpenAI,
+    messages: list,
+    model: str,
+    provider: str,
+    thinking_process: str | None,
+    tool_schemas: list,
+    is_last: bool = False,
+    session_id: str = "-1",
+    label: str = "",
+) -> AsyncIterator[dict[str, object]]:
     extra_body: dict = {}
-    # Sent whenever an effort is configured, INCLUDING 'none'. Omitting the
-    # field leaves the choice to the provider, and inclusionai/ling-3.0-flash
-    # defaults to reasoning ON: measured 380 reasoning tokens and 3.8s to first
-    # token, against 0 tokens and 0.9s with effort explicitly none. In voice
-    # that is dead air before the summary can start. The value itself is never
-    # decided here, it always comes from the per-model config.
-    effort = get_model_effort(model, cfg)
-    if effort is not None:
-        extra_body['reasoning'] = {'effort': effort}
-    if session_id != "-1": extra_body['session_id'] = session_id
-    provider_pin = get_orchestrator_provider_pin(model)
+    extra_headers: dict[str, str] = {}
+    if thinking_process is not None:
+        if provider == 'openrouter':
+            extra_body['reasoning'] = {'effort': thinking_process}
+        elif provider == 'opencode-go':
+            extra_body['reasoning_effort'] = thinking_process
+    if provider == 'openrouter' and session_id != "-1":
+        extra_body['session_id'] = session_id
+    if provider == 'opencode-go' and session_id != "-1":
+        extra_headers['x-opencode-session'] = f'tuki-{session_id}'
+    provider_pin = get_orchestrator_provider_pin(model) if provider == 'openrouter' else None
     if provider_pin:
         # Preferred provider first; OpenRouter falls back to others on error.
         extra_body['provider'] = {"order": [provider_pin]}
@@ -62,7 +71,9 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
         tool_choice="none" if is_last else "auto",
         parallel_tool_calls=True,
         stream=True,
+        stream_options={"include_usage": True},
         extra_body=extra_body,
+        extra_headers=extra_headers or None,
     )
     calls: dict[int, dict] = {}
     assistant_msg = None
@@ -173,17 +184,41 @@ async def _agentic_round(messages: list, model: str, tool_schemas: list, is_last
 
     if finish == "stop" or len(calls) == 0: yield {"type":"finish", "content":""}
     
-async def openai_agent(messages:list, model:str, max_rounds:int, tool_schemas: list, conv_id:int=-1):
+async def openai_agent(
+    messages: list,
+    model: str,
+    max_rounds: int,
+    tool_schemas: list,
+    conv_id: int = -1,
+    provider: str = 'openrouter',
+    thinking_process: str | None = None,
+) -> AsyncIterator[dict[str, object] | str]:
+    if conv_id == -1:
+        conv_id = _active_conversation_id.get()
+    conversation_token = _active_conversation_id.set(conv_id)
     _log(f"═══════════════════════════════════════════════")
-    _log(f"AGENT START — model={model}")
+    _log(f"AGENT START — provider={provider} model={model}")
     t_agent = time.perf_counter()
+    client = None
     try:
+        client = create_chat_client(provider)
+        session_id = str(conv_id) if conv_id != -1 else str(uuid4())
         for i in range(max_rounds):
             t_loop = time.perf_counter()
             _log(f"── Round {i+1}/{max_rounds}")
             _log(f"[PERF] agent: round={i+1}/{max_rounds} start=+{(t_loop - t_agent) * 1000:.1f}ms")
             is_last = i == max_rounds - 1
-            async for token in _agentic_round(messages, model, tool_schemas, is_last=is_last, session_id= str(conv_id), label= f"round-{i+1}/{max_rounds}"):
+            async for token in _agentic_round(
+                client=client,
+                messages=messages,
+                model=model,
+                provider=provider,
+                thinking_process=thinking_process,
+                tool_schemas=tool_schemas,
+                is_last=is_last,
+                session_id=session_id,
+                label=f"round-{i+1}/{max_rounds}",
+            ):
                 yield token
                 if token['type'] == "finish": break
             else: continue
@@ -194,3 +229,9 @@ async def openai_agent(messages:list, model:str, max_rounds:int, tool_schemas: l
         _log(f"AGENT ERROR: {e}")
         traceback.print_exc()
         yield 'ERROR_TOKEN'
+    finally:
+        try:
+            if client is not None:
+                await client.close()
+        finally:
+            _active_conversation_id.reset(conversation_token)

@@ -30,6 +30,25 @@ const statusEl = document.getElementById("status");
 const toggleBtn = document.getElementById("toggle-btn");
 const scoreEl = document.getElementById("score");
 const logEl = document.getElementById("log");
+// Fail closed until the server confirms that wake has all three capabilities.
+toggleBtn.disabled = true;
+
+async function loadWakeAvailability() {
+  try {
+    const response = await fetch("/api/config/capabilities");
+    if (!response.ok) throw new Error(`Capability request failed (${response.status})`);
+    const services = await response.json();
+    if (services.wake === true && window.isSecureContext) {
+      toggleBtn.disabled = false;
+      return;
+    }
+    toggleBtn.disabled = true;
+    setStatus("UNAVAILABLE", true);
+    logEl.textContent = "Wake requires configured LLM, STT, and TTS provider keys.";
+  } catch (error) {
+    console.error("Could not load wake availability:", error);
+  }
+}
 
 const iconMic = `<i class="bi bi-mic"></i>`;
 const iconMicFill = `<i class="bi bi-mic-fill"></i>`;
@@ -933,3 +952,5 @@ toggleBtn.addEventListener("click", async () => {
     toggleBtn.disabled = false;
   }
 });
+
+loadWakeAvailability();

@@ -13,6 +13,10 @@ import time
 from pathlib import Path
 
 import pytest
+from sqlalchemy.schema import MetaData
+
+# Keep TTS tests independent of the production database bootstrap.
+MetaData.create_all = lambda self, *args, **kwargs: None
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -130,17 +134,33 @@ def _stub_streaming_pipeline(monkeypatch, va, audio_items, sample_rate=24000):
     The producer task must never reach a live LLM/DB call even if the event
     loop gets a chance to run it before the consumer cancels it.
     """
-    async def fake_transcribe_stream(stream):
+    async def fake_transcribe_stream(stream, **_kwargs):
         return "hola"
-    monkeypatch.setattr(va, "get_stt_provider", lambda name=None: type('P', (), {'transcribe_stream': staticmethod(fake_transcribe_stream)})())
+    fake_provider = type('P', (), {'transcribe_stream': staticmethod(fake_transcribe_stream)})()
+    monkeypatch.setattr(va, "get_stt_provider", lambda name=None: fake_provider)
+    # The retry wrapper now resolves ordering from the STT package itself;
+    # keep this fake provider aligned with that configuration instead of
+    # consulting any configured local keys/database state.
+    from backend.ai import stt as stt_pkg
+    monkeypatch.setattr(stt_pkg, "get_available_stt_providers", lambda: ["deepgram"])
+    monkeypatch.setattr(
+        stt_pkg,
+        "get_model_config_for",
+        lambda usage: [usage, "deepgram", "nova-2", None],
+    )
 
     async def fake_openai_agent(**_kwargs):
         return
         yield  # unreachable: without a yield this would be a coroutine, not an async generator
     monkeypatch.setattr(va, "openai_agent", fake_openai_agent)
+    monkeypatch.setattr(
+        va,
+        "get_model_config_for",
+        lambda usage: [usage, "openrouter", "test-model", None],
+    )
 
-    # The Jev fast-path router would make a real HTTPS call when
-    # OPENROUTER_API_KEY is set; keep these unit tests hermetic.
+    # The Jev fast-path router would make a real HTTPS call when the
+    # OpenRouter key is configured in the database; keep these tests hermetic.
     async def fake_route_fast_path(transcript, info=None):
         return None
     monkeypatch.setattr(va, "route_fast_path", fake_route_fast_path)
