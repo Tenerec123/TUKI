@@ -234,4 +234,11 @@ async def openai_agent(
             if client is not None:
                 await client.close()
         finally:
-            _active_conversation_id.reset(conversation_token)
+            # The token may have been created in a different context when this
+            # async generator is consumed/aclosed from another task (e.g. the
+            # voice pipeline). Resetting across contexts raises ValueError and
+            # surfaces as "Task exception was never retrieved"; guard it.
+            try:
+                _active_conversation_id.reset(conversation_token)
+            except ValueError:
+                pass

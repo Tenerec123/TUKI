@@ -65,6 +65,11 @@ function SetupStream(stream) {
             return;
         }
         const transcript = await response.json();
+        if (!transcript || !String(transcript).trim()) {
+            // No speech was detected: friendly notice, no prompt sent.
+            showNoSpeechDetected();
+            return;
+        }
         sendPrompt(transcript);
     };
     can_record = true;
@@ -76,6 +81,14 @@ function showTranscriptionError(detail) {
     const div = document.createElement('div');
     div.classList.add('tuki-msg');
     div.textContent = detail || 'Could not transcribe your audio. Check the STT provider configuration on the LLMS page.';
+    chatContainer.appendChild(div);
+    updateChatPadding();
+    scrollToBottom();
+}
+function showNoSpeechDetected() {
+    const div = document.createElement('div');
+    div.classList.add('tuki-msg');
+    div.textContent = 'No se detectó voz. Intenta de nuevo.';
     chatContainer.appendChild(div);
     updateChatPadding();
     scrollToBottom();

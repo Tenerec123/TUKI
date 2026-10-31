@@ -288,9 +288,18 @@ def test_chat_stt_router_normalizes_browser_mime_and_returns_text(monkeypatch):
     assert seen["kwargs"]["content_type"] == "audio/ogg"
 
 
-def test_chat_stt_router_returns_502_when_every_provider_fails(monkeypatch):
-    async def fail_transcribe(audio, **kwargs):
+def test_chat_stt_router_returns_empty_when_no_speech_detected(monkeypatch):
+    async def empty_transcribe(audio, **kwargs):
         raise ValueError("No STT provider produced a transcript (tried: deepgram, openrouter)")
+
+    monkeypatch.setattr(ai_router, "transcribe_with_fallback", empty_transcribe)
+    result = asyncio.run(ai_router.stt_conversion(_FakeUpload("audio/ogg")))
+    assert result == ""
+
+
+def test_chat_stt_router_returns_502_when_provider_fails(monkeypatch):
+    async def fail_transcribe(audio, **kwargs):
+        raise RuntimeError("socket died")
 
     monkeypatch.setattr(ai_router, "transcribe_with_fallback", fail_transcribe)
     with pytest.raises(HTTPException) as excinfo:

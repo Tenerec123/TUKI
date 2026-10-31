@@ -51,12 +51,16 @@ async def stt_conversion(file: UploadFile = File(...)):
             content_type=content_type,
         )
     except Exception as exc:
-        # Neither provider produced text: answer a clear non-200 so the
-        # frontend shows a useful error instead of sending an empty prompt.
-        raise HTTPException(
-            status_code=502,
-            detail=f"Audio transcription failed: {exc}",
-        ) from exc
+        # A real provider failure (bad key, network, etc.) is still an error.
+        if "No STT provider produced a transcript" not in str(exc):
+            raise HTTPException(
+                status_code=502,
+                detail=f"Audio transcription failed: {exc}",
+            ) from exc
+        # No speech was detected: this is not a failure, just "nothing heard".
+        # Return an empty transcript so the frontend can show a friendly
+        # message instead of sending an empty prompt to the LLM.
+        return ""
     return result_text
 
 

@@ -158,10 +158,14 @@ class DeepgramSTTProvider(STTProvider):
             # fires on EVERY segment boundary), so the settle is unconditional.
             # Any result after CloseStream is the last word regardless; waiting
             # on server-close used to cost the full backlog (~1s) every turn.
-            SETTLE_S = 0.5
+            # Fallback settle in case Deepgram never sends a Metadata frame (older
+            # API behavior). Long enough to cover the endpointing window (600ms)
+            # plus transport latency, short enough to keep the turn snappy.
+            SETTLE_S = 2.0
             final_segments: list[str] = []
             last_interim = ""
             t_first_final = None
+            t_results_end = time.perf_counter()
             while True:
                 try:
                     message = await asyncio.wait_for(ws.recv(), timeout=SETTLE_S)
@@ -187,6 +191,11 @@ class DeepgramSTTProvider(STTProvider):
                     f"speech_final={data.get('speech_final')}",
                     source="stt",
                 )
+                if msg_type == "Metadata":
+                    # Metadata is Deepgram's end-of-stream marker: every
+                    # result has been flushed, so stop waiting.
+                    t_results_end = time.perf_counter()
+                    break
                 if msg_type not in ("Results", "Transcript"):
                     continue
                 alternatives = data.get("channel", {}).get("alternatives", [])

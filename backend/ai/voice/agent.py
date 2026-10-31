@@ -245,7 +245,9 @@ async def voice_agent_logic(
     perf["eos"] = time.perf_counter()
     perf["stt"] = (perf["eos"] - perf["t_stt"]) * 1000
     perf["transcript"] = transcription
-    perf["stt_timing"] = {}
+    # Surface the Deepgram provider's phase timings (connect/listen/finalize)
+    # instead of an always-empty dict, so the turn log reports real values.
+    perf["stt_timing"] = getattr(provider, "timing", {}) or {}
     # The handshake overlapped STT if it finished before the user stopped talking.
     perf["connect_overlapped"] = connect_task.done()
     # Perceived timeline: anchor at t_client_stop minus client-reported lag
