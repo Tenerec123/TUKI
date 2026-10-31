@@ -1,5 +1,5 @@
 from backend.database import Base, engine
-from sqlalchemy import Integer, String, ForeignKey, Numeric, JSON, UniqueConstraint, CheckConstraint
+from sqlalchemy import Integer, String, Text, ForeignKey, Numeric, JSON, UniqueConstraint, CheckConstraint
 from typing import List, Optional
 from decimal import Decimal
 from datetime import date,datetime
@@ -26,10 +26,26 @@ def get_embedding_model():
     return _embedding_model
 # Create your models here.
 
-class Config(Base):
+class AppConfig(Base):
     __tablename__ = "config"
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class ModelConfig(Base):
+    __tablename__ = "model_config"
+
+    usage: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    thinking_process: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+
+
+class APIKey(Base):
+    __tablename__ = "keys"
+
+    provider: Mapped[str] = mapped_column(String(64), primary_key=True)
+    key: Mapped[str] = mapped_column(Text, nullable=False)
 
 class McpServer(Base):
     __tablename__ = "mcp_servers"

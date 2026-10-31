@@ -22,6 +22,11 @@ if str(REPO_ROOT) not in sys.path:
 from backend.ai.voice import fast_path as vr
 
 
+@pytest.fixture(autouse=True)
+def _provider_key_is_configured(monkeypatch):
+    monkeypatch.setattr(vr, "get_provider_key", lambda _provider: "test-key")
+
+
 class _FakeJevResponse:
     def __init__(self, payload: dict):
         self._payload = payload
@@ -60,50 +65,42 @@ _JEVPATH_PHRASE = "cuenta me un chiste"
 
 
 def test_classify_time_key(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("time", 0.9))
     assert vr._classify(_JEVPATH_PHRASE) == "time"
 
 
 def test_classify_weather_key(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("weather", 0.99))
     assert vr._classify(_JEVPATH_PHRASE) == "weather"
 
 
 def test_classify_other_key(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("other", 0.9))
     assert vr._classify(_JEVPATH_PHRASE) == "other"
 
 
 def test_classify_accepts_index_form(monkeypatch):
     # Jev may answer with the criteria index instead of the key string.
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload(1, 0.9))
     assert vr._classify(_JEVPATH_PHRASE) == "weather"
 
 
 def test_classify_accepts_string_digit_index(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("0", 0.9))
     assert vr._classify(_JEVPATH_PHRASE) == "time"
 
 
 def test_classify_low_confidence_falls_back_to_other(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("time", 0.2))
     assert vr._classify("algo ambiguo") == "other"
 
 
 def test_classify_missing_confidence_is_accepted(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, _intent_payload("time"))
     assert vr._classify(_JEVPATH_PHRASE) == "time"
 
 
 def test_classify_network_error_returns_other(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def boom(request, timeout=None):
         raise OSError("timed out")
@@ -113,12 +110,14 @@ def test_classify_network_error_returns_other(monkeypatch):
 
 
 def test_classify_missing_api_key_returns_other(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    def missing_key(_provider):
+        raise ValueError("API key is not configured")
+
+    monkeypatch.setattr(vr, "get_provider_key", missing_key)
     assert vr._classify(_JEVPATH_PHRASE) == "other"
 
 
 def test_classify_malformed_response_returns_other(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     _patch_jev(monkeypatch, {"unexpected": "shape"})
     assert vr._classify(_JEVPATH_PHRASE) == "other"
 
@@ -205,7 +204,6 @@ def test_quick_intent_empty_returns_none():
 
 
 def test_classify_short_circuits_before_network(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def boom(request, timeout=None):
         raise AssertionError("urlopen must NOT be called for a quick intent")
@@ -218,7 +216,6 @@ def test_classify_short_circuits_before_network(monkeypatch):
 
 
 def test_classify_short_circuits_weather_before_network(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def boom(request, timeout=None):
         raise AssertionError("urlopen must NOT be called for a quick intent")
@@ -231,7 +228,6 @@ def test_classify_short_circuits_weather_before_network(monkeypatch):
 
 
 def test_classify_calls_network_for_non_matching(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     called: list[bool] = []
 
     def fake(request, timeout=None):
@@ -244,7 +240,6 @@ def test_classify_calls_network_for_non_matching(monkeypatch):
 
 
 def test_classify_never_raises_on_network_error_non_matching(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
 
     def boom(request, timeout=None):
         raise OSError("timed out")
@@ -325,12 +320,31 @@ class _FakePCMStream:
         return self
 
 
-def test_empty_transcript_yields_end_and_no_audio(monkeypatch):
+# S10: a transcription that returns "" is now a FAILED attempt (the wrapper
+# raises so the alternate provider is tried and, ultimately, the wake client
+# gets an error instead of an empty turn). The graceful end below still covers
+# the wake-word-only turn: STT returns text, but stripping the wake word
+# leaves nothing for the LLM.
+def test_wake_word_only_transcript_yields_end_and_no_audio(monkeypatch):
+    from backend.ai import stt as stt_pkg
     from backend.ai.voice import agent as va
 
-    async def fake_transcribe_stream(stream):
-        return ""
+    async def fake_transcribe_stream(stream, **kwargs):
+        return "alexa"
 
+    # Fully hermetic: patch provider availability too, or a real environment
+    # key would send this test's audio to a live provider.
+    monkeypatch.setattr(
+        stt_pkg, "get_available_stt_providers", lambda: ["deepgram"]
+    )
+    monkeypatch.setattr(
+        stt_pkg, "get_model_config_for",
+        lambda usage: ["stt", "deepgram", "nova-2", None],
+    )
+    monkeypatch.setattr(
+        stt_pkg, "get_stt_provider",
+        lambda name: (_ for _ in ()).throw(AssertionError("no second provider")),
+    )
     monkeypatch.setattr(
         va, "get_stt_provider",
         lambda name=None: type("P", (), {"transcribe_stream": staticmethod(fake_transcribe_stream)})(),
@@ -362,6 +376,139 @@ def test_empty_transcript_yields_end_and_no_audio(monkeypatch):
 
 
 # --- _strip_wake_word (defense in depth) -------------------------------------
+
+
+def test_all_providers_empty_or_failed_reaches_wake_as_error(monkeypatch):
+    # S10 wake path: when every provider fails or returns no text, the
+    # ValueError propagates out of voice_agent_logic; the voice WebSocket
+    # already converts it into {"type": "error", ...} for the client.
+    from backend.ai import stt as stt_pkg
+    from backend.ai.voice import agent as va
+
+    async def fake_transcribe_stream(stream):
+        return ""
+
+    class _P:
+        async def transcribe_stream(self, chunks, **kwargs):
+            return ""
+
+    def fake_get_stt_provider(name):
+        class _Fake:
+            async def transcribe(self, audio, **kwargs):
+                return ""
+
+            async def transcribe_stream(self, chunks, **kwargs):
+                return ""
+
+        return _Fake()
+
+    monkeypatch.setattr(stt_pkg, "get_stt_provider", fake_get_stt_provider)
+    monkeypatch.setattr(
+        stt_pkg, "get_available_stt_providers",
+        lambda: ["deepgram", "openrouter"],
+    )
+    monkeypatch.setattr(
+        stt_pkg, "get_model_config_for",
+        lambda usage: ["stt", "deepgram", "nova-2", None],
+    )
+    monkeypatch.setattr(va, "get_stt_provider", lambda name=None: _P())
+
+    # The TTS socket opens before STT; a failing STT never consumes its audio.
+    class _Session:
+        async def start(self):
+            pass
+
+        async def close(self):
+            pass
+
+    class _Provider:
+        def session(self):
+            return _Session()
+
+    monkeypatch.setattr(va, "get_tts_provider", lambda: _Provider())
+
+    async def collect():
+        return [item async for item in va.voice_agent_logic(_FakePCMStream(), streaming_path=True)]
+
+    with pytest.raises(ValueError, match="No STT provider produced a transcript"):
+        asyncio.run(asyncio.wait_for(collect(), timeout=5.0))
+
+
+def test_stt_provider_error_tears_down_tts_connect_and_session_once(monkeypatch):
+    """S11: an all-raise STT turn must not leak the TTS session opened before STT.
+
+    The TTS connect task is created before STT is awaited. When every STT
+    provider raises, that task must be cancelled and joined and the TTS
+    session closed exactly once, then the original provider error must
+    propagate unchanged to the voice WebSocket route's error frame.
+    """
+    import sqlalchemy
+
+    # Import the agent hermetically: backend.models bootstraps its tables at
+    # import time, so keep MetaData.create_all local and never touch PostgreSQL
+    # from test collection.
+    _create_all = sqlalchemy.MetaData.create_all
+    sqlalchemy.MetaData.create_all = lambda self, bind=None, **_kwargs: None
+    try:
+        from backend.ai import stt as stt_pkg
+        from backend.ai.voice import agent as va
+    finally:
+        sqlalchemy.MetaData.create_all = _create_all
+
+    original_error = RuntimeError("deepgram stream down")
+
+    class _FailingSTTProvider:
+        async def transcribe_stream(self, chunks, **_kwargs):
+            # One scheduling point first so the pre-STT TTS connect task is
+            # already running when the provider fails, like a real network
+            # error after the handshake began.
+            await asyncio.sleep(0)
+            raise original_error
+
+        async def transcribe(self, audio, **_kwargs):
+            raise original_error
+
+    start_calls: list[bool] = []
+    cancelled_calls: list[bool] = []
+    close_calls: list[bool] = []
+
+    class _FakeTTSConnection:
+        async def start(self):
+            start_calls.append(True)
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                cancelled_calls.append(True)
+                raise
+
+        async def close(self):
+            close_calls.append(True)
+
+    class _FakeTTSProvider:
+        def session(self):
+            return _FakeTTSConnection()
+
+    monkeypatch.setattr(stt_pkg, "get_available_stt_providers", lambda: ["deepgram"])
+    monkeypatch.setattr(
+        stt_pkg,
+        "get_model_config_for",
+        lambda usage: ["stt", "deepgram", "nova-2", None],
+    )
+    monkeypatch.setattr(va, "get_stt_provider", lambda name=None: _FailingSTTProvider())
+    monkeypatch.setattr(va, "get_tts_provider", lambda: _FakeTTSProvider())
+
+    async def collect():
+        return [item async for item in va.voice_agent_logic(_FakePCMStream(), streaming_path=True)]
+
+    with pytest.raises(RuntimeError) as excinfo:
+        asyncio.run(asyncio.wait_for(collect(), timeout=5.0))
+
+    # The WebSocket route serializes whatever exception arrives, so it must be
+    # the provider's own error, not an unwrapped substitute.
+    assert excinfo.value is original_error
+    assert start_calls == [True]
+    assert cancelled_calls == [True], "the pending TTS connect task must be cancelled and joined"
+    assert close_calls == [True], "session.close() must run exactly once"
 
 
 def test_strip_wake_word_removes_leading_token():

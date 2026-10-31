@@ -5,12 +5,11 @@ from ..logic.conversations import edit_conversation_logic
 from .agent import openai_agent
 from . import cost_tracker
 from .stream_manager import stream_manager
-from openai import AsyncOpenAI
-from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config
+from .config import MAX_AGENTIC_ROUNDS, SYSTEM_PROMPT, get_model_config_for
+from .credentials import create_chat_client
 from .tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 from sqlalchemy import update
 from decimal import Decimal
-import os
 import asyncio
 import json
 from .fake_ai import fake_ai
@@ -86,46 +85,52 @@ def _db_format_new_messages(new_msgs: list) -> list[MessageBase]:
     return db_format_messages
 
 
-async def _generate_title(conv_id: int, user_message: str):
+async def _generate_title(conv_id: int, user_message: str) -> None:
     system_prompt = """Generate a short, descriptive title (max 6 words) for a conversation based on this first message. 
 Reply ONLY with the title, no quotes, no punctuation.
 Use the language of the query. If the query is in Spanish use Spanish, if it's in English, use English."""
 
-    models = [
-        "mistralai/mistral-nemo",
-        "google/gemma-4-31b-it:free",
-        "nvidia/nemotron-nano-9b-v2:free",
-    ]
+    _usage, provider, model, thinking_process = get_model_config_for('namer')
+    client = None
+    try:
+        client = create_chat_client(provider)
+        extra_body = {}
+        if thinking_process is not None:
+            if provider == 'openrouter':
+                extra_body['reasoning'] = {'effort': thinking_process}
+            elif provider == 'opencode-go':
+                extra_body['reasoning_effort'] = thinking_process
+        extra_headers = (
+            {'x-opencode-session': f'tuki-{conv_id}'}
+            if provider == 'opencode-go'
+            else None
+        )
+        response = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ],
+            temperature=0.3,
+            max_tokens=30,
+            timeout=30,
+            extra_body=extra_body,
+            extra_headers=extra_headers,
+        )
+        title = (response.choices[0].message.content or '').strip().strip('"\'')
+    except Exception as exc:
+        print(f"[TITLE GEN] {provider}/{model} failed: {exc}")
+        return
+    finally:
+        if client is not None:
+            await client.close()
 
-    client = AsyncOpenAI(
-        api_key=os.environ['OPENROUTER_API_KEY'],
-        base_url="https://openrouter.ai/api/v1",
-    )
-
-    for model in models:
-        try:
-            response = await client.chat.completions.create(
-                model=model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message},
-                ],
-                temperature=0.3,
-                max_tokens=30,
-                timeout=30,
-            )
-            title = response.choices[0].message.content.strip().strip('"\'')
-        except Exception as e:
-            print(f"[TITLE GEN] {model} failed: {e}")
-            continue
-
-        if title:
-            with SessionLocal() as db:
-                edit_conversation_logic(conv_id, ConversationUpdate(title=title), db=db)
-                print(f"[TITLE GEN] Set title '{title}' via {model}")
-                return
-
-    print("[TITLE GEN] All models failed — conversation remains untitled")
+    if title:
+        with SessionLocal() as db:
+            edit_conversation_logic(conv_id, ConversationUpdate(title=title), db=db)
+            print(f"[TITLE GEN] Set title '{title}' via {provider}/{model}")
+            return
+    print("[TITLE GEN] Configured model returned an empty title — conversation remains untitled")
 
 def _db_queries1(prompt:Prompt):
     with SessionLocal() as db:
@@ -184,13 +189,15 @@ async def chat_persistence_wrapper(prompt: Prompt):
                 _generate_title(prompt.conversation_id, prompt.user_message)
             )
 
-        model_config = get_model_config()
+        orchestrator = get_model_config_for('orchestrator')
         messages = build_messages(conversation, SYSTEM_PROMPT)
         base_len = len(messages)
         cost_tracker.reset()  # turn total starts at zero
         async for token in openai_agent(
             messages=messages,
-            model = model_config['orchestrator'],
+            model=orchestrator[2],
+            provider=orchestrator[1],
+            thinking_process=orchestrator[3],
             max_rounds=MAX_AGENTIC_ROUNDS,
             tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
             conv_id=conversation.id):

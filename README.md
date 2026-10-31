@@ -46,7 +46,6 @@ pip install -r requirements.txt
 4. **Configure environment variables**
 ```bash
 cp .env.example .env
-# Edit .env with your API keys
 ```
 
 5. **Run the application**
@@ -122,11 +121,14 @@ frontend/
 
 ### Environment Variables
 
-See `.env.example` for all available options:
+See `.env.example` for environment options:
 
-- `OPENROUTER_API_KEY` - Your OpenRouter API key
 - `DATABASE_URL` - Database connection string
 - `ENVIRONMENT` - development, staging, or production
+
+OpenRouter, OpenCode Go, and Deepgram API keys are configured in the LLMS page
+and stored as plain text in the local database. Saved keys are never returned
+to the browser.
 
 ## Development
 

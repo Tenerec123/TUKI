@@ -75,6 +75,10 @@ async def favicon():
 async def read_index():
     return FileResponse('frontend/chat.html')
 
+@api.get("/llms")
+async def read_llms():
+    return FileResponse('frontend/llms.html')
+
 @api.get("/todo")
 async def read_index():
     return FileResponse('frontend/todo.html')

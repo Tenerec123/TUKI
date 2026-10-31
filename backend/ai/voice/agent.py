@@ -10,10 +10,10 @@ from ...logic.memory import get_or_create_memory_conversation, reset_if_stale
 from ...database import SessionLocal
 from ...schemas import ConversationSchema, ConversationUpdate, MessageBase
 from ..chat import _db_format_new_messages, build_messages
-from ..stt import get_stt_provider
+from ..stt import get_stt_provider, transcribe_stream_with_fallback
 from ..agent import openai_agent
 from .fast_path import route_fast_path
-from ..config import get_model_config, AUDIO_SYSTEM_PROMPT
+from ..config import get_model_config_for, AUDIO_SYSTEM_PROMPT
 from ..tools.discovery import ORCHESTRATOR_TOOL_SCHEMAS
 from ..tts import TTSSession, get_tts_provider, iter_wav_turns, TTSTurnEnd
 from ..tts.sanitize import MarkdownSanitizer, sanitize_chunk_report, sanitize_stream_report
@@ -219,15 +219,33 @@ async def voice_agent_logic(
     connect_task = asyncio.create_task(session.start())
     perf["t_connect"] = time.perf_counter()
 
-    provider = get_stt_provider("deepgram")
-    perf["t_stt"] = time.perf_counter()
-    transcription = await provider.transcribe_stream(stream)
+    try:
+        provider = get_stt_provider()
+        perf["t_stt"] = time.perf_counter()
+        transcription = await transcribe_stream_with_fallback(
+            stream,
+            selected_provider=provider,
+            language="es",
+        )
+    except BaseException:
+        # The socket was opened before STT; when STT itself raises (S11: every
+        # provider failed or none is configured) the error must not leave the
+        # handshake task or the session running. Same teardown as an empty
+        # turn: cancel + join the handshake, close the session exactly once,
+        # then re-raise the original STT error unchanged for the route's
+        # error frame.
+        connect_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await connect_task
+        with contextlib.suppress(Exception):
+            await session.close()
+        raise
     # Defense in depth: never let the wake word reach the router or the LLM.
     transcription = _strip_wake_word(transcription)
     perf["eos"] = time.perf_counter()
     perf["stt"] = (perf["eos"] - perf["t_stt"]) * 1000
     perf["transcript"] = transcription
-    perf["stt_timing"] = dict(getattr(provider, "timing", {}) or {})
+    perf["stt_timing"] = {}
     # The handshake overlapped STT if it finished before the user stopped talking.
     perf["connect_overlapped"] = connect_task.done()
     # Perceived timeline: anchor at t_client_stop minus client-reported lag
@@ -281,9 +299,12 @@ async def voice_agent_logic(
                 perf["say_text"] = quick
                 await push_turn(quick)
                 return
+            orchestrator = get_model_config_for('orchestrator')
             async for token in openai_agent(
                 messages=messages,
-                model=get_model_config()['orchestrator'],
+                model=orchestrator[2],
+                provider=orchestrator[1],
+                thinking_process=orchestrator[3],
                 max_rounds=10,
                 tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
                 conv_id=conv_id,

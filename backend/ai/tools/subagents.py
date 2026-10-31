@@ -1,4 +1,4 @@
-from ..config import WEB_SEARCH_SYSTEM_PROMPT, SUMMARY_MAX_CHARS, get_model_config
+from ..config import WEB_SEARCH_SYSTEM_PROMPT, SUMMARY_MAX_CHARS, get_model_config_for
 from .websearch import fetch_pages, search
 import asyncio
 
@@ -44,6 +44,7 @@ async def WebSearch(query: str):
         return f"No sources could be retrieved for: {query}"
 
     body = "\n\n".join(f"[{p.n}] {p.title} — {p.url}\n{p.text}" for p in pages)
+    searcher = get_model_config_for('searcher')
     messages = [
         {
             'role': 'developer',
@@ -64,7 +65,9 @@ async def WebSearch(query: str):
         result, truncated = await asyncio.wait_for(
             _consume(openai_agent(
                 messages=messages,
-                model=get_model_config()['searcher'],
+                model=searcher[2],
+                provider=searcher[1],
+                thinking_process=searcher[3],
                 max_rounds=1,
                 tool_schemas=[])),
             timeout=SUMMARY_TIMEOUT_S)

@@ -7,13 +7,13 @@ DEGRADED, not broken: Kokoro has no streaming transport, so a whole buffer must 
 
 import asyncio
 import io
-import os
 import re
 import time
 import wave
 from typing import AsyncIterator
 
 from openai import AsyncOpenAI
+from ..credentials import get_provider_key
 
 from .base import (
     TTSSession,
@@ -30,20 +30,26 @@ TTS_VOICE = "ef_dora"  # Spanish female. Alternatives: em_alex, em_santa (Spanis
 _KOKORO_SAMPLE_RATE = 24000
 
 _client: AsyncOpenAI | None = None
+_client_key: str | None = None
 
 
-def _get_client() -> tuple[AsyncOpenAI, float, bool]:
+async def _get_client() -> tuple[AsyncOpenAI, float, bool]:
     """Return the client plus its (ctor_ms, cold_start) cost.
 
     Wrapper construction only: httpx connects lazily, so DNS/TCP/TLS land in the first request and are reported as ``http``, not here.
     """
-    global _client
-    if _client is None:
+    global _client, _client_key
+    api_key = get_provider_key('openrouter')
+    if _client is None or _client_key != api_key:
         t0 = time.perf_counter()
+        previous_client = _client
         _client = AsyncOpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=os.environ["OPENROUTER_API_KEY"],
+            api_key=api_key,
         )
+        _client_key = api_key
+        if previous_client is not None:
+            await previous_client.close()
         ctor_ms = (time.perf_counter() - t0) * 1000
         print(f"[PERF] tts: client_ctor ctor={ctor_ms:.1f}ms cold_start=yes")
         return _client, ctor_ms, True
@@ -66,7 +72,7 @@ async def synthesize_pcm(text: str) -> tuple[bytes, int]:
     Raw PCM (lowest latency); the caller decides on the container. There is no final-sibilant workaround any more: it existed only for a Kokoro bug Aura-2 does not have, and the markdown that fed it is now stripped in ``sanitize.py``.
     """
     t_call = time.perf_counter()
-    client, ctor_ms, cold = _get_client()
+    client, ctor_ms, cold = await _get_client()
     t_http = time.perf_counter()
     resp = await client.audio.speech.create(
         model=TTS_MODEL,

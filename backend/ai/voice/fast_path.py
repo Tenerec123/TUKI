@@ -15,6 +15,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from . import log as voicelog
+from ..credentials import get_provider_key
 
 JEV_ENDPOINT = "https://openrouter.ai/api/alpha/decisions"
 JEV_MODEL = "typesafe/jev-1.13"
@@ -131,7 +132,7 @@ def _classify(transcript: str, info: dict | None = None) -> str:
             JEV_ENDPOINT,
             data=json.dumps(payload).encode("utf-8"),
             headers={
-                "Authorization": f"Bearer {os.environ['OPENROUTER_API_KEY']}",
+                "Authorization": f"Bearer {get_provider_key('openrouter')}",
                 "Content-Type": "application/json",
             },
             method="POST",

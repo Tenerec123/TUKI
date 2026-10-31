@@ -5,6 +5,10 @@ const conversationList = document.getElementById('conversation-list');
 const textarea = document.getElementById('prompt-writer')
 const toggleBtn = document.getElementById('toggle-sidebar');
 const mic = document.getElementById('toggle-mic');
+// Fail closed until the server confirms the required capabilities.
+const initialSubmit = document.getElementById('submit-btn');
+initialSubmit.disabled = true;
+mic.disabled = true;
 let posOfSelectedConv = -1;
 let idOfSelectedConv = -1;
 let menu_displayed = null;
@@ -15,7 +19,6 @@ let is_recording = false;
 let recorder = null;
 let mediaStream = null;
 let chunks = [];
-let modelDict = null;
 
 const TEXTAREA_MAX_LINES = 5;
 
@@ -55,12 +58,27 @@ function SetupStream(stream) {
         const response = await fetch(`/api/ai/stt`, {
             method: 'POST',
             body: formData,
-        }).then(response => response.json())
-        .then(data => {
-            sendPrompt(data)
         });
+        if (!response.ok) {
+            const detail = await response.json().catch(() => null);
+            showTranscriptionError(detail && detail.detail);
+            return;
+        }
+        const transcript = await response.json();
+        sendPrompt(transcript);
     };
     can_record = true;
+}
+
+// STT failed for every configured provider: surface the server's error in the
+// chat instead of sending an empty prompt to the LLM.
+function showTranscriptionError(detail) {
+    const div = document.createElement('div');
+    div.classList.add('tuki-msg');
+    div.textContent = detail || 'Could not transcribe your audio. Check the STT provider configuration on the LLMS page.';
+    chatContainer.appendChild(div);
+    updateChatPadding();
+    scrollToBottom();
 }
 async function ToggleMic() {
     if (is_recording) {
@@ -99,6 +117,22 @@ async function ToggleMic() {
     }
 }
 mic.addEventListener('click', ToggleMic);
+
+async function loadServiceCapabilities() {
+    try {
+        const response = await fetch('/api/config/capabilities');
+        if (!response.ok) throw new Error(`Capability request failed (${response.status})`);
+        const services = await response.json();
+        document.getElementById('submit-btn').disabled = services.chat !== true;
+        mic.disabled = services.microphone !== true;
+        if (!services.chat) textarea.placeholder = 'Configure an LLM provider on the LLMS page';
+        if (!services.microphone) mic.title = 'Configure an LLM and STT provider on the LLMS page';
+    } catch (error) {
+        console.error('Could not load service availability:', error);
+    }
+}
+
+loadServiceCapabilities();
 
 async function createConversation(){
     chat = {
@@ -710,107 +744,18 @@ function Render(){
     renderMathInElement(document.body, KATEX_OPTIONS);
 }
 
-// ── Model loaders (one per output modality) ──────────────────────────
-
-async function fetchModels(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Failed to fetch models: ${res.status}`);
-    const object = await res.json();
-    return object.data;
-}
-
-function appendModelItem(list, model, showPrice = true) {
-    const item = document.createElement('li');
-    item.classList.add('model-item');
-    item.setAttribute('data-model', model.id);
-    item.dataset.reasoningMandatory = String(Boolean(model.reasoning && model.reasoning.mandatory));
-    item.dataset.supportedEfforts = JSON.stringify((model.reasoning && model.reasoning.supported_efforts) || []);
-    let label = model.name;
-    if (showPrice) {
-        const i = parseFloat(model.pricing.prompt) * 1_000_000;
-        const o = parseFloat(model.pricing.completion) * 1_000_000;
-        label = `${i.toFixed(2)} ${o.toFixed(2)} | ${model.name}`;
-    }
-    item.textContent = label;
-    list.appendChild(item);
-}
-
-async function loadTextModels() {
-    try {
-        const data = await fetchModels('https://openrouter.ai/api/v1/models');
-        const textLists = document.querySelectorAll('.sub-details ul.text');
-        for (const model of data) {
-            const modalities = model.architecture.output_modalities || [];
-            if (modalities.length !== 1 || modalities[0] !== 'text') continue;
-            modelDict[model.id] = model.name
-            textLists.forEach(list => appendModelItem(list, model, true));
-        }
-    } catch (e) {
-        console.error('[CONFIG] Failed to load text models:', e);
-    }
-}
-
-async function loadTranscriptionModels() {
-    try {
-        const data = await fetchModels('https://openrouter.ai/api/v1/models?output_modalities=transcription');
-        const sttList = document.querySelector('.sub-details ul.transcription');
-        for (const model of data) {
-            modelDict[model.id] = model.name
-            appendModelItem(sttList, model, false);
-        }
-    } catch (e) {
-        console.error('[CONFIG] Failed to load transcription models:', e);
-    }
-}
-
-// One delegated click handler for every dynamically-created model item.
-function SetupModelSelectorClick() {
-    const container = document.querySelector('.model-selector-details');
-    container.addEventListener('click', (e) => {
-        const model = e.target.closest('.model-item');
-        if (!model) return;
-        const agentS = model.closest('.sub-details');
-        const selectedBefore = agentS.querySelector('.selected-model');
-        if (selectedBefore == model) { return }
-        if (selectedBefore) { selectedBefore.classList.remove('selected-model') }
-        model.classList.add('selected-model');
-        agentS.querySelector('.model-current-name').textContent = model.textContent;
-        agentS.open = false;
-        SendModelConfig();
-    });
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
-    modelDict = {}
     const container = document.getElementById('chat-sidebar-container');
     toggleBtn.addEventListener('click', () => {
         container.classList.toggle('sidebar-collapsed');
     });
 
-    SetupModelSelectorClick();
-    await Promise.all([loadTextModels(), loadTranscriptionModels()]);
-
     await getConversations();
     if (conversationList.children){
         conversationList.children[0].children[0].click();
     }
-    await LoadModelConfig();
     Render();
 })
-modelSearcher = document.getElementById('model-searcher')
-let timer;
-modelSearcher.addEventListener('input', () => {
-  clearTimeout(timer);                    // cancela el anterior
-  timer = setTimeout(filtrarModelos, 200); // espera 200ms tras el último keystroke
-});
-
-function filtrarModelos() {
-    for (const [key, value] of Object.entries(modelDict)) {
-        model_selectors = document.querySelectorAll(`li[data-model="${key}"]`);
-        dispValue =  (value.toLowerCase().includes(modelSearcher.value.toLowerCase())) ? '' : 'none'
-        model_selectors.forEach(selector => selector.style.display = dispValue)
-    }
-}
 function OpenMenu(button, id, position){
     const rect = button.getBoundingClientRect();
     const x = rect.left; 
@@ -852,91 +797,10 @@ function OpenMenu(button, id, position){
     }
 }
 
-async function LoadModelConfig(){
-    try {
-        const res = await fetch(`/api/config/models`);
-        if (!res.ok) { return }
-        const config = await res.json();
-        const targets = [
-            ['orchestrator-name', config.orchestrator],
-            ['searcher-name', config.searcher],
-            ['stt-name', config.stt],
-        ];
-        for (const [spanId, model] of targets) {
-            if (!model) { continue }
-            const sub = document.getElementById(spanId).closest('.sub-details');
-            sub.querySelectorAll('.model-item').forEach(item => {
-                if (item.getAttribute('data-model') === model) {
-                    sub.querySelectorAll('.selected-model').forEach(s => s.classList.remove('selected-model'));
-                    item.classList.add('selected-model');
-                    sub.querySelector('.model-current-name').textContent = item.textContent;
-                }
-            });
-        }
-
-        const orchItem = document.getElementById('orchestrator-name').closest('.sub-details').querySelector('.selected-model');
-        if (orchItem && config.orchestrator_effort === 'none' && computeReasoningEffort(orchItem) !== 'none') {
-            SendModelConfig();
-        }
-    } catch (e) {
-        console.error('[CONFIG] Failed to load model config:', e);
-    }
-}
-
-// Compute the OpenRouter reasoning effort for the orchestrator model from the
-// reasoning metadata stashed on the selected <li> by appendModelItem().
-// Catalog semantics: supported_efforts is ordered descending (most reasoning ->
-// least), so the minimal effort is the LAST element. Models with mandatory
-// reasoning but no supported_efforts (e.g. deepseek/deepseek-r1) fall back to
-// "low". Models without reasoning (or non-mandatory) get "none" (disabled).
-function computeReasoningEffort(item) {
-    const mandatory = item && item.dataset.reasoningMandatory === 'true';
-    if (!mandatory) return 'none';
-    const efforts = JSON.parse(item.dataset.supportedEfforts || '[]');
-    if (efforts.length > 0) return efforts[efforts.length - 1]; // catalog is ordered descending: last = minimum
-    return 'low'; // mandatory reasoning but provider does not list efforts (e.g. deepseek-r1)
-}
-
-function SendModelConfig(){
-    function getSelectedModelItem(spanId) {
-        const sub = document.getElementById(spanId).closest('.sub-details');
-        return sub.querySelector('.selected-model');
-    }
-    const modelId = (el) => el ? el.getAttribute('data-model') : null;
-    const orch = getSelectedModelItem('orchestrator-name');
-    const searcher = getSelectedModelItem('searcher-name');
-    // Model and effort are sent as SEPARATE fields for every reasoning model,
-    // and the backend composes "MODEL_ID EFFORT" when it stores them. The
-    // client must not build the composite itself: a client older than the
-    // backend would write the row without the effort and the failure is silent.
-    const config = {
-        "orchestrator": modelId(orch),
-        "orchestrator_effort": computeReasoningEffort(orch),
-        "searcher": modelId(searcher),
-        "searcher_effort": computeReasoningEffort(searcher),
-        "stt": modelId(getSelectedModelItem('stt-name')),
-    };
-    if (!config.orchestrator || !config.searcher) {
-        console.warn('[CONFIG] Missing model selection, skipping save');
-        return;
-    }
-    fetch(`/api/config/models`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(config)
-    }).catch(e => console.error('[CONFIG] Failed to save model config:', e));
-}
-
 document.addEventListener('click', (e) => {
     if (menu_displayed != null && !e.target.closest('.conv-options') && !menu_displayed.contains(e.target)){
         menu_displayed.remove();
         menu_displayed = null;
         id_of_menu_disp = null;
-    }
-    const modelSelector = document.querySelector('.model-selector-details');
-    if (!e.target.closest('.model-selector-details') && modelSelector && modelSelector.open){
-        modelSelector.open = false;
     }
 })

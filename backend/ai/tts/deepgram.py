@@ -2,7 +2,7 @@
 
 Replaces the batch Kokoro synthesis that used to sit at the end of the voice pipeline: TTS was the ONLY non-streaming link, so playback could not start until a whole phrase was synthesized (measured: p1_synth up to 4257 ms). Aura takes text in and streams audio out, so audio arrives while the LLM is still writing the reply.
 
-Protocol (verified against the Deepgram streaming TTS docs): ``wss://api.deepgram.com/v1/speak?model=...&encoding=linear16&sample_rate=...`` with ``Authorization: Token <DEEPGRAM_API_KEY>`` (the STT provider's env var). Client -> server: ``Speak``/``Flush``/``Clear``/``Close``. BINARY frames back are raw linear16 PCM -- the endpoint emits RAW audio, so no ``container`` parameter is accepted on this transport. JSON events: ``Flushed``, ``Metadata``, ``Cleared``, ``Close``, ``Warning``, ``Error``.
+Protocol (verified against the Deepgram streaming TTS docs): ``wss://api.deepgram.com/v1/speak?model=...&encoding=linear16&sample_rate=...`` with ``Authorization: Token <Deepgram API key>``. The key is read from the provider credentials table. Client -> server: ``Speak``/``Flush``/``Clear``/``Close``. BINARY frames back are raw linear16 PCM -- the endpoint emits RAW audio, so no ``container`` parameter is accepted on this transport. JSON events: ``Flushed``, ``Metadata``, ``Cleared``, ``Close``, ``Warning``, ``Error``.
 
 Turn ordering was MEASURED against Aura v1 (/v1/speak); the newer Flux docs do not match.
 
@@ -26,6 +26,7 @@ from urllib.parse import urlencode
 import websockets
 
 from ..voice import log as voicelog
+from ..credentials import get_provider_key
 from .base import TTSSession, TTSProvider, TTSTurnEnd
 
 DEEPGRAM_TTS_WS_URL = "wss://api.deepgram.com/v1/speak"
@@ -112,9 +113,7 @@ class DeepgramTTTSession(TTSSession):
         return self._sample_rate
 
     async def start(self) -> None:
-        api_key = os.environ.get("DEEPGRAM_API_KEY")
-        if not api_key:
-            raise ValueError("DEEPGRAM_API_KEY environment variable not set")
+        api_key = get_provider_key('deepgram')
         params = {
             "model": self._voice,
             "encoding": "linear16",

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>T.U.K.I. LLMS</title>
+  <link rel="icon" type="image/svg" href="TUKI.svg">
+  <link rel="stylesheet" href="/frontend/style.css">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body>
+  <header>
+    <div id="navbar">
+      <a href="chat">CHAT</a>
+      <a class="unable" href="llms">LLMS</a>
+      <a href="todo">TODO</a>
+      <a href="kale">KALE</a>
+      <a href="notes">NOTE</a>
+      <a href="wake">WAKE</a>
+    </div>
+  </header>
+
+  <main class="llms-page">
+    <section class="llms-heading">
+      <div>
+        <p class="llms-eyebrow">T.U.K.I. / CONFIGURATION</p>
+        <h1>LLMS</h1>
+        <p>Manage provider credentials and choose the models used by each AI role.</p>
+      </div>
+      <div class="llms-preview-notice" role="status">
+        <i class="bi bi-info-circle" aria-hidden="true"></i>
+        <span>Provider keys are stored as plain text in the local database. TUKI never returns saved key values to this page. Protect the database and its backups.</span>
+      </div>
+    </section>
+
+    <section class="llms-section" aria-labelledby="providers-heading">
+      <div class="llms-section-heading">
+        <div>
+          <p class="llms-eyebrow">01 / ACCESS</p>
+          <h2 id="providers-heading">Providers</h2>
+        </div>
+        <span class="llms-section-note">Saved key values are write-only; only connection status is returned.</span>
+      </div>
+
+      <div class="llms-provider-grid">
+        <article class="llms-provider-card" data-provider-card="openrouter">
+          <div class="llms-provider-title">
+            <div class="llms-provider-mark"><i class="bi bi-diagram-3" aria-hidden="true"></i></div>
+            <div>
+              <h3>OpenRouter</h3>
+              <p>Unified access to models from multiple providers.</p>
+            </div>
+            <span class="llms-connection-state">Not connected</span>
+          </div>
+          <form class="llms-key-form" data-provider-key-form="openrouter">
+            <label for="openrouter-key">API key</label>
+            <div class="llms-key-entry">
+              <input id="openrouter-key" name="api_key" type="password" autocomplete="new-password" placeholder="Enter an OpenRouter API key" required>
+              <button type="submit" class="llms-button llms-button-secondary">Save key</button>
+            </div>
+            <p class="llms-form-status" aria-live="polite">Enter a key to connect this provider.</p>
+          </form>
+          <button type="button" class="llms-button llms-button-secondary llms-key-delete" data-provider-key-delete="openrouter" aria-label="Delete saved OpenRouter key" disabled>Delete saved key</button>
+        </article>
+
+        <article class="llms-provider-card" data-provider-card="opencode-go">
+          <div class="llms-provider-title">
+            <div class="llms-provider-mark"><i class="bi bi-lightning-charge" aria-hidden="true"></i></div>
+            <div>
+              <h3>OpenCode Go</h3>
+              <p>Subscription access to a curated model catalog.</p>
+            </div>
+            <span class="llms-connection-state">Not connected</span>
+          </div>
+          <form class="llms-key-form" data-provider-key-form="opencode-go">
+            <label for="opencode-go-key">API key</label>
+            <div class="llms-key-entry">
+              <input id="opencode-go-key" name="api_key" type="password" autocomplete="new-password" placeholder="Enter an OpenCode Go API key" required>
+              <button type="submit" class="llms-button llms-button-secondary">Save key</button>
+            </div>
+            <p class="llms-form-status" aria-live="polite">Enter a key to connect this provider.</p>
+          </form>
+          <button type="button" class="llms-button llms-button-secondary llms-key-delete" data-provider-key-delete="opencode-go" aria-label="Delete saved OpenCode Go key" disabled>Delete saved key</button>
+        </article>
+
+        <article class="llms-provider-card" data-provider-card="deepgram">
+          <div class="llms-provider-title">
+            <div class="llms-provider-mark"><i class="bi bi-soundwave" aria-hidden="true"></i></div>
+            <div>
+              <h3>Deepgram</h3>
+              <p>Speech-to-text and text-to-speech services.</p>
+            </div>
+            <span class="llms-connection-state">Not connected</span>
+          </div>
+          <form class="llms-key-form" data-provider-key-form="deepgram">
+            <label for="deepgram-key">API key</label>
+            <div class="llms-key-entry">
+              <input id="deepgram-key" name="api_key" type="password" autocomplete="new-password" placeholder="Enter a Deepgram API key" required>
+              <button type="submit" class="llms-button llms-button-secondary">Save key</button>
+            </div>
+            <p class="llms-form-status" aria-live="polite">Enter a key to connect this provider.</p>
+          </form>
+          <button type="button" class="llms-button llms-button-secondary llms-key-delete" data-provider-key-delete="deepgram" aria-label="Delete saved Deepgram key" disabled>Delete saved key</button>
+        </article>
+      </div>
+    </section>
+
+    <section class="llms-section" aria-labelledby="models-heading">
+      <div class="llms-section-heading">
+        <div>
+          <p class="llms-eyebrow">02 / ASSIGNMENT</p>
+          <h2 id="models-heading">Model assignments</h2>
+        </div>
+        <span class="llms-section-note" id="llms-catalog-status" role="status">Loading public model catalogs…</span>
+      </div>
+      <p id="llms-availability" role="status">Checking service availability…</p>
+      <p class="llms-catalog-note">OpenCode Go models are filtered to its Chat Completions endpoint, which is the protocol used by TUKI.</p>
+
+      <div class="llms-role-grid">
+        <article class="llms-role-card" data-role="orchestrator">
+          <div class="llms-role-heading">
+            <div>
+              <span class="llms-role-index">ROLE 01</span>
+              <h3>Orchestrator</h3>
+              <p>Main assistant and tool-calling model.</p>
+            </div>
+            <label class="llms-provider-select-label">
+              Provider
+              <select class="llms-provider-select" aria-label="Orchestrator provider">
+                <option value="openrouter">OpenRouter</option>
+                <option value="opencode-go">OpenCode Go</option>
+              </select>
+            </label>
+          </div>
+          <div class="llms-current-selection" aria-live="polite">No model selected</div>
+          <label class="llms-search-label">
+            Find a model
+            <input class="llms-model-search" type="search" placeholder="Search by model or provider">
+          </label>
+          <ul class="llms-model-list" aria-label="Orchestrator models"></ul>
+          <label class="llms-effort-label">
+            Thinking effort
+            <select class="llms-effort-select" aria-label="Orchestrator thinking effort" disabled>
+              <option value="">Effort options unavailable</option>
+            </select>
+          </label>
+        </article>
+
+        <article class="llms-role-card" data-role="searcher">
+          <div class="llms-role-heading">
+            <div>
+              <span class="llms-role-index">ROLE 02</span>
+              <h3>Searcher</h3>
+              <p>Model used for web-search summaries.</p>
+            </div>
+            <label class="llms-provider-select-label">
+              Provider
+              <select class="llms-provider-select" aria-label="Searcher provider">
+                <option value="openrouter">OpenRouter</option>
+                <option value="opencode-go">OpenCode Go</option>
+              </select>
+            </label>
+          </div>
+          <div class="llms-current-selection" aria-live="polite">No model selected</div>
+          <label class="llms-search-label">
+            Find a model
+            <input class="llms-model-search" type="search" placeholder="Search by model or provider">
+          </label>
+          <ul class="llms-model-list" aria-label="Searcher models"></ul>
+          <label class="llms-effort-label">
+            Thinking effort
+            <select class="llms-effort-select" aria-label="Searcher thinking effort" disabled>
+              <option value="">Effort options unavailable</option>
+            </select>
+          </label>
+        </article>
+
+        <article class="llms-role-card" data-role="namer">
+          <div class="llms-role-heading">
+            <div>
+              <span class="llms-role-index">ROLE 03</span>
+              <h3>Conversation namer</h3>
+              <p>Model used to name new conversations.</p>
+            </div>
+            <label class="llms-provider-select-label">
+              Provider
+              <select class="llms-provider-select" aria-label="Conversation namer provider">
+                <option value="openrouter">OpenRouter</option>
+                <option value="opencode-go">OpenCode Go</option>
+              </select>
+            </label>
+          </div>
+          <div class="llms-current-selection" aria-live="polite">No model selected</div>
+          <label class="llms-search-label">
+            Find a model
+            <input class="llms-model-search" type="search" placeholder="Search by model or provider">
+          </label>
+          <ul class="llms-model-list" aria-label="Conversation namer models"></ul>
+          <label class="llms-effort-label">
+            Thinking effort
+            <select class="llms-effort-select" aria-label="Conversation namer thinking effort" disabled>
+              <option value="">Effort options unavailable</option>
+            </select>
+          </label>
+        </article>
+
+        <article class="llms-role-card" data-role="stt">
+          <div class="llms-role-heading">
+            <div>
+              <span class="llms-role-index">ROLE 04</span>
+              <h3>Transcription</h3>
+              <p>Speech-to-text model used by chat.</p>
+            </div>
+            <label class="llms-provider-select-label">
+              Provider
+              <select class="llms-provider-select" aria-label="Transcription provider">
+                <option value="openrouter">OpenRouter</option>
+                <option value="deepgram">Deepgram</option>
+              </select>
+            </label>
+          </div>
+          <div class="llms-current-selection" aria-live="polite">No model selected</div>
+          <label class="llms-search-label">
+            Find a model
+            <input class="llms-model-search" type="search" placeholder="Search transcription models">
+          </label>
+          <ul class="llms-model-list" aria-label="Transcription models"></ul>
+          <p class="llms-role-footnote">Deepgram model choices are shown when its API key is configured.</p>
+        </article>
+      </div>
+
+      <div class="llms-save-row">
+        <label class="llms-provider-select-label">
+          Wake TTS provider
+          <select id="llms-tts-provider" aria-label="Wake TTS provider">
+            <option value="openrouter">OpenRouter</option>
+            <option value="deepgram">Deepgram</option>
+          </select>
+        </label>
+        <p id="llms-save-status" role="status">Selections are temporary in this UI preview.</p>
+        <button type="button" class="llms-button llms-button-primary" id="save-llms-config">Save model configuration</button>
+      </div>
+    </section>
+  </main>
+  <script src="/frontend/llms_reasoning.js"></script>
+  <script src="/frontend/llms_script.js"></script>
+</body>
+</html>

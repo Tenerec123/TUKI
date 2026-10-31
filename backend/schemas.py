@@ -2,13 +2,8 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator, model_valida
 from datetime import date, datetime
 from typing import List, Optional, Literal, Union, Annotated
 
-class ModelConfig(BaseModel):
-    orchestrator: str = Field(max_length=100)
-    orchestrator_effort: Optional[str] = Field(default=None, max_length=16)
-    searcher: Optional[str] = Field(default=None, max_length=128)
-
-    searcher_effort: Optional[str] = Field(default=None, max_length=16)
-    stt: Optional[str] = Field(default=None, max_length=128)
+class ProviderKeyInput(BaseModel):
+    key: str
 
 class BaseItem(BaseModel):
     name: str = Field(..., max_length=512, description='Name of the todo')
