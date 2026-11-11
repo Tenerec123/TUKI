@@ -187,6 +187,141 @@ def _save_voice_turn(new_rows: list[MessageBase]) -> None:
         voicelog.log(f"history ! save failed: {exc}")
 
 
+# Race window: Jev classifies while the orchestrator's first tokens stream.
+# Jev answers in 0.4-0.7s (measured 2026-11-11); 1.5s covers p95 with margin.
+_RACE_CAP_S = 1.5
+
+
+async def _race_llm_vs_jev(
+    agent_iter: AsyncIterator[dict | str],
+    route_task: asyncio.Task[str | None],
+    cap_s: float = _RACE_CAP_S,
+) -> tuple[list, str | None, str]:
+    """Pull orchestrator tokens while Jev classifies, then resolve the race.
+
+    The producer used to await the router first, so every non-time/weather
+    turn paid Jev's round-trip before the LLM even connected. Here the
+    stream is pulled immediately — TTFT and the first sentence overlap the
+    classification — but every pulled token is HELD in a buffer: nothing is
+    pushed, and the stream is never stepped past a ``tool_call`` yield while
+    the race is open (the real agent executes tools one ``__anext__`` after
+    yielding the call), so no tool side effect can land before the router
+    has had its say.
+
+    Returns ``(buffered, quick, outcome)``:
+
+    - ``"jev"``: the router answered within the cap. ``quick`` is its result
+      (prefab sentence, or None for "other"). With a prefab the stream is
+      discarded and closed: the pending ``__anext__`` is cancelled, then
+      ``aclose()`` runs the generator's finally blocks, so tools never
+      execute. With None the stream stays live at its current position and
+      ``buffered`` must be replayed before continuing it; an in-flight
+      ``__anext__`` is drained to completion — never cancelled, because
+      cancellation would kill the generator.
+    - ``"cap"``: the cap expired without an answer. ``quick`` is None, the
+      stream is live, and ``route_task`` keeps running detached (it never
+      raises, so cancelling it buys nothing).
+    - ``"llm"``: the stream ended (StopAsyncIteration, ``finish``, or the
+      ERROR_TOKEN string) before Jev answered. ``buffered`` holds the
+      complete tail: a finished LLM reply is strictly faster than waiting
+      for a prefab, so Jev loses.
+
+    A router exception degrades to ``quick=None`` / ``"jev"``: a router
+    failure must never kill the turn.
+    """
+    buffered: list = []
+    deadline = time.perf_counter() + cap_s
+    while True:
+        remaining = deadline - time.perf_counter()
+        if remaining <= 0:
+            return buffered, None, "cap"
+        tok_task = asyncio.ensure_future(agent_iter.__anext__())
+        waiters = {tok_task} if route_task.done() else {tok_task, route_task}
+        done, _ = await asyncio.wait(
+            waiters, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+        )
+        if route_task in done and tok_task not in done:
+            # Jev answered mid-pull: decide now.
+            try:
+                quick = route_task.result()
+            except Exception:
+                quick = None
+            if quick is not None:
+                # Prefab win: discard the stream. The in-flight pull is
+                # cancelled (it never steps past a tool_call yield) and the
+                # generator closed so its finally blocks run.
+                tok_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration, Exception):
+                    await tok_task
+                with contextlib.suppress(Exception):
+                    await agent_iter.aclose()
+                return buffered, quick, "jev"
+            # "other": the LLM stands. Drain the in-flight token instead of
+            # cancelling it — cancellation would kill the generator.
+            try:
+                buffered.append(await tok_task)
+            except StopAsyncIteration:
+                pass
+            return buffered, None, "jev"
+        if tok_task not in done:
+            # Cap expired with the next token still in flight: the cap is a
+            # heuristic, not a hard deadline, so drain it — never cancel.
+            try:
+                buffered.append(await tok_task)
+            except StopAsyncIteration:
+                return buffered, None, "llm"
+            return buffered, None, "cap"
+        # The token arrived first.
+        try:
+            token = tok_task.result()
+        except StopAsyncIteration:
+            return buffered, None, "llm"
+        buffered.append(token)
+        if isinstance(token, str) or token.get("type") == "finish":
+            return buffered, None, "llm"
+        if token.get("type") == "tool_call" and not route_task.done():
+            # Execution is one __anext__ away: hold the stream and let Jev
+            # decide first. Never execute a tool while the race is open.
+            done2, _ = await asyncio.wait(
+                {route_task}, timeout=max(0.0, deadline - time.perf_counter())
+            )
+            if route_task in done2:
+                try:
+                    quick = route_task.result()
+                except Exception:
+                    quick = None
+                if quick is not None:
+                    with contextlib.suppress(Exception):
+                        await agent_iter.aclose()
+                    return buffered, quick, "jev"
+                return buffered, None, "jev"
+            return buffered, None, "cap"
+        if route_task.done() and tok_task in done:
+            # The route resolved while a benign token (text/inference_end)
+            # was in flight; decide now, with no pull pending.
+            try:
+                quick = route_task.result()
+            except Exception:
+                quick = None
+            if quick is not None:
+                with contextlib.suppress(Exception):
+                    await agent_iter.aclose()
+                return buffered, quick, "jev"
+            return buffered, None, "jev"
+        # Benign token buffered; keep racing.
+
+
+async def _replay_then_live(
+    agent_iter: AsyncIterator[dict | str],
+    buffered: list,
+) -> AsyncIterator[dict | str]:
+    """Yield the race's buffered tokens, then the agent's remaining stream."""
+    for token in buffered:
+        yield token
+    async for token in agent_iter:
+        yield token
+
+
 async def voice_agent_logic(
     stream: AsyncIterable[bytes],
     streaming_path: bool = False,
@@ -294,15 +429,14 @@ async def voice_agent_logic(
         try:
             # Fast path checked INSIDE try: returning before it would skip the
             # finally below and leave session.audio() waiting forever.
-            quick = await route_task
-            perf["intent_ms"] = (time.perf_counter() - perf["t_route_start"]) * 1000
-            if quick is not None:
-                perf["fast_path"] = True
-                perf["say_text"] = quick
-                await push_turn(quick)
-                return
+            # The iterator is created BEFORE the race: calling the async
+            # generator only builds it (the body, including the client
+            # connect, runs on the first pull inside the race), so the LLM's
+            # TTFT overlaps Jev's classification instead of queueing behind
+            # it. Side effect: get_model_config_for now also runs on prefab
+            # turns — one single-row read, ms-scale.
             orchestrator = get_model_config_for('orchestrator')
-            async for token in openai_agent(
+            agent_iter = openai_agent(
                 messages=messages,
                 model=orchestrator[2],
                 provider=orchestrator[1],
@@ -310,7 +444,19 @@ async def voice_agent_logic(
                 max_rounds=10,
                 tool_schemas=ORCHESTRATOR_TOOL_SCHEMAS,
                 conv_id=conv_id,
-            ):
+            )
+            buffered, quick, race_outcome = await _race_llm_vs_jev(agent_iter, route_task)
+            perf["intent_ms"] = (time.perf_counter() - perf["t_route_start"]) * 1000
+            perf["race"] = race_outcome
+            if quick is not None:
+                perf["fast_path"] = True
+                perf["say_text"] = quick
+                await push_turn(quick)
+                return
+            # Known approximation: perf["first_text"] is stamped at replay
+            # time below, slightly after the token truly arrived (it sat in
+            # the race buffer first).
+            async for token in _replay_then_live(agent_iter, buffered):
                 if isinstance(token, str):
                     # The agent yields the literal string 'ERROR_TOKEN' on failure.
                     voicelog.log(f"agent ! stream error token: {token}")
