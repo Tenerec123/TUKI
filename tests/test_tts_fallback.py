@@ -40,6 +40,7 @@ class _FakeSession:
     def __init__(
         self, *, start_error=None, flush_error=None, audio=b"fallback",
         audio_error=None, early_eof=False, emit_marker=True,
+        fail_before_audio=False,
     ):
         self.start_error = start_error
         self.flush_error = flush_error
@@ -47,6 +48,7 @@ class _FakeSession:
         self.audio_error = audio_error
         self.early_eof = early_eof
         self.emit_marker = emit_marker
+        self.fail_before_audio = fail_before_audio
         self.items = []
         self.text = []
         self.started = False
@@ -76,6 +78,11 @@ class _FakeSession:
         self.items = []
 
     async def audio(self):
+        if self.fail_before_audio:
+            # The reader dies before a single byte is delivered.
+            if self.audio_error:
+                raise self.audio_error
+            return
         for item in self.items:
             yield item
         self.items = []
@@ -94,6 +101,29 @@ class _FakeProvider:
 
     def session(self):
         return self._session
+
+
+class _GatedFakeSession(_FakeSession):
+    """Emit one chunk, then block on a gate before ending the turn.
+
+    The gate opens a window between the chunk and the turn end: a test can
+    see exactly what the consumer already holds while the provider is still
+    mid-synthesis, which a wrapper bundling bytes with the marker hides.
+    """
+
+    def __init__(self, *, error_after_gate=None):
+        super().__init__(audio=b"")
+        self.gate = asyncio.Event()
+        self.error_after_gate = error_after_gate
+        self.marker_emitted = False
+
+    async def audio(self):
+        yield b"chunk"
+        await self.gate.wait()
+        if self.error_after_gate is not None:
+            raise self.error_after_gate
+        self.marker_emitted = True
+        yield TTSTurnEnd(index=1, chars=4, audio_ms=1.0)
 
 
 def test_session_start_failure_fails_over_without_losing_the_turn(monkeypatch):
@@ -118,7 +148,42 @@ def test_session_start_failure_fails_over_without_losing_the_turn(monkeypatch):
     "reader_failure",
     [RuntimeError("reader failed"), "early_eof"],
 )
-def test_partial_reader_failure_retries_one_complete_turn(reader_failure):
+def test_reader_failure_before_any_byte_replays_the_whole_turn(reader_failure):
+    """No audio reached the consumer, so the turn is still fully retryable."""
+    primary = _FakeSession(
+        audio=b"partial",
+        audio_error=(reader_failure if isinstance(reader_failure, Exception) else None),
+        early_eof=reader_failure == "early_eof",
+        emit_marker=False,
+        fail_before_audio=True,
+    )
+    fallback = _FakeSession(audio=b"complete")
+    primary.items = [b"partial"]  # synthesized, but never delivered
+    fallback.items = [b"complete", TTSTurnEnd(index=1, chars=1, audio_ms=1)]
+    provider = tts_module.FailoverTTSProvider(
+        "deepgram", _FakeProvider(primary), "openrouter", _FakeProvider(fallback)
+    )
+    session = provider.session()
+
+    async def scenario():
+        await session.start()
+        await session.push_text("Hola")
+        await session.flush()
+        return [item async for item in session.audio()]
+
+    assert asyncio.run(scenario()) == [
+        b"complete", TTSTurnEnd(index=1, chars=1, audio_ms=1)
+    ]
+    assert fallback.text == ["Hola"]
+    assert fallback.flush_calls == 1
+
+
+@pytest.mark.parametrize(
+    "reader_failure",
+    [RuntimeError("reader failed"), "early_eof"],
+)
+def test_reader_failure_after_partial_audio_degrades_gracefully(reader_failure):
+    """Heard audio cannot be replayed: keep it and close the turn synthetically."""
     primary = _FakeSession(
         audio=b"partial",
         audio_error=(reader_failure if isinstance(reader_failure, Exception) else None),
@@ -139,17 +204,24 @@ def test_partial_reader_failure_retries_one_complete_turn(reader_failure):
         await session.flush()
         return [item async for item in session.audio()]
 
+    # The partial bytes stay with the consumer and a synthetic marker closes
+    # the turn; nothing is replayed through the fallback.
     assert asyncio.run(scenario()) == [
-        b"complete", TTSTurnEnd(index=1, chars=1, audio_ms=1)
+        b"partial", TTSTurnEnd(index=1, chars=4, audio_ms=0.0)
     ]
-    assert fallback.text == ["Hola"]
-    assert fallback.flush_calls == 1
+    assert session._pending_turns == []
+    assert fallback.text == []
+    assert fallback.flush_calls == 0
 
 
 def test_read_failure_flushes_fallback_when_it_only_synthesizes_on_flush():
-    primary = _FakeSession(audio=b"partial", emit_marker=False)
+    primary = _FakeSession(
+        audio=b"partial",
+        audio_error=RuntimeError("reader failed"),
+        emit_marker=False,
+        fail_before_audio=True,
+    )
     fallback = _FakeSession(audio=b"complete")
-    primary.items = [b"partial"]
     provider = tts_module.FailoverTTSProvider(
         "deepgram", _FakeProvider(primary), "openrouter", _FakeProvider(fallback)
     )
@@ -191,10 +263,13 @@ def test_first_marker_does_not_discard_a_queued_second_turn():
     assert asyncio.run(scenario()) == [
         b"first",
         TTSTurnEnd(index=1, chars=1, audio_ms=1),
-        b"second",
-        TTSTurnEnd(index=1, chars=1, audio_ms=1),
+        b"partial-second",
+        TTSTurnEnd(index=2, chars=len("Dos"), audio_ms=0.0),
     ]
-    assert fallback.text == ["Dos"]
+    # The synthetic marker (chars matching "Dos") proves the second turn was
+    # still queued when the stream failed; it is retired, not replayed.
+    assert session._pending_turns == []
+    assert fallback.text == []
 
 
 def test_coalesced_marker_retires_all_represented_turns():
@@ -220,11 +295,14 @@ def test_coalesced_marker_retires_all_represented_turns():
     assert asyncio.run(scenario()) == [
         b"first-two",
         TTSTurnEnd(index=1, chars=len("UnoDos"), audio_ms=1),
-        b"third",
-        TTSTurnEnd(index=1, chars=1, audio_ms=1),
+        b"partial-third",
+        TTSTurnEnd(index=2, chars=len("Tres"), audio_ms=0.0),
     ]
-    assert fallback.text == ["Tres"]
-    assert fallback.flush_calls == 1
+    # The coalesced marker retired "Uno" and "Dos"; the synthetic marker
+    # retires only "Tres", and no replay happens.
+    assert session._pending_turns == []
+    assert fallback.text == []
+    assert fallback.flush_calls == 0
 
 
 def test_flush_failure_retries_unemitted_turn_on_the_other_provider():
@@ -244,3 +322,69 @@ def test_flush_failure_retries_unemitted_turn_on_the_other_provider():
     assert asyncio.run(scenario()) == [b"openrouter", TTSTurnEnd(index=1, chars=1, audio_ms=1)]
     assert primary.text == ["Hola"]
     assert fallback.text == ["Hola"]
+
+
+def test_first_chunk_streams_before_the_turn_marker_exists():
+    """First audio must not wait for the full-sentence marker.
+
+    The primary blocks on a gate between its chunk and the marker, so the
+    consumer must already hold the chunk while the marker is still unborn.
+    """
+    primary = _GatedFakeSession()
+    fallback = _FakeSession(audio=b"complete")
+    provider = tts_module.FailoverTTSProvider(
+        "deepgram", _FakeProvider(primary), "openrouter", _FakeProvider(fallback)
+    )
+    session = provider.session()
+
+    async def scenario():
+        await session.start()
+        await session.push_text("Hola")
+        await session.flush()
+        stream = session.audio()
+        chunk = await asyncio.wait_for(stream.__anext__(), timeout=0.5)
+        marker_pending = not primary.marker_emitted
+        primary.gate.set()
+        marker = await asyncio.wait_for(stream.__anext__(), timeout=0.5)
+        rest = [item async for item in stream]
+        return chunk, marker_pending, marker, rest
+
+    chunk, marker_pending, marker, rest = asyncio.run(scenario())
+    assert chunk == b"chunk"
+    assert marker_pending
+    assert marker == TTSTurnEnd(index=1, chars=4, audio_ms=1.0)
+    assert rest == []
+    assert fallback.text == []
+
+
+def test_flush_midstream_does_not_reenable_replay():
+    """A flush between heard audio and a reader failure must stay unretryable.
+
+    Re-enabling retry there would replay a sentence the consumer already
+    heard part of, so the stream must degrade gracefully instead.
+    """
+    primary = _GatedFakeSession(error_after_gate=RuntimeError("reader failed"))
+    fallback = _FakeSession(audio=b"complete")
+    provider = tts_module.FailoverTTSProvider(
+        "deepgram", _FakeProvider(primary), "openrouter", _FakeProvider(fallback)
+    )
+    session = provider.session()
+
+    async def scenario():
+        await session.start()
+        await session.push_text("Hola")
+        await session.flush()
+        stream = session.audio()
+        chunk = await asyncio.wait_for(stream.__anext__(), timeout=0.5)
+        await session.flush()  # mid-stream: must not reset retryability
+        primary.gate.set()
+        rest = [item async for item in stream]
+        return chunk, rest
+
+    chunk, rest = asyncio.run(scenario())
+    assert chunk == b"chunk"
+    assert rest == [TTSTurnEnd(index=1, chars=4, audio_ms=0.0)]
+    assert session._pending_turns == []
+    assert primary.flush_calls == 2  # the mid-stream flush reached the provider
+    assert fallback.text == []
+    assert fallback.flush_calls == 0

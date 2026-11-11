@@ -10,6 +10,7 @@ from .deepgram import DeepgramTTSProvider
 from .openrouter import OpenRouterTTSProvider
 from ..config import get_app_setting
 from ..credentials import ProviderCredentialError, get_provider_key
+from ..voice import log as voicelog
 
 _PROVIDERS = {
     "openrouter": OpenRouterTTSProvider,
@@ -42,7 +43,7 @@ class FailoverTTSProvider(TTSProvider):
 
 
 class FailoverTTSSession(TTSSession):
-    """Keep a turn retryable until its selected session emits audio."""
+    """Keep a turn retryable until its first audio byte reaches the consumer."""
 
     def __init__(
         self,
@@ -107,9 +108,6 @@ class FailoverTTSSession(TTSSession):
             await self._active.flush()
         except Exception as error:
             await self._switch(error, flush_turns=True)
-        # Keep the turn until audio() observes TTSTurnEnd. A successful flush
-        # only requests synthesis; it does not prove that the turn was delivered.
-        self._turn_has_audio = False
 
     def _retire_marked_turns(self, marker: TTSTurnEnd) -> None:
         """Remove every queued turn represented by one provider marker."""
@@ -138,55 +136,65 @@ class FailoverTTSSession(TTSSession):
             await self._active.clear()
 
     async def audio(self) -> AsyncIterator[bytes | TTSTurnEnd]:
-        """Emit only complete turns, retrying an interrupted provider read.
+        """Stream provider bytes as they arrive; retry only unheard turns.
 
-        Provider bytes remain private until their ``TTSTurnEnd`` arrives. This
-        makes a reader error or an early EOF transactional: partial primary
-        audio is discarded and the buffered sentence is replayed once through
-        the fallback session.
+        Bytes are forwarded immediately so first audio is not held behind
+        full-sentence synthesis. A turn stays retryable only until its first
+        byte reaches the consumer: a failure before that replays the buffered
+        sentence once through the fallback session; a failure after partial
+        audio cannot be replayed without repeating heard audio, so the turn is
+        closed with a synthetic marker and the stream ends gracefully instead.
         """
-        buffered = bytearray()
+        markers_forwarded = 0
         while True:
             active = self._active
             try:
                 async for item in active.audio():
                     if isinstance(item, bytes):
-                        buffered.extend(item)
+                        self._turn_has_audio = True
+                        yield item
                         continue
                     if isinstance(item, TTSTurnEnd):
-                        if buffered:
-                            yield bytes(buffered)
-                            buffered.clear()
                         self._retire_marked_turns(item)
                         self._turn_has_audio = True
                         yield item
+                        markers_forwarded += 1
                         self._turn_has_audio = False
                 if self._closed:
-                    if buffered:
-                        yield bytes(buffered)
                     return
-                if not buffered and not self._pending_turns and not self._current_turn:
+                if not self._pending_turns and not self._current_turn:
                     return
                 error = RuntimeError(
                     f"{getattr(active, '__class__', type(active)).__name__} "
                     "ended before the TTS turn marker"
                 )
-                if not self._fallback_used:
-                    await self._switch(error, flush_turns=True)
-                else:
-                    raise error
-                buffered.clear()
-                continue
-            except Exception as error:
+            except Exception as exc:
                 if self._closed:
                     raise
-                if not buffered and not self._pending_turns and not self._current_turn:
+                if not self._pending_turns and not self._current_turn:
                     raise
-                if not self._fallback_used:
-                    await self._switch(error, flush_turns=True)
-                else:
-                    raise
-                buffered.clear()
+                # ``except ... as`` deletes its name when the clause ends, but
+                # the shared handling below still needs the exception.
+                error = exc
+            if self._turn_has_audio:
+                # Partial audio already reached the consumer: unrecoverable.
+                # Close the in-flight turn with a synthetic marker instead of
+                # replaying heard audio, and end the reply gracefully.
+                in_flight = self._pending_turns[-1] if self._pending_turns else self._current_turn
+                turn_chars = sum(len(text) for text in in_flight) if in_flight else 0
+                synthetic = TTSTurnEnd(index=markers_forwarded + 1, chars=turn_chars, audio_ms=0.0)
+                self._retire_marked_turns(synthetic)
+                self._turn_has_audio = False
+                voicelog.log(
+                    "tts ! stream failed after partial audio; "
+                    "ending the reply gracefully"
+                )
+                yield synthetic
+                return
+            if not self._fallback_used:
+                await self._switch(error, flush_turns=True)
+                continue
+            raise error
 
     async def close(self) -> None:
         self._closed = True
