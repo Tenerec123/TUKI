@@ -66,6 +66,16 @@ class FailoverTTSSession(TTSSession):
     def sample_rate(self) -> int:
         return self._active.sample_rate
 
+    @property
+    def t_first_push(self):
+        """Delegate to the active provider so the voice pipeline can measure TTFB."""
+        return getattr(self._active, "t_first_push", None)
+
+    @property
+    def first_audio_s(self):
+        """Delegate to the active provider so the voice pipeline can measure TTFB."""
+        return getattr(self._active, "first_audio_s", None)
+
     async def _switch(self, error: Exception, flush_turns: bool = False) -> None:
         if self._fallback_used or self._turn_has_audio:
             raise error

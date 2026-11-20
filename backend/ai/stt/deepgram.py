@@ -77,7 +77,7 @@ class DeepgramSTTProvider(STTProvider):
         """
         api_key = get_provider_key('deepgram')
         stt_config = get_model_config_for('stt')
-        stt_model = stt_config[2] if stt_config[1] == 'deepgram' else 'nova-2'
+        stt_model = stt_config[2] if stt_config[1] == 'deepgram' else 'nova-3'
         headers = {"Authorization": f"Token {api_key}"}
 
         # Deepgram v1 streaming config goes in URL query parameters, NOT in a

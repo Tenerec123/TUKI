@@ -1,4 +1,5 @@
 import os
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from ...schemas import TaskSchema, ProjectSchema, RoutineSchema, EventSchema, BlockRead, BlockExceptionRead, BlockOccurrenceRead
@@ -183,6 +184,11 @@ def GetBlockExceptions(block_id: int) -> list[dict]:
         return [BlockExceptionRead.model_validate(item).model_dump() for item in exceptions]
 
 
+# In-process cache for weather (avoids repeated cold external calls).
+_WEATHER_CACHE: dict[str, tuple[float, dict]] = {}
+_WEATHER_CACHE_TTL = 600.0  # seconds
+
+
 def Weather(city: str = None):
     '''
     Current weather and 3-day forecast. Defaults to WEATHER_DEFAULT_CITY.
@@ -194,6 +200,12 @@ def Weather(city: str = None):
         city = os.environ.get('WEATHER_DEFAULT_CITY', '')
         if not city:
             return {'error': 'No city specified and WEATHER_DEFAULT_CITY not set in .env'}
+
+    cache_key = city
+    now = time.time()
+    cached = _WEATHER_CACHE.get(cache_key)
+    if cached is not None and (now - cached[0]) < _WEATHER_CACHE_TTL:
+        return cached[1]
 
     try:
         encoded = urllib.parse.quote(city)
@@ -225,6 +237,8 @@ def Weather(city: str = None):
                 'chance_of_rain': day['hourly'][0]['chanceofrain']
             })
 
+        if not (isinstance(result, dict) and "error" in result):
+            _WEATHER_CACHE[cache_key] = (time.time(), result)
         return result
     except Exception as e:
         return {'error': f'Failed to get weather: {str(e)}'}

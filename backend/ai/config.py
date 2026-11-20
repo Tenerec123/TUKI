@@ -74,7 +74,7 @@ ORCHESTRATOR_PROVIDER_PINS = {
 MODEL_DEFAULTS: list[list[str | None]] = [
     ['orchestrator', 'openrouter', 'openai/gpt-oss-120b', 'minimal'],
     ['searcher', 'openrouter', 'google/gemini-2.5-flash-lite', None],
-    ['stt', 'deepgram', 'nova-2', None],
+    ['stt', 'deepgram', 'nova-3', None],
     ['namer', 'openrouter', 'mistralai/mistral-nemo', None],
 ]
 
