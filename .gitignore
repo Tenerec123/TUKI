@@ -71,4 +71,5 @@ draft/
 .ignore
 
 # Runtime-downloaded wake word models (python scripts/download_wake_models.py)
+frontend/models/odd/
 frontend/models/
