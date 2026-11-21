@@ -65,7 +65,7 @@ const INPUT_GAIN = 3.0;
 // Utterance-end tuning (1 frame = 1280 samples @ 16 kHz = 80 ms).
 // The engine waits for this many CONSECUTIVE silent VAD frames before
 // calling onUtterance; 6 frames = ~480 ms of silence (~0.5 s).
-const VAD_STOP_FRAMES = 6;
+const VAD_STOP_FRAMES = 8;
 // Hard cap on capture duration: never buffer longer than this (seconds),
 // even if the VAD never reports silence.
 const MAX_CAPTURE_DURATION = 20;
@@ -80,7 +80,7 @@ const FRAME_MS = 80;
 // the wake word has been said, so starting the capture at the detection
 // frame loses whatever the user said in between. Nothing is trimmed — the
 // whole ring ships with the utterance, wake word included.
-const PREROLL_FRAMES = 13;        // 13 x 80 ms = 1.04 s
+const PREROLL_FRAMES = 8;         // 8 x 80 ms = 0.64 s
 
 // Local wake-word confirmation tone. Generate it in the browser with Web Audio
 // so detection feedback needs no backend request or audio-file download.

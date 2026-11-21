@@ -107,6 +107,7 @@ async def transcribe_stream_with_fallback(
     chunks: AsyncIterable[bytes],
     provider_name: str | None = None,
     selected_provider: STTProvider | None = None,
+    preopened_ws=None,
     **kwargs,
 ) -> str:
     """Transcribe live audio while retaining a WAV-safe fallback copy."""
@@ -150,7 +151,20 @@ async def transcribe_stream_with_fallback(
                     if source_consumed
                     else recording_chunks()
                 )
-                transcript = await provider.transcribe_stream(stream, **kwargs)
+                # Pass a pre-opened socket only to providers that support it
+                # (Deepgram). Other providers (and fakes in tests) ignore it.
+                try:
+                    from .deepgram import DeepgramSTTProvider
+
+                    is_deepgram = isinstance(provider, DeepgramSTTProvider)
+                except Exception:
+                    is_deepgram = False
+                if is_deepgram:
+                    transcript = await provider.transcribe_stream(
+                        stream, preopened_ws=preopened_ws, **kwargs
+                    )
+                else:
+                    transcript = await provider.transcribe_stream(stream, **kwargs)
         except Exception as exc:
             last_error = exc
             # A failed streaming provider may have stopped consuming the source.

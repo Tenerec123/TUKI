@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import time
 from typing import AsyncIterator
@@ -22,12 +23,48 @@ class DeepgramSTTProvider(STTProvider):
     input, the encoding is declared via URL query parameters.
     """
 
+    def _build_url(self, language: str, raw_pcm: bool) -> str:
+        """Build the Deepgram WebSocket URL (model, language, endpointing, etc.)."""
+        from urllib.parse import urlencode
+
+        stt_config = get_model_config_for("stt")
+        stt_model = stt_config[2] if stt_config[1] == "deepgram" else "nova-3"
+        params = {
+            "model": stt_model,
+            "language": language,
+            "interim_results": "true",
+            "endpointing": "300",
+            "smart_format": "true",
+        }
+        if raw_pcm:
+            params.update({
+                "encoding": "linear16",
+                "sample_rate": "16000",
+                "channels": "1",
+            })
+        return f"{DEEPGRAM_WS_URL}?{urlencode(params)}"
+
+    async def preconnect(self, language: str = "es", raw_pcm: bool = True):
+        """Open a Deepgram WebSocket ahead of time so the connect cost overlaps
+        the client wait / TTS handshake. Returns the open socket (caller owns close)."""
+        import websockets
+
+        api_key = get_provider_key("deepgram")
+        url = self._build_url(language, raw_pcm)
+        headers = {"Authorization": f"Token {api_key}"}
+        ws = websockets.connect(url, additional_headers=headers)
+        conn = await ws.__aenter__()
+        # Keep a reference to the context manager for close (stored on the conn).
+        conn._cm = ws
+        return conn
+
     async def transcribe(
         self,
         audio_data: bytes,
         language: str = "es",
         content_type: str = "audio/wav",
         raw_pcm: bool = False,
+        preopened_ws=None,
     ) -> str:
         """
             content_type: MIME type of the audio. When ``audio/x-raw`` or
@@ -46,12 +83,14 @@ class DeepgramSTTProvider(STTProvider):
             chunk_iter(),
             language=language,
             raw_pcm=raw_pcm or content_type == "audio/x-raw",
+            preopened_ws=preopened_ws,
         )
 
     async def transcribe_stream(
         self,
         chunks: AsyncIterator[bytes],
         language: str = "es",
+        preopened_ws=None,
     ) -> str:
         """
         Args:
@@ -62,6 +101,7 @@ class DeepgramSTTProvider(STTProvider):
             chunks,
             language=language,
             raw_pcm=True,
+            preopened_ws=preopened_ws,
         )
 
     async def _run_websocket(
@@ -69,46 +109,14 @@ class DeepgramSTTProvider(STTProvider):
         chunks: AsyncIterator[bytes],
         language: str,
         raw_pcm: bool,
+        preopened_ws=None,
     ) -> str:
         """Shared WebSocket session: connect, forward, close.
 
         Returns the final transcript (latest final/interim hypothesis)
         once the socket closes.
         """
-        api_key = get_provider_key('deepgram')
-        stt_config = get_model_config_for('stt')
-        stt_model = stt_config[2] if stt_config[1] == 'deepgram' else 'nova-3'
-        headers = {"Authorization": f"Token {api_key}"}
-
-        # Deepgram v1 streaming config goes in URL query parameters, NOT in a
-        # Configure message. Sending {"type":"Configure","config":{...}}
-        # makes the API reply with a SchemaError and no transcript.
-        params = {
-            "model": stt_model,
-            "language": language,
-            "interim_results": "true",
-            # Silence required before Deepgram finalizes a segment. Set ABOVE
-            # the typical pause between the wake word and the command
-            # ("alexa ... que hora es", <600ms) so the wake word is not split
-            # into its own segment. A separate finalize for the wake segment
-            # wedged Deepgram ~1s behind the live audio and the command's
-            # final result arrived after the session closed (truncation).
-            # This does NOT need to stay under the client's VAD trailing
-            # silence (VAD_STOP_FRAMES in wake_script.js): when the client's
-            # end frame arrives the router sends CloseStream, which flushes
-            # whatever Deepgram still holds whether or not endpointing fired,
-            # so the final lands either way. The wake-pause bound above is the
-            # only constraint that matters.
-            "endpointing": "600",
-            "smart_format": "true",
-        }
-        if raw_pcm:
-            params.update({
-                "encoding": "linear16",
-                "sample_rate": "16000",
-                "channels": "1",
-            })
-        url = f"{DEEPGRAM_WS_URL}?{urlencode(params)}"
+        url = self._build_url(language, raw_pcm)
         voicelog.debug(f"connecting {url}", source="stt")
 
         t_start = time.perf_counter()
@@ -116,10 +124,22 @@ class DeepgramSTTProvider(STTProvider):
         error_description: str | None = None
         self.timing = {}
 
-        async with websockets.connect(url, additional_headers=headers) as ws:
+        if preopened_ws is not None:
+            ws = preopened_ws
+            t_conn = time.perf_counter()
+            voicelog.debug("using pre-opened socket", source="stt")
+        else:
+            import websockets
+
+            api_key = get_provider_key("deepgram")
+            headers = {"Authorization": f"Token {api_key}"}
+            cm = websockets.connect(url, additional_headers=headers)
+            ws = await cm.__aenter__()
+            ws._cm = cm
             t_conn = time.perf_counter()
             voicelog.debug(f"connected  connect={(t_conn - t_start) * 1000:.1f}ms", source="stt")
 
+        try:
             # Forward each incoming chunk to the socket as it arrives.
             chunk_count = 0
             total_bytes = 0
@@ -161,7 +181,7 @@ class DeepgramSTTProvider(STTProvider):
             # Fallback settle in case Deepgram never sends a Metadata frame (older
             # API behavior). Long enough to cover the endpointing window (600ms)
             # plus transport latency, short enough to keep the turn snappy.
-            SETTLE_S = 2.0
+            SETTLE_S = 0.7
             final_segments: list[str] = []
             last_interim = ""
             t_first_final = None
@@ -229,6 +249,9 @@ class DeepgramSTTProvider(STTProvider):
                     f"{error_description}"
                 )
 
+        finally:
+            with contextlib.suppress(Exception):
+                await ws.close()
         # Fall back to the last interim hypothesis when no final was received.
         if not final_segments and last_interim:
             transcript = last_interim

@@ -35,7 +35,7 @@ _INTENT_KEYS = ["time", "weather", "other"]
 _TIME_RE = re.compile(
     r"(?:"
     r"(?:me\s+dices|dime|decime)\s+la\s+hora"
-    r"|(?<!a\s)que\s+hora\s+(?:es|son)"
+    r"|que\s+hora\s+(?:es|son)"
     r"|que\s+hora\s+tenes"
     r"|la\s+hora"
     r"|what'?s\s+the\s+time"

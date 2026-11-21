@@ -350,17 +350,37 @@ async def voice_agent_logic(
     # the user's wait instead of adding it at the end.
     session = get_tts_provider().session()
     stats: dict = {"turns": 0, "audio_ms": 0.0, "bytes": 0}
-    sanitizer = MarkdownSanitizer()
+    sanitizer = MarkdownSanitizer(clause_split=True)
     connect_task = asyncio.create_task(session.start())
     perf["t_connect"] = time.perf_counter()
 
+    # Pre-open the STT socket in parallel with the TTS handshake so the
+    # connect cost (0.4-1.9s) overlaps the client wait / STT listen instead
+    # of being pure latency. Only Deepgram supports pre-open; other providers
+    # (and fakes) fall back to opening their own socket.
+    stt_preconnect_task = None
+    preopened_ws = None
+    provider = get_stt_provider()
     try:
-        provider = get_stt_provider()
+        from ..stt.deepgram import DeepgramSTTProvider
+
+        if isinstance(provider, DeepgramSTTProvider):
+            stt_preconnect_task = asyncio.create_task(provider.preconnect(language="es", raw_pcm=True))
+    except Exception:
+        stt_preconnect_task = None
+
+    try:
         perf["t_stt"] = time.perf_counter()
+        if stt_preconnect_task is not None:
+            try:
+                preopened_ws = await stt_preconnect_task
+            except Exception:
+                preopened_ws = None
         transcription = await transcribe_stream_with_fallback(
             stream,
             selected_provider=provider,
             language="es",
+            preopened_ws=preopened_ws,
         )
     except BaseException:
         # The socket was opened before STT; when STT itself raises (S11: every
@@ -369,11 +389,18 @@ async def voice_agent_logic(
         # turn: cancel + join the handshake, close the session exactly once,
         # then re-raise the original STT error unchanged for the route's
         # error frame.
+        if stt_preconnect_task is not None and not stt_preconnect_task.done():
+            stt_preconnect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await stt_preconnect_task
         connect_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await connect_task
         with contextlib.suppress(Exception):
             await session.close()
+        if preopened_ws is not None:
+            with contextlib.suppress(Exception):
+                await preopened_ws.close()
         raise
     # Defense in depth: never let the wake word reach the router or the LLM.
     transcription = _strip_wake_word(transcription)
@@ -393,11 +420,18 @@ async def voice_agent_logic(
 
     if not transcription.strip():
         # The socket was opened before STT; an empty turn must tear it down or it leaks.
+        if stt_preconnect_task is not None and not stt_preconnect_task.done():
+            stt_preconnect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await stt_preconnect_task
         connect_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await connect_task
         with contextlib.suppress(Exception):
             await session.close()
+        if preopened_ws is not None:
+            with contextlib.suppress(Exception):
+                await preopened_ws.close()
         _print_empty_turn(perf)
         if streaming_path:
             yield {"type": "end"}

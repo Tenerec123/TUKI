@@ -206,12 +206,13 @@ class MarkdownSanitizer:
     ``push()`` returns what became safe to emit, ``flush()`` the held-back tail; output is always safe to hand to a TTS provider.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, clause_split: bool = False) -> None:
         self._buffer = ""
         self._fence: str | None = None
         self._line_start = True
         self._last_char = ""
         self._prev_char = ""
+        self._clause_split = clause_split
         self._splitter = PhraseSplitter()
         self.chars_in = 0
         self.chars_out = 0
@@ -245,7 +246,7 @@ class MarkdownSanitizer:
             p
             for p in (
                 _normalize_phrase(phrase)
-                for phrase in self._splitter.take(text, decided=True)
+                for phrase in self._splitter.take(text, decided=True, clause=self._clause_split)
             )
             if p
         ]
@@ -347,7 +348,7 @@ class MarkdownSanitizer:
                 guard = max(guard, held)
         cut = 0
         for index in range(guard, len(self._buffer)):
-            if is_sentence_end(self._buffer, index):
+            if is_sentence_end(self._buffer, index, clause=self._clause_split):
                 cut = index + 1
         if cut == 0:
             self.waits += 1
@@ -411,12 +412,26 @@ def _normalize_phrase(phrase: str) -> str:
     return text
 
 
-def is_sentence_end(buffer: str, index: int, decided: bool = False) -> bool:
+def is_sentence_end(buffer: str, index: int, decided: bool = False, clause: bool = False) -> bool:
     """Report whether ``buffer[index]`` terminates a spoken phrase.
 
     A terminator only ends a sentence when whitespace follows or the buffer ends there, which keeps dots inside a URL ("x.dev") and decimals ("3.5") from cutting the stream. A "." ending the buffer is undecided whatever precedes it: the next token can still turn "x." into "x.dev" or "2." into "2.5".
     """
     char = buffer[index]
+    # Clause-level splitting (opt-in): a comma/semicolon also ends a phrase
+    # when the accumulated clause is long enough, so TTS can start on the
+    # first clause instead of waiting for the whole sentence.
+    if clause and char in (",", ";"):
+        if index + 1 < len(buffer) and not buffer[index + 1].isspace():
+            return False
+        last = -1
+        for j in range(index - 1, -1, -1):
+            if buffer[j] in _SENTENCE_ENDINGS or buffer[j] in (",", ";"):
+                last = j
+                break
+        if (index - last) < 40:
+            return False
+        return True
     if char not in _SENTENCE_ENDINGS:
         return False
     if char != ".":
@@ -443,14 +458,14 @@ class PhraseSplitter:
         self._buffer = ""
         self._scan = 0
 
-    def take(self, text: str, decided: bool = False) -> list[str]:
+    def take(self, text: str, decided: bool = False, clause: bool = False) -> list[str]:
         self._buffer += text
         phrases: list[str] = []
         start = 0
         index = min(max(self._scan, 0), len(self._buffer))
         resume = index
         while index < len(self._buffer):
-            if not is_sentence_end(self._buffer, index, decided):
+            if not is_sentence_end(self._buffer, index, decided, clause):
                 resume = index
                 index += 1
                 continue
