@@ -326,6 +326,8 @@ async def voice_agent_logic(
     stream: AsyncIterable[bytes],
     streaming_path: bool = False,
     client_meta: dict | None = None,
+    preopened_stt=None,
+    preopened_tts_session=None,
 ) -> AsyncIterator[dict | bytes]:
     """Stream the agent's reply. Supports both legacy WAV-per-turn and PCM streaming.
 
@@ -348,26 +350,34 @@ async def voice_agent_logic(
     # Open the TTS socket NOW, in parallel with STT: the handshake costs ~0.5s and
     # does not depend on the transcript, so overlapping it with STT hides it from
     # the user's wait instead of adding it at the end.
-    session = get_tts_provider().session()
+    if preopened_tts_session is not None:
+        session = preopened_tts_session
+        connect_task = None  # already started
+        perf["t_connect"] = time.perf_counter()
+        # mark as connected
+        perf["t_connected_early"] = True
+    else:
+        session = get_tts_provider().session()
+        connect_task = asyncio.create_task(session.start())
+        perf["t_connect"] = time.perf_counter()
     stats: dict = {"turns": 0, "audio_ms": 0.0, "bytes": 0}
     sanitizer = MarkdownSanitizer(clause_split=True)
-    connect_task = asyncio.create_task(session.start())
-    perf["t_connect"] = time.perf_counter()
 
     # Pre-open the STT socket in parallel with the TTS handshake so the
     # connect cost (0.4-1.9s) overlaps the client wait / STT listen instead
     # of being pure latency. Only Deepgram supports pre-open; other providers
     # (and fakes) fall back to opening their own socket.
     stt_preconnect_task = None
-    preopened_ws = None
+    preopened_ws = preopened_stt  # may be provided by caller (aggressive preconnect)
     provider = get_stt_provider()
-    try:
-        from ..stt.deepgram import DeepgramSTTProvider
+    if preopened_stt is None:
+        try:
+            from ..stt.deepgram import DeepgramSTTProvider
 
-        if isinstance(provider, DeepgramSTTProvider):
-            stt_preconnect_task = asyncio.create_task(provider.preconnect(language="es", raw_pcm=True))
-    except Exception:
-        stt_preconnect_task = None
+            if isinstance(provider, DeepgramSTTProvider):
+                stt_preconnect_task = asyncio.create_task(provider.preconnect(language="es", raw_pcm=True))
+        except Exception:
+            stt_preconnect_task = None
 
     try:
         perf["t_stt"] = time.perf_counter()
@@ -393,9 +403,10 @@ async def voice_agent_logic(
             stt_preconnect_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await stt_preconnect_task
-        connect_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await connect_task
+        if connect_task is not None:
+            connect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await connect_task
         with contextlib.suppress(Exception):
             await session.close()
         if preopened_ws is not None:
@@ -411,7 +422,7 @@ async def voice_agent_logic(
     # instead of an always-empty dict, so the turn log reports real values.
     perf["stt_timing"] = getattr(provider, "timing", {}) or {}
     # The handshake overlapped STT if it finished before the user stopped talking.
-    perf["connect_overlapped"] = connect_task.done()
+    perf["connect_overlapped"] = (connect_task.done() if connect_task is not None else True)
     # Perceived timeline: anchor at t_client_stop minus client-reported lag
     # (true end of speech). The router fills it when the end frame arrives.
     meta = client_meta or {}
@@ -424,9 +435,10 @@ async def voice_agent_logic(
             stt_preconnect_task.cancel()
             with contextlib.suppress(asyncio.CancelledError, Exception):
                 await stt_preconnect_task
-        connect_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await connect_task
+        if connect_task is not None:
+            connect_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await connect_task
         with contextlib.suppress(Exception):
             await session.close()
         if preopened_ws is not None:
@@ -451,7 +463,8 @@ async def voice_agent_logic(
         if not text.strip():
             return
         if not perf.get("t_connected"):
-            await connect_task
+            if connect_task is not None:
+                await connect_task
             perf["t_connected"] = time.perf_counter()
         await session.push_text(text)
         await session.flush()
@@ -490,6 +503,7 @@ async def voice_agent_logic(
             # Known approximation: perf["first_text"] is stamped at replay
             # time below, slightly after the token truly arrived (it sat in
             # the race buffer first).
+            _pushed_text_this_round = False
             async for token in _replay_then_live(agent_iter, buffered):
                 if isinstance(token, str):
                     # The agent yields the literal string 'ERROR_TOKEN' on failure.
@@ -502,8 +516,16 @@ async def voice_agent_logic(
                     sanitize_chunk_report(sanitizer, force=True)
                     for unit in pending:
                         await push_turn(unit)
+                        _pushed_text_this_round = True
                     continue
                 if token.get("type") != "agent":
+                    # Fallback ack: if the LLM is about to execute tools without
+                    # having spoken anything, send a short ack so the user knows
+                    # something is happening. The prompt asks for this, but the
+                    # model sometimes skips it in early rounds.
+                    if token.get("type") == "tool_call" and not _pushed_text_this_round:
+                        await push_turn("Un momento.")
+                        _pushed_text_this_round = True
                     continue  # tool_call / tool_result carry no spoken content
                 if "first_text" not in perf:
                     perf["first_text"] = time.perf_counter()
@@ -512,6 +534,7 @@ async def voice_agent_logic(
                 sanitize_chunk_report(sanitizer)
                 for unit in pending:
                     await push_turn(unit)
+                    _pushed_text_this_round = True
         except Exception as exc:
             voicelog.log(f"agent ! error: {exc}")
         finally:
@@ -527,9 +550,10 @@ async def voice_agent_logic(
                 # The LLM may yield nothing and leave the handshake pending;
                 # close() can't kill it (it sees no _ws yet), so cancel it first
                 # or the started Deepgram socket/pump leaks.
-                connect_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError, Exception):
-                    await connect_task
+                if connect_task is not None:
+                    connect_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await connect_task
                 with contextlib.suppress(Exception):
                     await session.close()
 

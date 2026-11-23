@@ -65,7 +65,7 @@ const INPUT_GAIN = 3.0;
 // Utterance-end tuning (1 frame = 1280 samples @ 16 kHz = 80 ms).
 // The engine waits for this many CONSECUTIVE silent VAD frames before
 // calling onUtterance; 6 frames = ~480 ms of silence (~0.5 s).
-const VAD_STOP_FRAMES = 8;
+const VAD_STOP_FRAMES = 6;
 // Hard cap on capture duration: never buffer longer than this (seconds),
 // even if the VAD never reports silence.
 const MAX_CAPTURE_DURATION = 20;
@@ -80,7 +80,7 @@ const FRAME_MS = 80;
 // the wake word has been said, so starting the capture at the detection
 // frame loses whatever the user said in between. Nothing is trimmed — the
 // whole ring ships with the utterance, wake word included.
-const PREROLL_FRAMES = 8;         // 8 x 80 ms = 0.64 s
+const PREROLL_FRAMES = 4;         // 4 x 80 ms = 0.32 s, sent at 1.25x speed (64 ms/frame) to reduce client wait
 
 // Local wake-word confirmation tone. Generate it in the browser with Web Audio
 // so detection feedback needs no backend request or audio-file download.
@@ -296,11 +296,16 @@ function flushPending() {
   // stream (see sendQueue comment).
   const now = performance.now();
   if (!sendSchedule) sendSchedule = now;
+  // Pre-roll is sent at 1.25x speed to reduce client wait while still
+  // capturing the start of fast commands.
+  const PRE_ROLL_FRAME_MS = Math.round(FRAME_MS / 1.25);
+  let preRollSchedule = sendSchedule;
   for (let i = 0; i < frames.length; i++) {
-    sendQueue.push({ frame: frames[i], dueAt: sendSchedule });
-    sendSchedule += FRAME_MS;
+    sendQueue.push({ frame: frames[i], dueAt: preRollSchedule });
+    preRollSchedule += PRE_ROLL_FRAME_MS;
     queueBytes += frames[i].byteLength;
   }
+  sendSchedule = preRollSchedule;
   log(`Enqueued ${frames.length} pre-roll frames (${(frames.length * FRAME_MS / 1000).toFixed(2)}s) paced at realtime`);
   pumpSendQueue();
 }
@@ -376,6 +381,9 @@ function startVoiceStream() {
   if (sendTimer) { clearTimeout(sendTimer); sendTimer = null; }
 
   ws.onopen = () => {
+    // Aggressive preconnect: tell the backend to open STT + TTS sockets now,
+    // while the user is still speaking, so connect costs overlap speech.
+    try { ws.send(JSON.stringify({ type: "start" })); } catch (e) { /* ignore */ }
     // Socket is up: release the pre-roll held while it was CONNECTING.
     flushPending();
   };

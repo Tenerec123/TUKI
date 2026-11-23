@@ -236,7 +236,7 @@ def test_voice_ws_dispatches_frames_by_proto(monkeypatch):
     wav_payload = b"RIFF\x24\x00\x00\x00WAVEfmt"
     pcm_payload = b"\x01\x00\x02\x00"
 
-    async def fake_logic(stream, streaming_path=False, client_meta=None):
+    async def fake_logic(stream, streaming_path=False, client_meta=None, **kwargs):
         if streaming_path:
             yield {"type": "pcm_start", "sample_rate": 24000}
             yield pcm_payload

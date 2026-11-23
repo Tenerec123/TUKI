@@ -32,7 +32,7 @@ from .base import TTSSession, TTSProvider, TTSTurnEnd
 DEEPGRAM_TTS_WS_URL = "wss://api.deepgram.com/v1/speak"
 
 # Argentine Spanish: the user is Rioplatense. Overridable without a code change.
-DEFAULT_VOICE = os.environ.get("TTS_DEEPGRAM_VOICE", "aura-2-antonia-es")
+DEFAULT_VOICE = os.environ.get("TTS_DEEPGRAM_VOICE", "aura-2-olivia-es")
 
 AUDIO_SAMPLE_RATE = 24000
 
@@ -124,7 +124,7 @@ class DeepgramTTTSession(TTSSession):
         voicelog.debug(f"connecting {url}", source="tts")
 
         t0 = time.perf_counter()
-        self._ws = await websockets.connect(url, additional_headers=headers)
+        self._ws = await websockets.connect(url, additional_headers=headers, ping_interval=10.0, ping_timeout=5.0)
         self.connect_ms = (time.perf_counter() - t0) * 1000
         voicelog.debug(
             f"connected voice={self._voice} rate={self._sample_rate} "
@@ -142,7 +142,7 @@ class DeepgramTTTSession(TTSSession):
                 await self._ws.send(json.dumps({"type": "Close"}))
                 # Deepgram drains what it has buffered before the socket goes away, and this is the only chance to get the tail of the last sentence. Ten seconds covers a normal reply; a larger backlog is reported, not silently cut.
                 try:
-                    await asyncio.wait_for(asyncio.shield(self._pump), timeout=10.0)
+                    await asyncio.wait_for(asyncio.shield(self._pump), timeout=20.0)
                 except asyncio.TimeoutError:
                     voicelog.log(
                         "tts ! close timed out with audio still buffered; "
@@ -282,7 +282,6 @@ class DeepgramTTTSession(TTSSession):
             voicelog.log(f"tts ! read error: {exc}")
         finally:
             await self._queue.put(None)
-
     async def _handle_event(self, raw: str) -> None:
         try:
             data = json.loads(raw)

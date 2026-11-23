@@ -1,7 +1,8 @@
 from ..schemas import Prompt
 from fastapi import APIRouter, UploadFile, File, HTTPException, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
-from ..ai.stt import transcribe_with_fallback
+from ..ai.stt import transcribe_with_fallback, get_stt_provider
+from ..ai.tts import get_tts_provider
 from ..ai.stream_manager import stream_manager
 from ..ai.chat import chat_persistence_wrapper
 from ..ai.agent import openai_agent
@@ -84,10 +85,61 @@ async def voice_agent_ws(websocket: WebSocket):
     # turn log measures the perceived timeline, not just the server-side one.
     client_meta: dict = {}
 
+    # Aggressive preconnect: if the client sends a "start" frame before any
+    # audio, open STT + TTS sockets NOW (while the user is still speaking)
+    # so connect costs overlap speech instead of being pure latency.
+    preopened_stt = None
+    preopened_tts = None
+    # Wait briefly for an optional "start" frame (aggressive preconnect).
+    # If none arrives (legacy clients / tests), proceed without preconnect.
+    first_msg = None
+    try:
+        first_msg = await asyncio.wait_for(websocket.receive(), timeout=0.2)
+    except asyncio.TimeoutError:
+        first_msg = None
+    if first_msg is not None and first_msg.get("type") == "websocket.disconnect":
+        return
+    start_data = None
+    if first_msg is not None and first_msg.get("text"):
+        try:
+            start_data = json.loads(first_msg["text"])
+        except json.JSONDecodeError:
+            start_data = None
+    if start_data and start_data.get("type") == "start":
+        try:
+            from backend.ai.stt.deepgram import DeepgramSTTProvider
+
+            stt_provider = get_stt_provider()
+            if isinstance(stt_provider, DeepgramSTTProvider):
+                try:
+                    preopened_stt = await asyncio.wait_for(
+                        stt_provider.preconnect(language="es", raw_pcm=True), timeout=2.0
+                    )
+                except Exception:
+                    preopened_stt = None
+        except Exception as exc:
+            print(f"[voice-agent-ws] stt preconnect failed: {exc}")
+            preopened_stt = None
+        try:
+            tts_session = get_tts_provider().session()
+            try:
+                await asyncio.wait_for(tts_session.start(), timeout=2.0)
+                preopened_tts = tts_session
+            except Exception:
+                preopened_tts = None
+        except Exception as exc:
+            print(f"[voice-agent-ws] tts preconnect failed: {exc}")
+            preopened_tts = None
+
     async def audio_chunks() -> AsyncIterator[bytes]:
         """Yield incoming binary audio frames until the utterance ends."""
         chunk_count = 0
         total_bytes = 0
+        # First message may already be audio (no "start" frame) — yield it.
+        if first_msg is not None and first_msg.get("bytes"):
+            chunk_count += 1
+            total_bytes += len(first_msg["bytes"])
+            yield first_msg["bytes"]
         while True:
             message = await websocket.receive()
             if message.get("type") == "websocket.disconnect":
@@ -114,7 +166,13 @@ async def voice_agent_ws(websocket: WebSocket):
                     return
 
     try:
-        async for item in voice_agent_logic(audio_chunks(), streaming_path=use_proto2, client_meta=client_meta):
+        async for item in voice_agent_logic(
+            audio_chunks(),
+            streaming_path=use_proto2,
+            client_meta=client_meta,
+            preopened_stt=preopened_stt,
+            preopened_tts_session=preopened_tts,
+        ):
             if isinstance(item, dict):
                 await websocket.send_json(item)
             elif isinstance(item, bytes):
